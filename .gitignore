@@ -1,0 +1,10 @@
+node_modules
+build
+HANDOFF-*.md
+handoffs/
+.DS_Store
+.env
+.env.*
+deploy.local.json
+CLAUDE.local.md
+dist

@@ -1,0 +1,1456 @@
+/* xterm.css komplett einbetten: ohne diese Regeln kollabiert das Terminal. */
+@import "@xterm/xterm/css/xterm.css";
+
+/* Terminal-Ansicht: Inhaltsfläche ohne Rand, die Pane füllt sie absolut aus.
+   Ohne bemaßtes Elternelement misst xterm 0 px. */
+.workspace-leaf-content .view-content.cockpit-terminal-content {
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Füllt den Platz über der Codeblock-Leiste und bemaßt den absolut positionierten Host. */
+.cockpit-terminal-body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* Leiste über der Pane: eine Zeile, waagerecht scrollbar. Unten verdeckte sie die Statusleiste. */
+.cockpit-code-bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 4px 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+}
+
+.cockpit-code-button {
+  flex: 0 0 auto;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  height: auto;
+  padding: 2px 8px;
+  color: var(--text-normal);
+  background: var(--background-modifier-form-field);
+  border: 1px solid var(--background-modifier-border);
+  box-shadow: none;
+}
+
+/* Fester Knopf „Handoff kopieren“, immer vorn. Steht vor -last: Steht er zugleich für den letzten Block der Antwort, gewinnt dessen Akzentfläche. */
+.cockpit-code-button-handoff {
+  font-family: var(--font-interface);
+  font-weight: var(--font-semibold);
+  color: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
+.cockpit-code-button-last {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+
+.cockpit-terminal-host {
+  position: absolute;
+  inset: 0;
+}
+
+.cockpit-rename-input {
+  width: 100%;
+}
+
+.cockpit-rename-error {
+  min-height: 1.4em;
+  margin-top: 6px;
+  color: var(--text-error);
+}
+
+/* Benachrichtigung: Tab-Markierung bei fertig (Akzent) und Frage (Orange). */
+.workspace-tab-header.cockpit-attention .workspace-tab-header-inner-title {
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+.workspace-tab-header.cockpit-attention-question .workspace-tab-header-inner-title {
+  color: var(--color-orange);
+  font-weight: 600;
+}
+
+/* Einstellungsseite: Grund bei ungültiger Eingabe. */
+.cockpit-setting-error {
+  color: var(--text-error);
+}
+
+/* Launcher: Name und Quelle in einer Zeile, Beschreibung gedämpft auf zwei Zeilen begrenzt. */
+.cockpit-launch-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.cockpit-launch-name {
+  font-weight: 600;
+}
+
+.cockpit-launch-source {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
+
+.cockpit-launch-desc {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Dashboard: Kopf oben (unten rechts liegt Obsidians Statusleiste), darunter die Karten. */
+.cockpit-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  /* Unten rechts liegt Obsidians Statusleiste: Luft lassen, nichts Wichtiges dorthin. */
+  padding-bottom: 48px;
+}
+
+.cockpit-dashboard-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.cockpit-dashboard-title {
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+.cockpit-pull-status {
+  flex: 1 1 auto;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.cockpit-pull-status.cockpit-pull-error {
+  color: var(--text-error);
+}
+
+.cockpit-card {
+  /* Nicht stauchen: Sonst passt das Dashboard alle Karten der Fensterhöhe an und schneidet ihr Ende ab, statt zu scrollen. */
+  flex-shrink: 0;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+}
+
+.cockpit-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.cockpit-card-title {
+  font-weight: 600;
+}
+
+.cockpit-card-date {
+  flex: 1 1 auto;
+  color: var(--text-muted);
+}
+
+.cockpit-card-chevron {
+  color: var(--text-faint);
+  width: 1em;
+}
+
+.cockpit-card-body {
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.cockpit-briefing-select {
+  margin-bottom: 8px;
+}
+
+.cockpit-briefing-text {
+  user-select: text;
+}
+
+/* Karte Aufgaben (Abend 10). */
+.cockpit-tasks-head {
+  cursor: default;
+}
+
+.cockpit-progress {
+  flex: 0 0 120px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+
+.cockpit-progress-fill {
+  height: 100%;
+  background: var(--interactive-accent);
+}
+
+.cockpit-hint {
+  color: var(--text-muted);
+}
+
+.cockpit-task-heading {
+  margin-top: 8px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.cockpit-task-heading-1 {
+  font-size: var(--font-ui-medium);
+}
+
+.cockpit-task-heading-2,
+.cockpit-task-heading-3 {
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+}
+
+.cockpit-task {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  cursor: pointer;
+  border-radius: var(--radius-s);
+}
+
+.cockpit-task:hover {
+  background: var(--background-modifier-hover);
+}
+
+.cockpit-task-box {
+  flex: 0 0 auto;
+  color: var(--interactive-accent);
+}
+
+.cockpit-task-done .cockpit-task-text {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
+.cockpit-task-done .cockpit-task-box {
+  color: var(--text-faint);
+}
+
+/* Karte Skills (Abend 10). */
+.cockpit-skills-head {
+  cursor: default;
+}
+
+.cockpit-skill-search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cockpit-skill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cockpit-skill-scroll {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+/* Karte Usage (Abend 12). */
+.cockpit-usage-head {
+  cursor: default;
+}
+
+.cockpit-usage-row {
+  display: grid;
+  grid-template-columns: 6em 120px 1fr;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.cockpit-usage-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+
+.cockpit-usage-fill {
+  height: 100%;
+  background: var(--interactive-accent);
+}
+
+.cockpit-usage-fill.cockpit-usage-high {
+  background: var(--text-error);
+}
+
+.cockpit-usage-tokens {
+  margin-top: 4px;
+}
+
+.cockpit-usage-error {
+  color: var(--text-error);
+}
+
+/* Karte Research (Abend 14). */
+.cockpit-research-head {
+  cursor: default;
+}
+
+.cockpit-research-section {
+  margin-bottom: 12px;
+}
+
+.cockpit-research-heading {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.cockpit-research-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.cockpit-research-name {
+  flex: none;
+  color: var(--link-color);
+  cursor: pointer;
+}
+
+.cockpit-research-name:hover {
+  text-decoration: underline;
+}
+
+.cockpit-research-stars,
+.cockpit-research-age {
+  flex: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.cockpit-research-desc {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
+}
+
+.cockpit-research-new {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 8px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-size: var(--font-ui-smaller);
+}
+
+.cockpit-research-check {
+  flex: none;
+  margin: 0;
+}
+
+.cockpit-research-error {
+  color: var(--text-error);
+  margin-bottom: 4px;
+}
+
+.cockpit-research-setting {
+  flex-wrap: wrap;
+}
+
+.cockpit-research-setting .setting-item-control {
+  flex: 1 1 100%;
+  margin-top: 8px;
+}
+
+.cockpit-research-searches {
+  flex: 1 1 auto;
+  width: 100%;
+  font-family: var(--font-monospace);
+}
+
+/* ---- Cockpit-Ansicht (Abend 15) ----
+   Bühne mit dem Hintergrundbild (1536 × 1942), Instrumente auf den grauen Flächen, Zoom-Overlay.
+   Alle Maße in Prozent der Bühne bzw. in cqw (Container-Einheit der Bühne), damit alles mit ihr skaliert.
+   Die Positionen setzt cockpit-layout.ts inline aus der Geometrie in core/cockpit-panels.ts. */
+.view-content.cockpit-dashboard.cockpit-dashboard-cockpit {
+  display: block;
+  position: relative;
+  padding: 0;
+  overflow: hidden;
+}
+
+/* Der Titel steht im Zoom des Kopfes, auf der Bühne nicht. */
+.cockpit-dashboard-cockpit .cockpit-dashboard-title {
+  display: none;
+}
+
+/* Schwarzer Rand: Die Bühne füllt die View, das Bild wird eingepasst (contain) und mittig gesetzt. */
+.cockpit-stage-wrap {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #000;
+  container-type: size;
+  overflow: hidden;
+}
+
+/* Fenster (19b): passt den Ausschnitt in die Pane ein (contain; das Seitenverhältnis des Ausschnitts setzt der Host als --cockpit-view-aspect, Breite durch Höhe)
+   und schneidet ab, was die Bühne darüber hinaus zeigt. Das Zoom-Overlay liegt nicht darin, es deckt die ganze Pane. */
+.cockpit-window {
+  position: relative;
+  width: min(100cqw, calc(100cqh * var(--cockpit-view-aspect, 0.7909)));
+  aspect-ratio: var(--cockpit-view-aspect, 0.7909);
+  overflow: hidden;
+}
+
+/* Die volle Bühne im Fenster: Breite, links und oben setzt der Host inline (zugeschnitten größer als das Fenster und nach links oben geschoben,
+   voll ohne Versatz). Alle Maße in cqw beziehen sich auf diese Bühne, nicht auf das Fenster. */
+.cockpit-stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  aspect-ratio: 1536 / 1942;
+  container-type: inline-size;
+  font-family: Monaco, Menlo, var(--font-monospace), monospace;
+  color: #dff3ff;
+  user-select: none;
+}
+
+.cockpit-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  pointer-events: none;
+}
+
+/* Ampelfarben und neutrales Hellblau; --tone färbt Zahl und Lampe. */
+.cockpit-tone-plain { --tone: #dff3ff; }
+.cockpit-tone-green { --tone: #5ee08a; }
+.cockpit-tone-yellow { --tone: #ffd24a; }
+.cockpit-tone-red { --tone: #ff6161; }
+.cockpit-tone-gray { --tone: #8d9aa8; }
+/* Regenbogen (Token-Ring ab p90): --tone ist nur die Ersatzfarbe für Schrift und Schein, den Verlauf zeichnen Ring und Zoom. */
+.cockpit-tone-rainbow { --tone: #e6c8ff; }
+
+.cockpit-panel {
+  position: absolute;
+  cursor: pointer;
+  transition: filter 0.18s ease;
+}
+
+/* Der Glanz liegt am äußeren Element: clip-path am inneren schnitte ihn ab, drop-shadow folgt der Form. */
+.cockpit-panel:hover,
+.cockpit-panel:focus-visible {
+  filter: drop-shadow(0 0 0.5cqw rgba(140, 210, 255, 0.95)) drop-shadow(0 0 1.4cqw rgba(140, 210, 255, 0.5));
+  outline: none;
+}
+
+.cockpit-panel-clip {
+  position: absolute;
+  inset: 0;
+  background: rgba(6, 14, 22, 0.66);
+}
+
+/* Die Seitenscheiben reichen über den gemalten grauen Bildschirm hinaus bis an den Rahmen: deckend im Mischton über Grau 51, sonst wäre der Streifen darüber dunkler. */
+.cockpit-panel-tasks .cockpit-panel-clip,
+.cockpit-panel-research .cockpit-panel-clip {
+  background: rgb(21, 27, 32);
+}
+
+.cockpit-panel-content {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35cqw;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.cockpit-inst-title {
+  font-size: 1cqw;
+  letter-spacing: 0.16em;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+.cockpit-inst-big {
+  font-size: 4.2cqw;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--tone);
+  text-shadow: 0 0 0.8cqw var(--tone);
+}
+
+.cockpit-inst-line {
+  font-size: 1.45cqw;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.88;
+}
+
+/* Fortschrittsbalken (Woche): Rahmen in der Neonfarbe der Bühne, Füllung in der Ampelfarbe. */
+.cockpit-inst-bar {
+  box-sizing: border-box;
+  height: 0.6cqw;
+  border: 1px solid rgba(140, 210, 255, 0.7);
+  background: rgba(140, 210, 255, 0.08);
+  overflow: hidden;
+}
+
+.cockpit-inst-bar-fill {
+  height: 100%;
+  background: var(--tone);
+  box-shadow: 0 0 0.5cqw var(--tone);
+}
+
+/* Woche: der Querbalken ist nur etwa 18 × 2,6 cqw groß. Oben Titel, Prozent und Restzeit, darunter der Balken. */
+.cockpit-panel-week .cockpit-panel-content {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-content: center;
+  column-gap: 0.7cqw;
+  row-gap: 0.25cqw;
+}
+
+.cockpit-panel-week .cockpit-inst-title {
+  font-size: 0.8cqw;
+  line-height: 1.2;
+  align-self: center;
+}
+
+.cockpit-panel-week .cockpit-inst-big {
+  font-size: 1.3cqw;
+  line-height: 1.2;
+  text-shadow: 0 0 0.4cqw var(--tone);
+}
+
+.cockpit-panel-week .cockpit-inst-line {
+  font-size: 0.95cqw;
+  line-height: 1.2;
+  text-align: right;
+  align-self: center;
+}
+
+.cockpit-panel-week .cockpit-inst-bar {
+  grid-column: 1 / -1;
+}
+
+/* Warnungen: der Kasten ist nur etwa 7,6 × 5,8 cqw groß; Titel und höchstens zwei Zeilen („5h knapp“, „Woche knapp“), kritisch rechts daneben „!“. */
+.cockpit-panel-warnings .cockpit-panel-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-content: start;
+  column-gap: 0.2cqw;
+  row-gap: 0.25cqw;
+}
+
+.cockpit-panel-warnings .cockpit-inst-title {
+  grid-column: 1;
+  font-size: 0.8cqw;
+  letter-spacing: 0.08em;
+}
+
+.cockpit-panel-warnings .cockpit-inst-line {
+  grid-column: 1;
+  font-size: 0.85cqw;
+  color: var(--tone);
+  opacity: 1;
+}
+
+/* Kritisch: rot leuchtendes Ausrufezeichen; schmale Spalte, der Strich des Zeichens ist dünn. */
+.cockpit-panel-warnings .cockpit-inst-big {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+  align-self: center;
+  width: 0.9cqw;
+  font-size: 2.4cqw;
+  line-height: 1;
+  text-align: center;
+  overflow: visible;
+  text-shadow: 0 0 0.4cqw var(--tone), 0 0 1.1cqw var(--tone);
+  animation: cockpit-warn-pulse 1.1s ease-in-out infinite alternate;
+}
+
+@keyframes cockpit-warn-pulse {
+  from { opacity: 1; }
+  to { opacity: 0.45; }
+}
+
+/* Kontrollleuchten: Die Fläche selbst leuchtet in der Ampelfarbe, grau bleibt ruhig. */
+.cockpit-panel-lamp-pull {
+  filter: drop-shadow(0 0 0.6cqw var(--tone));
+}
+
+.cockpit-panel-lamp-pull.cockpit-tone-gray {
+  filter: none;
+}
+
+.cockpit-panel-lamp-pull .cockpit-panel-clip {
+  background:
+    radial-gradient(ellipse at 72% 68%, var(--tone) 0%, transparent 62%),
+    rgba(6, 14, 22, 0.82);
+}
+
+.cockpit-panel-lamp-pull:hover,
+.cockpit-panel-lamp-pull:focus-visible {
+  filter: drop-shadow(0 0 0.5cqw rgba(140, 210, 255, 0.95)) drop-shadow(0 0 1.2cqw var(--tone));
+}
+
+/* Regal der vollen Karten: im Layout (damit isShown() der Karten stimmt), aber weit außerhalb und unsichtbar. */
+.cockpit-shelf {
+  position: absolute;
+  top: 0;
+  left: -10000px;
+  width: 560px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Zoom: die volle Karte vergrößert über dem Cockpit; Klick daneben, ✕ oder Escape schließen. */
+.cockpit-zoom {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4%;
+  background: rgba(0, 0, 0, 0.72);
+}
+
+.cockpit-zoom-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 900px;
+  max-height: 100%;
+  overflow: hidden;
+  background: var(--background-primary);
+  border: 1px solid rgba(160, 220, 255, 0.55);
+  border-radius: 8px;
+  box-shadow: 0 0 28px rgba(120, 200, 255, 0.35);
+  outline: none;
+  animation: cockpit-zoom-in 0.16s ease-out;
+}
+
+@keyframes cockpit-zoom-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+
+.cockpit-zoom-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 6px 14px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.cockpit-zoom-title {
+  font-weight: 600;
+}
+
+.cockpit-zoom-close {
+  all: unset;
+  box-sizing: border-box;
+  padding: 2px 9px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.cockpit-zoom-close:hover,
+.cockpit-zoom-close:focus-visible {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.cockpit-zoom-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+}
+
+/* Diff-Ansicht (Abend 17): Farben aus dem Theme, kein eigenes Farbschema. */
+.cockpit-diff {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+}
+
+.cockpit-diff-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--size-4-2) var(--size-4-3);
+  padding: var(--size-4-2) var(--size-4-3);
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+}
+
+.cockpit-diff-path {
+  flex: 1 1 12em;
+  min-width: 0;
+  font-family: var(--font-monospace);
+  font-weight: var(--font-semibold);
+  overflow-wrap: anywhere;
+}
+
+.cockpit-diff-summary {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.cockpit-diff-buttons {
+  display: flex;
+  gap: var(--size-4-2);
+}
+
+.cockpit-diff-notes {
+  flex: 1 1 100%;
+  color: var(--text-warning);
+  font-size: var(--font-ui-small);
+}
+
+.cockpit-diff-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  font-family: var(--font-monospace);
+  font-size: var(--font-smaller);
+  line-height: 1.5;
+}
+
+.cockpit-diff-hunk {
+  position: sticky;
+  top: 0;
+  padding: 2px var(--size-4-3);
+  color: var(--text-muted);
+  background: var(--background-secondary-alt);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.cockpit-diff-row {
+  display: grid;
+  grid-template-columns: 4ch 4ch 2ch minmax(0, 1fr);
+  gap: 0 var(--size-4-1);
+  padding: 0 var(--size-4-3);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.cockpit-diff-no {
+  color: var(--text-faint);
+  text-align: right;
+  user-select: none;
+}
+
+.cockpit-diff-sign {
+  user-select: none;
+}
+
+.cockpit-diff-add {
+  background: rgba(var(--color-green-rgb), 0.15);
+}
+
+.cockpit-diff-add .cockpit-diff-sign {
+  color: var(--color-green);
+}
+
+.cockpit-diff-del {
+  background: rgba(var(--color-red-rgb), 0.15);
+}
+
+.cockpit-diff-del .cockpit-diff-sign {
+  color: var(--color-red);
+}
+
+.cockpit-diff-noeol {
+  display: block;
+  color: var(--text-faint);
+  font-style: italic;
+}
+
+.cockpit-diff-empty,
+.cockpit-diff-gone {
+  padding: var(--size-4-4);
+  color: var(--text-muted);
+}
+
+/* ---- Neue Flächen (Abend 18): Sitzungsradar, Kanzel, Ringe, Vault, Repos, Radare, Effort-Schieber, Schalter ----
+   Nur cockpit-Klassen, eng unter der Bühne selektiert (fremde Plugins teilen Klassennamen). Die Flächen sind klein und
+   schräg: wenig Text, der Rest steht im Zoom. Der äußere Rahmen fängt keine Klicks (pointer-events: none), nur die Fläche
+   im clip-path (repos und radars überlappen in den Boxen). */
+.cockpit-stage .cockpit-field {
+  position: absolute;
+  transition: filter 0.18s ease;
+}
+
+.cockpit-stage .cockpit-field:hover,
+.cockpit-stage .cockpit-field:focus-within {
+  filter: drop-shadow(0 0 0.5cqw rgba(140, 210, 255, 0.95)) drop-shadow(0 0 1.2cqw rgba(140, 210, 255, 0.45));
+}
+
+.cockpit-stage .cockpit-field-clip {
+  position: absolute;
+  inset: 0;
+  outline: none;
+}
+
+.cockpit-stage .cockpit-field-clip[role="button"],
+.cockpit-stage .cockpit-field-clip[role="switch"] {
+  cursor: pointer;
+}
+
+.cockpit-stage .cockpit-field-content {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.cockpit-stage .cockpit-field-title {
+  font-size: 0.85cqw;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+
+/* Lampen: Farbe über --lamp; grün blinkt (arbeitet), grau ruht ohne Glanz. */
+.cockpit-lamp {
+  --lamp: #8d9aa8;
+  flex: none;
+  display: inline-block;
+  box-sizing: border-box;
+  width: 1cqw;
+  height: 1cqw;
+  border-radius: 50%;
+  background: var(--lamp);
+  box-shadow: 0 0 0.5cqw var(--lamp);
+}
+.cockpit-lamp-busy { --lamp: #5ee08a; animation: cockpit-lamp-blink 1s ease-in-out infinite alternate; }
+.cockpit-lamp-question { --lamp: #ffd24a; }
+.cockpit-lamp-unseen { --lamp: #4aa3ff; }
+.cockpit-lamp-idle { --lamp: #8d9aa8; box-shadow: none; }
+.cockpit-lamp-dead { --lamp: #ff6161; }
+
+@keyframes cockpit-lamp-blink {
+  from { opacity: 1; }
+  to { opacity: 0.25; }
+}
+
+/* Sitzungsradar: höchstens fünf Zeilen und „+n“. */
+.cockpit-stage .cockpit-field-radar .cockpit-field-content {
+  justify-content: flex-start;
+  gap: 0.25cqw;
+}
+
+.cockpit-stage .cockpit-radar-row {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 0.6cqw;
+  flex: none;
+  min-width: 0;
+  padding: 0.1cqw 0.3cqw;
+  font-family: inherit;
+  font-size: 1.4cqw;
+  line-height: 1.25;
+  color: #dff3ff;
+  cursor: pointer;
+  border-radius: 0.3cqw;
+}
+
+.cockpit-stage .cockpit-radar-row:hover,
+.cockpit-stage .cockpit-radar-row:focus-visible {
+  background: rgba(120, 200, 255, 0.22);
+}
+
+.cockpit-stage .cockpit-radar-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.cockpit-stage .cockpit-radar-more {
+  padding-left: 0.3cqw;
+  font-size: 1.2cqw;
+  line-height: 1.2;
+  opacity: 0.7;
+}
+
+/* Fokus-Tafel (Mittelkonsole): deckender dunkler Grund, damit die ins Bild gezeichneten Tastenkästen verschwinden; der Grund liegt
+   im clip-path der Fläche und endet an der hellen Linie. Grüne HUD-Schrift wie bisher. */
+.cockpit-stage .cockpit-field-focus .cockpit-field-clip {
+  background: #07090c;
+}
+
+.cockpit-stage .cockpit-field-focus .cockpit-field-content {
+  justify-content: flex-start;
+  gap: 0.5cqw;
+  text-align: left;
+  color: #7dffa0;
+  text-shadow: 0 0 0.6cqw rgba(94, 224, 138, 0.7);
+}
+
+.cockpit-stage .cockpit-focus-head {
+  flex: none;
+  font-size: 0.85cqw;
+  letter-spacing: 0.14em;
+  line-height: 1.2;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+
+/* Jeder Punkt bricht um (mit Silbentrennung, lang="de" setzt der Host) und endet erst am Ende seines Platzes mit Auslassung; der volle Text steht im
+   title-Tooltip. Die Tafel misst nur etwa 15 x 12 cqw: Zwei Punkte à 120 Zeichen passen ganz hinein, wenn die Schrift eine schmale Proportionalschrift
+   von etwa 1 cqw ist (am 06.10.2026 in der Vorschau gemessen; Monaco bräuchte 0,9 cqw, 1,5 cqw ließe pro Punkt nur drei Zeilen). */
+.cockpit-stage .cockpit-focus-line {
+  flex: none;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 1cqw;
+  line-height: 1.2;
+  hyphens: auto;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+/* Rundinstrumente: Ring in Ampelfarbe, Zahl im Tooltip und im Zoom. */
+.cockpit-stage .cockpit-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(var(--tone) var(--fill, 0%), rgba(140, 210, 255, 0.16) 0);
+  -webkit-mask: radial-gradient(circle, transparent 54%, #000 57%);
+  mask: radial-gradient(circle, transparent 54%, #000 57%);
+}
+
+.cockpit-stage .cockpit-ring-pulse {
+  animation: cockpit-ring-pulse 0.9s ease-in-out infinite alternate;
+}
+
+/* Regenbogen ab p90: voller Verlauf (der Ring ist dort ohnehin voll), langsame Drehung; die Maske ist ein Kreis, dreht also mit. */
+.cockpit-stage .cockpit-tone-rainbow .cockpit-ring {
+  background: conic-gradient(#ff5e5e, #ffd24a, #5ee08a, #4ac8ff, #a17dff, #ff6bd6, #ff5e5e);
+  animation: cockpit-ring-rainbow 14s linear infinite;
+}
+
+@keyframes cockpit-ring-rainbow {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes cockpit-ring-pulse {
+  from { opacity: 1; }
+  to { opacity: 0.35; }
+}
+
+.cockpit-stage .cockpit-field-gaugeLeft .cockpit-field-content,
+.cockpit-stage .cockpit-field-gaugeRight .cockpit-field-content {
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95cqw;
+  letter-spacing: 0.06em;
+  color: var(--tone);
+  text-shadow: 0 0 0.5cqw var(--tone);
+}
+
+/* Vault-Lage: drei Zeilen. */
+.cockpit-stage .cockpit-field-vault .cockpit-field-content {
+  justify-content: center;
+  gap: 0.5cqw;
+}
+
+.cockpit-stage .cockpit-vault-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1.5cqw;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.cockpit-stage .cockpit-vault-label {
+  opacity: 0.75;
+}
+
+.cockpit-stage .cockpit-vault-value {
+  color: var(--tone);
+  text-shadow: 0 0 0.5cqw var(--tone);
+}
+
+/* Repo-Ampel (19b): die breite Tafel der Konsole unter dem System-Display, etwa 10 x 17 cqw groß: Titel, darunter die Zahl groß in der Mitte. */
+.cockpit-stage .cockpit-field-repos .cockpit-field-content {
+  align-items: center;
+  justify-content: center;
+  gap: 0.8cqw;
+}
+
+.cockpit-stage .cockpit-field-repos .cockpit-field-title {
+  font-size: 1.1cqw;
+}
+
+.cockpit-stage .cockpit-field-repos .cockpit-big {
+  font-size: 6cqw;
+}
+
+.cockpit-stage .cockpit-big {
+  font-size: 2.4cqw;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--tone);
+  text-shadow: 0 0 0.7cqw var(--tone);
+}
+
+/* LOC und Commits heute: kleine Schlitze über dem OUT-Ring (je etwa 2,7cqw breit, oben schmal zulaufend). Zahl unten, wo der Schlitz am breitesten ist, und über das Textrechteck hinaus (der clip-path der Fläche schneidet). */
+.cockpit-stage .cockpit-field-loc .cockpit-field-content,
+.cockpit-stage .cockpit-field-commits .cockpit-field-content {
+  align-items: flex-start;
+  justify-content: flex-end;
+  overflow: visible;
+  gap: 0.05cqw;
+}
+
+.cockpit-stage .cockpit-field-loc .cockpit-field-title,
+.cockpit-stage .cockpit-field-commits .cockpit-field-title {
+  font-size: 0.75cqw;
+  letter-spacing: 0.04em;
+}
+
+/* Zahl so groß, wie die Breite unten im Schlitz trägt (Monospace ≈ 0,6em je Zeichen; LOC ≈ 36 px, COM ≈ 43 px Bildbreite), gedeckelt durch die Höhe. */
+/* Kurztext („aus“) statt Zahl in der Repo-Tafel: in der Größe der Tafelbeschriftung, nicht 6cqw. */
+.cockpit-stage .cockpit-field-repos .cockpit-big-short {
+  font-size: 2.4cqw;
+}
+
+.cockpit-stage .cockpit-field-loc .cockpit-big {
+  font-size: min(2cqw, 3.7cqw / var(--chars));
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.cockpit-stage .cockpit-field-commits .cockpit-big {
+  font-size: min(2.2cqw, 4.4cqw / var(--chars));
+  line-height: 1;
+  white-space: nowrap;
+}
+
+/* Radare (19b): der schmale Streifen der Konsole rechts neben der Repo-Tafel (etwa 4,4 cqw breit, 14 cqw hoch): zwei Kontrollleuchten übereinander, Punkt über dem Kürzel. */
+.cockpit-stage .cockpit-field-radars .cockpit-field-content {
+  align-items: center;
+  justify-content: center;
+  gap: 3cqw;
+}
+
+.cockpit-stage .cockpit-radar-lamp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7cqw;
+  font-size: 1.3cqw;
+  line-height: 1;
+}
+
+.cockpit-stage .cockpit-radar-lamp-dot {
+  width: 2.4cqw;
+  height: 2.4cqw;
+}
+
+.cockpit-radar-lamp-dot {
+  flex: none;
+  box-sizing: border-box;
+  width: 1.5cqw;
+  height: 1.5cqw;
+  border-radius: 50%;
+  background: var(--tone);
+  box-shadow: 0 0 0.6cqw var(--tone);
+}
+
+.cockpit-tone-gray .cockpit-radar-lamp-dot {
+  box-shadow: none;
+}
+
+/* Effort-Schieber (19e) auf dem grauen Schirm links: senkrechter Schlitz mit flachem, breitem Griff, rechts daneben die sechs Stufen, max oben, aus unten.
+   --tone: grün, bei „aus“ grau (setzt cockpit-layout). Dunkler Grund wie bei den anderen Schirmen (.cockpit-panel-clip). Der Schirm misst im Bild 171 x 182 px,
+   der Inhalt etwa 9,8 x 10,4 cqw; abzüglich 0,9 cqw Polster oben und unten (halbe Zeilenhöhe der Beschriftung) bleiben 8,6 cqw Weg, also 1,7 cqw (rund 14 px
+   bei 720 px Panebreite im Ausschnitt) von Stufe zu Stufe. Der Griff ist 0,95 cqw hoch (rund 55 % des Abstands) und 3,2 cqw breit; angefasst wird auf
+   der ganzen Fläche des Schirms (Schlitz, Rand und Raum neben den Beschriftungen), nicht nur am Griff. Position über --pos (Anteil von oben, 0 = max, 1 = aus). */
+.cockpit-stage .cockpit-field-effort .cockpit-field-clip {
+  background: rgba(6, 14, 22, 0.66);
+}
+
+.cockpit-stage .cockpit-effort-lever {
+  box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0.9cqw 0;
+  display: flex;
+  outline: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.cockpit-stage .cockpit-effort-rail {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: ns-resize;
+}
+
+.cockpit-stage .cockpit-effort-dragging .cockpit-effort-rail {
+  cursor: grabbing;
+}
+
+/* Der Schlitz: eine dunkle Rille in der Mitte des Streifens links. */
+.cockpit-stage .cockpit-effort-slot {
+  position: absolute;
+  top: -0.3cqw;
+  bottom: -0.3cqw;
+  left: 1.9cqw;
+  width: 0.5cqw;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  border-radius: 0.25cqw;
+  border: 1px solid rgba(223, 243, 255, 0.28);
+  background: rgba(0, 0, 0, 0.7);
+  box-shadow: inset 0 0 0.3cqw rgba(0, 0, 0, 0.9);
+}
+
+/* Rasten: ein kurzer Strich je Stufe rechts vom Schlitz. */
+.cockpit-stage .cockpit-effort-tick {
+  position: absolute;
+  top: calc(var(--pos) * 100%);
+  left: 3.3cqw;
+  width: 0.55cqw;
+  height: 0;
+  border-top: 1px solid rgba(223, 243, 255, 0.35);
+}
+
+.cockpit-stage .cockpit-effort-mark {
+  position: absolute;
+  top: calc(var(--pos) * 100%);
+  left: 4.1cqw;
+  transform: translateY(-50%);
+  font-size: 1.35cqw;
+  line-height: 1;
+  white-space: nowrap;
+  color: rgba(223, 243, 255, 0.55);
+  cursor: pointer;
+}
+
+.cockpit-stage .cockpit-effort-mark:hover {
+  color: #dff3ff;
+}
+
+/* Die Stufe unter dem Griff (im Zug die unter dem Griff, nicht die zuletzt gesetzte). */
+.cockpit-stage .cockpit-effort-mark-on {
+  color: var(--tone);
+  text-shadow: 0 0 0.5cqw var(--tone);
+}
+
+.cockpit-stage .cockpit-effort-knob {
+  position: absolute;
+  top: calc(var(--pos) * 100%);
+  left: 1.9cqw;
+  width: 3.2cqw;
+  height: 0.95cqw;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+  border-radius: 0.3cqw;
+  border: 1px solid var(--tone);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tone) 55%, #dff3ff) 0%, color-mix(in srgb, var(--tone) 70%, #06121c) 100%);
+  box-shadow: 0 0 0.7cqw var(--tone), 0 0.15cqw 0.3cqw rgba(0, 0, 0, 0.6);
+  pointer-events: auto;
+}
+
+/* Griffleiste: eine helle Rille quer über dem Griff. */
+.cockpit-stage .cockpit-effort-grip {
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 50%;
+  height: 0;
+  transform: translateY(-50%);
+  border-top: 1px solid rgba(6, 18, 28, 0.75);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.45);
+}
+
+.cockpit-stage .cockpit-effort-lever:focus-visible .cockpit-effort-knob {
+  outline: 1px solid #dff3ff;
+  outline-offset: 0.2cqw;
+}
+
+.cockpit-stage .cockpit-effort-dragging .cockpit-effort-knob {
+  box-shadow: 0 0 1.1cqw var(--tone), 0 0.15cqw 0.3cqw rgba(0, 0, 0, 0.6);
+}
+
+/* Plus auf dem Knauf des Schalthebels in der Mitte (a18e): grün glühend, Hover-Glow wie bei den anderen Flächen (am äußeren Element). */
+.cockpit-stage .cockpit-field-newSession .cockpit-field-clip {
+  cursor: pointer;
+}
+
+.cockpit-stage .cockpit-field-newSession .cockpit-field-content {
+  align-items: center;
+  justify-content: center;
+  color: #5ee08a;
+  overflow: visible;
+  user-select: none;
+}
+
+.cockpit-stage .cockpit-field-newSession .cockpit-newsession-plus {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  /* Höhe des Textrechtecks (Höhe von newSession, rund 3,45 cqw); größer schnitte overflow das Zeichen ab (18f). */
+  font-size: 3.4cqw;
+  font-weight: 700;
+  line-height: 1;
+  text-shadow: 0 0 0.6cqw #5ee08a, 0 0 1.8cqw rgba(94, 224, 138, 0.8);
+}
+
+.cockpit-stage .cockpit-field-newSession .cockpit-field-content {
+  flex-direction: row;
+  gap: 0.3cqw;
+}
+
+.cockpit-stage .cockpit-field-newSession .cockpit-field-hint {
+  white-space: nowrap;
+  font-size: 1cqw;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.cockpit-stage .cockpit-field-newSession:hover .cockpit-field-content,
+.cockpit-stage .cockpit-field-newSession:focus-within .cockpit-field-content {
+  color: #b9ffd0;
+}
+
+/* Kippschalter (Telegram, Ton): Knopf oben = an. */
+.cockpit-stage .cockpit-field-telegram .cockpit-field-content,
+.cockpit-stage .cockpit-field-sound .cockpit-field-content {
+  align-items: center;
+  justify-content: space-between;
+  text-align: center;
+}
+
+.cockpit-stage .cockpit-switch-label,
+.cockpit-stage .cockpit-switch-state {
+  font-size: 1cqw;
+  line-height: 1.2;
+  color: var(--tone);
+  text-shadow: 0 0 0.4cqw var(--tone);
+}
+
+.cockpit-stage .cockpit-switch-lever {
+  position: relative;
+  flex: none;
+  width: 1.3cqw;
+  height: 3cqw;
+  border-radius: 0.7cqw;
+  background: rgba(140, 210, 255, 0.16);
+  border: 1px solid rgba(160, 220, 255, 0.55);
+}
+
+.cockpit-stage .cockpit-switch-knob {
+  position: absolute;
+  left: 50%;
+  bottom: 0.15cqw;
+  width: 0.9cqw;
+  height: 1.2cqw;
+  transform: translateX(-50%);
+  border-radius: 0.4cqw;
+  background: var(--tone);
+  box-shadow: 0 0 0.5cqw var(--tone);
+  transition: bottom 0.15s ease;
+}
+
+.cockpit-stage .cockpit-switch-on .cockpit-switch-knob {
+  bottom: calc(100% - 1.35cqw);
+}
+
+/* Zoom-Inhalte der neuen Flächen. */
+.cockpit-zoom .cockpit-zoom-session {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "lamp name state" ". cwd cwd";
+  align-items: center;
+  gap: 2px 10px;
+  padding: 6px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.cockpit-zoom .cockpit-zoom-session:hover,
+.cockpit-zoom .cockpit-zoom-session:focus-visible {
+  background: var(--background-modifier-hover);
+}
+
+.cockpit-zoom .cockpit-zoom-session .cockpit-lamp {
+  grid-area: lamp;
+  width: 10px;
+  height: 10px;
+}
+
+.cockpit-zoom .cockpit-zoom-session-name { grid-area: name; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cockpit-zoom .cockpit-zoom-session-state { grid-area: state; color: var(--text-muted); }
+.cockpit-zoom .cockpit-zoom-session-cwd { grid-area: cwd; color: var(--text-faint); font-size: var(--font-ui-smaller); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cockpit-zoom .cockpit-zoom-gauge {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--tone);
+  background: var(--background-secondary);
+  border-radius: 4px;
+}
+
+.cockpit-zoom .cockpit-zoom-gauge-title { font-weight: 600; color: var(--tone); }
+
+/* Regenbogen im Zoom: Randstreifen und Titel als statischer Verlauf. */
+.cockpit-zoom .cockpit-zoom-gauge.cockpit-tone-rainbow {
+  border-left: 3px solid transparent;
+  border-image: linear-gradient(#ff5e5e, #ffd24a, #5ee08a, #4ac8ff, #a17dff, #ff6bd6) 1;
+}
+
+.cockpit-zoom .cockpit-zoom-gauge.cockpit-tone-rainbow .cockpit-zoom-gauge-title {
+  background: linear-gradient(90deg, #ff5e5e, #ffd24a, #5ee08a, #4ac8ff, #a17dff, #ff6bd6);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  width: fit-content;
+}
+.cockpit-zoom .cockpit-zoom-line { color: var(--text-normal); }
+.cockpit-zoom .cockpit-vault-value { color: var(--tone); font-weight: 600; }
+.cockpit-zoom .cockpit-zoom-subtitle { margin-top: 6px; font-weight: 600; color: var(--text-muted); }
+.cockpit-zoom .cockpit-zoom-empty { color: var(--text-muted); }
+
+.cockpit-zoom .cockpit-lint-button {
+  all: unset;
+  box-sizing: border-box;
+  align-self: flex-start;
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  cursor: pointer;
+}
+
+.cockpit-zoom .cockpit-lint-button:hover,
+.cockpit-zoom .cockpit-lint-button:focus-visible {
+  filter: brightness(1.15);
+}
+
+.cockpit-zoom .cockpit-link {
+  all: unset;
+  box-sizing: border-box;
+  align-self: flex-start;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--interactive-accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.cockpit-zoom .cockpit-repo-row,
+.cockpit-zoom .cockpit-zoom-radar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+}
+
+.cockpit-zoom .cockpit-repo-name,
+.cockpit-zoom .cockpit-zoom-radar-name { font-weight: 600; }
+.cockpit-zoom .cockpit-repo-state,
+.cockpit-zoom .cockpit-zoom-radar-text { color: var(--tone); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cockpit-panel-warnings .cockpit-inst-big {
+    animation: none;
+  }
+
+  /* Blinken und Pulsieren stehen still (die Lampe leuchtet, der Ring bleibt voll sichtbar). */
+  .cockpit-lamp-busy,
+  .cockpit-stage .cockpit-ring-pulse,
+  .cockpit-stage .cockpit-tone-rainbow .cockpit-ring {
+    animation: none;
+  }
+
+  .cockpit-stage .cockpit-field,
+  .cockpit-stage .cockpit-switch-knob,
+  .cockpit-panel {
+    transition: none;
+  }
+
+  .cockpit-zoom-panel {
+    animation: none;
+  }
+}
+
+/* Nicht eingerichtet (Abend 21.2): Hinweis mit Sprung in die Einstellungen */
+.cockpit-zoom .cockpit-zoom-hint,
+.cockpit-unset-hint { color: var(--text-muted); font-style: italic; margin: 2px 0 6px; }
+.cockpit-zoom .cockpit-unset-open,
+.cockpit-unset-hint .cockpit-unset-open { margin: 4px 0 8px; cursor: pointer; }
+.cockpit-unset-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cockpit-focus-unset,
+.cockpit-radars-unset { color: var(--text-muted); overflow: hidden; white-space: nowrap; }
+/* Radar-Feld ohne Radare (Abend 21.3): kurzes „aus“ in der Größe der Radar-Kürzel, der volle Hinweis steht im title. */
+.cockpit-stage .cockpit-radars-unset { font-size: 1.3cqw; line-height: 1; font-style: normal; text-align: center; }
