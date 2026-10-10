@@ -17,7 +17,7 @@ The plugin's settings and labels are in German. There is no English interface ye
 
 ## Installation
 
-1. Download the ZIP from the GitHub release: `<RELEASE-LINK>`
+1. Download the ZIP from the GitHub release: [https://github.com/nyko073006/glasscockpit/releases/latest](https://github.com/nyko073006/glasscockpit/releases/latest)
 2. Unzip it. You get a folder `glasscockpit` with `main.js`, `manifest.json`, `styles.css` and `native/`.
 3. Move the folder to `<your vault>/.obsidian/plugins/`.
 4. In Obsidian, open Settings, Community plugins, and enable Glasscockpit.

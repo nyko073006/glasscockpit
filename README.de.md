@@ -15,7 +15,7 @@ Glasscockpit ist ein Obsidian-Plugin. Es startet [Claude-Code](https://code.clau
 
 ## Installation
 
-1. ZIP aus dem GitHub-Release laden: `<RELEASE-LINK>`
+1. ZIP aus dem GitHub-Release laden: [https://github.com/nyko073006/glasscockpit/releases/latest](https://github.com/nyko073006/glasscockpit/releases/latest)
 2. Entpacken. Es entsteht ein Ordner `glasscockpit` mit `main.js`, `manifest.json`, `styles.css` und `native/`.
 3. Den Ordner nach `<dein Vault>/.obsidian/plugins/` legen.
 4. In Obsidian unter Einstellungen, Community-Plugins, Glasscockpit aktivieren.
