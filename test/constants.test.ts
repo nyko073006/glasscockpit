@@ -33,6 +33,11 @@ describe("(a) Namensraum und Konstanten", () => {
     expect(manifest.id).toBe(PLUGIN_ID);
   });
 
+  it("manifest.json: Beschreibung ohne das Wort Obsidian (Portal-Regel)", () => {
+    const manifest = JSON.parse(readFileSync(join(ROOT, "manifest.json"), "utf8"));
+    expect(manifest.description).not.toMatch(/obsidian/i);
+  });
+
   it("CSS_PREFIX ist cockpit-", () => {
     expect(CSS_PREFIX).toBe("cockpit-");
   });

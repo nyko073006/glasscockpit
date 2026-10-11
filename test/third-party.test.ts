@@ -85,7 +85,7 @@ describe("Lizenz und Metadaten", () => {
     const manifest = JSON.parse(readFileSync(resolve(ROOT, "manifest.json"), "utf8"));
     const pkg = JSON.parse(readFileSync(resolve(ROOT, "package.json"), "utf8"));
     for (const beschreibung of [manifest.description, pkg.description]) {
-      expect(beschreibung).toBe("Run Claude Code sessions as terminal views inside Obsidian, with a cockpit dashboard.");
+      expect(beschreibung).toBe("Run Claude Code sessions as terminal views with a cockpit dashboard.");
       expect(beschreibung).not.toMatch(/Eigengebrauch/);
     }
     expect(manifest.author).toBe("nyko073006");

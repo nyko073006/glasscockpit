@@ -1,9 +1,9 @@
 {
   "id": "glasscockpit",
   "name": "Glasscockpit",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "minAppVersion": "1.13.0",
-  "description": "Run Claude Code sessions as terminal views inside Obsidian, with a cockpit dashboard.",
+  "description": "Run Claude Code sessions as terminal views with a cockpit dashboard.",
   "author": "nyko073006",
   "authorUrl": "https://github.com/nyko073006",
   "isDesktopOnly": true
