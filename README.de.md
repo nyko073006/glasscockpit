@@ -15,12 +15,20 @@ Glasscockpit ist ein Obsidian-Plugin. Es startet [Claude-Code](https://code.clau
 
 ## Installation
 
+**Weg A: ohne ZIP (BRAT, oder der Community-Store, sobald das Plugin dort steht).**
+
+1. Plugin mit BRAT installieren (Repository `nyko073006/glasscockpit`) oder aus der Community-Plugin-Liste. Beide holen nur `main.js`, `manifest.json` und `styles.css`.
+2. Glasscockpit unter Einstellungen, Community-Plugins aktivieren.
+3. Einstellungen, Glasscockpit, Abschnitt „Binärdateien“, „Binärdateien laden“ drücken. Das Plugin lädt die Terminal-Bibliothek `node-pty` für deinen Mac einmalig herunter und prüft sie (siehe „Netzwerk“ unten). Danach eine Sitzung starten.
+
+**Weg B: das komplette ZIP.**
+
 1. ZIP aus dem GitHub-Release laden: [https://github.com/nyko073006/glasscockpit/releases/latest](https://github.com/nyko073006/glasscockpit/releases/latest)
 2. Entpacken. Es entsteht ein Ordner `glasscockpit` mit `main.js`, `manifest.json`, `styles.css` und `native/`.
 3. Den Ordner nach `<dein Vault>/.obsidian/plugins/` legen.
 4. In Obsidian unter Einstellungen, Community-Plugins, Glasscockpit aktivieren.
 
-Das Plugin steht nicht im Community-Store. In `native/` liegt die Terminal-Bibliothek `node-pty` als kompilierte Binärdatei. Beim ersten Start entfernt das Plugin für diesen Ordner das macOS-Quarantäne-Flag (`xattr`).
+Das Plugin steht noch nicht im Community-Store. In `native/` liegt die Terminal-Bibliothek `node-pty` als kompilierte Binärdatei (Weg B bringt sie mit, Weg A lädt sie). Beim ersten Start entfernt das Plugin für diesen Ordner das macOS-Quarantäne-Flag (`xattr`).
 
 ## Erste Schritte
 
@@ -108,11 +116,12 @@ Das folgt den Offenlegungsregeln der Obsidian-Entwicklerrichtlinien.
 - `~/.claude/ide/<port>.lock`: Lockfile der IDE-Brücke (Schalter „IDE-Brücke“, Vorgabe an). Damit sehen vom Plugin gestartete Claude-Sitzungen deine Auswahl und können Notizen öffnen. Der Server hört nur auf `127.0.0.1`. Das Lockfile verschwindet beim Beenden.
 - `npm run deploy:statusline` schreibt `~/.claude/statusline-command.sh`. Das startest du selbst.
 
-**Schreibt im Vault.** Die `data.json` des Plugins (Einstellungen, Sitzungsliste), die Aufgabendatei bei „Anlegen“ oder beim Abhaken einer Aufgabe und das Ergebnis von `git pull` im Briefing-Ordner.
+**Schreibt im Vault.** Die `data.json` des Plugins (Einstellungen, Sitzungsliste), den Ordner `native/darwin-<arch>/` im Plugin-Ordner bei „Binärdateien laden“ (dazu währenddessen einen Hilfsordner `.native-download-*`, danach entfernt), die Aufgabendatei bei „Anlegen“ oder beim Abhaken einer Aufgabe und das Ergebnis von `git pull` im Briefing-Ordner.
 
 **Netzwerk.**
 - GitHub-Suche (`api.github.com/search/repositories`) für die Research-Karte, ohne Token. Gesendet werden nur die Suchzeilen aus den Einstellungen. Ohne Token erlaubt GitHub 10 Suchen pro Minute.
 - Telegram (`api.telegram.org`), nur wenn du „Telegram, wenn eine Sitzung fertig ist“ oder „… eine Frage hat“ einschaltest (beide in der Vorgabe aus). Gesendet wird ein kurzer Statustext.
+- Binär-Download, nur wenn du in den Einstellungen „Binärdateien laden“ drückst, nie von selbst: ein ZIP (rund 40 KB) mit dem kompilierten `node-pty` für deinen Mac von `github.com/nyko073006/glasscockpit/releases/download/<Plugin-Version>/glasscockpit-native-darwin-<arch>.zip`. Das Plugin sendet dabei nichts außer der Anfrage selbst. Die Adresse steht fest im Code. Bevor etwas installiert wird, wird jede Datei des Downloads mit einer SHA256-Liste verglichen, die im Plugin eingebaut ist (keine Zusatzdateien, keine Symlinks, jede Summe muss stimmen); bei jeder Abweichung bleibt alles unverändert. Die geladenen Dateien sind nativer Code, den Obsidian danach lädt; die Summen sind deshalb die Absicherung: Sie stammen aus dem Plugin selbst, nicht aus dem Download.
 - Claude Code selbst spricht mit Anthropic. Das ist das Programm `claude`, nicht dieses Plugin.
 
 **Keine Telemetrie.** Das Plugin sendet keine Nutzungsdaten, keine Analytics und keine Absturzberichte.

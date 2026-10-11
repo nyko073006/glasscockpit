@@ -17,12 +17,20 @@ The plugin's settings and labels are in German. There is no English interface ye
 
 ## Installation
 
+**Option A: without the ZIP (BRAT, or the community store once the plugin is listed).**
+
+1. Install the plugin with BRAT (repository `nyko073006/glasscockpit`) or from the community plugins list. Both fetch `main.js`, `manifest.json` and `styles.css` only.
+2. Enable Glasscockpit under Settings, Community plugins.
+3. Open Settings, Glasscockpit, section "Binärdateien", and press "Binärdateien laden". The plugin downloads the terminal library `node-pty` for your Mac once and checks it (see "Network" below). Then start a session.
+
+**Option B: the complete ZIP.**
+
 1. Download the ZIP from the GitHub release: [https://github.com/nyko073006/glasscockpit/releases/latest](https://github.com/nyko073006/glasscockpit/releases/latest)
 2. Unzip it. You get a folder `glasscockpit` with `main.js`, `manifest.json`, `styles.css` and `native/`.
 3. Move the folder to `<your vault>/.obsidian/plugins/`.
 4. In Obsidian, open Settings, Community plugins, and enable Glasscockpit.
 
-The plugin is not in the community store. `native/` holds the terminal library `node-pty` as a compiled binary. On first start the plugin removes the macOS quarantine flag from that folder (`xattr`).
+The plugin is not in the community store yet. `native/` holds the terminal library `node-pty` as a compiled binary (Option B ships it, Option A downloads it). On first start the plugin removes the macOS quarantine flag from that folder (`xattr`).
 
 ## First steps
 
@@ -110,11 +118,12 @@ This follows the disclosure rules of the Obsidian developer policies.
 - `~/.claude/ide/<port>.lock`: lock file of the IDE bridge (switch "IDE-Brücke", on by default). It lets Claude sessions started by the plugin see your selection and open notes. The server listens on `127.0.0.1` only. The lock file is removed on exit.
 - `npm run deploy:statusline` writes `~/.claude/statusline-command.sh`. You run that yourself.
 
-**Writes inside the vault.** The plugin's `data.json` (settings, session list), the task file when you press "Anlegen" or tick a task, and the result of `git pull` in the briefing folder.
+**Writes inside the vault.** The plugin's `data.json` (settings, session list), the folder `native/darwin-<arch>/` inside the plugin folder when you press "Binärdateien laden" (plus a temporary folder `.native-download-*` there while it runs, removed afterwards), the task file when you press "Anlegen" or tick a task, and the result of `git pull` in the briefing folder.
 
 **Network.**
 - GitHub search (`api.github.com/search/repositories`) for the Research card, without a token. It sends your search lines from the settings and nothing else. Without a token GitHub allows 10 searches per minute.
 - Telegram (`api.telegram.org`), only if you enable "Telegram, wenn eine Sitzung fertig ist" or "…eine Frage hat" (both off by default). It sends a short status text.
+- Binary download, only when you press "Binärdateien laden" in the settings, never automatically: one ZIP (about 40 KB) with the compiled `node-pty` for your Mac from `github.com/nyko073006/glasscockpit/releases/download/<plugin version>/glasscockpit-native-darwin-<arch>.zip`. The plugin sends no data beyond the request itself. The address is fixed in the code. Before anything is installed, every file of the download is compared against a SHA256 list that is built into the plugin (no extra files, no symbolic links, every checksum must match); on any mismatch nothing is changed. The downloaded files are native code that Obsidian then loads, so the checksums are the safeguard: they come from the plugin itself, not from the download.
 - Claude Code itself talks to Anthropic. That is the `claude` program, not this plugin.
 
 **No telemetry.** The plugin sends no usage data, no analytics and no crash reports.

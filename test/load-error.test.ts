@@ -70,3 +70,15 @@ describe("classifyLoadError", () => {
     expect(new Set(meldungen).size).toBe(5);
   });
 });
+
+describe("Abend 26 (5): fehlendes node-pty verweist auf den Knopf", () => {
+  it("die Meldung nennt „Binärdateien laden“ in den Einstellungen und weiter npm run deploy", () => {
+    for (const roh of [ECHT.fehltEnoent, ECHT.fehltModul]) {
+      const m = classifyLoadError(roh).message;
+      expect(m).toContain("node-pty fehlt im Plugin-Ordner");
+      expect(m).toContain("Binärdateien laden");
+      expect(m).toContain("Einstellungen");
+      expect(m).toContain("npm run deploy");
+    }
+  });
+});

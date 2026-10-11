@@ -7,6 +7,9 @@ import type { SessionStore } from "../core/session-store";
 import { TEST_TEXT } from "../core/telegram";
 import { addRadar, canAddRadar, removeRadar, renameRadar, setRadarFile, RADAR_FULL_HINT, RADAR_VISIBLE_HINT } from "../core/radar-list";
 import { sendTelegram } from "./telegram-send";
+import { nativeStatusText } from "../core/native-verify";
+import { downloadNative, nativeInstalled } from "./native-download";
+import { pluginDirOf, REAL_DOWNLOAD_DEPS } from "./native-download-fetch";
 
 type BoolKey = { [K in keyof CockpitSettings]: CockpitSettings[K] extends boolean ? K : never }[keyof CockpitSettings];
 type TextKey = { [K in keyof CockpitSettings]: CockpitSettings[K] extends string ? K : never }[keyof CockpitSettings];
@@ -16,9 +19,12 @@ type NumKey = { [K in keyof CockpitSettings]: CockpitSettings[K] extends number 
 // Einstellungsseite: Werte kommen aus store.settings(), geschrieben wird nur über store.updateSetting.
 export class CockpitSettingTab extends PluginSettingTab {
   private readonly store: SessionStore;
+  private readonly plugin: Plugin;
+  private nativeBusy = false;
 
   constructor(app: App, plugin: Plugin, store: SessionStore) {
     super(app, plugin);
+    this.plugin = plugin;
     this.store = store;
   }
 
@@ -34,6 +40,8 @@ export class CockpitSettingTab extends PluginSettingTab {
       "reopenAfterDisable", "Tabs nach dem Abschalten wieder öffnen", s.reopenAfterDisable,
       "An: Wer Glasscockpit unter Community-Plugins aus- und wieder einschaltet, bekommt die vorher offenen Sitzungen als Tabs zurück, mit ihrer Unterhaltung, und die Cockpit-Ansicht an ihrem Platz (Hauptbereich oder Seitenleiste). Aus: Sie bleiben zu, wie bei Obsidian üblich.",
     );
+
+    this.nativeSection();
 
     new Setting(containerEl).setName("Terminal").setHeading();
     this.toggleField(
@@ -145,6 +153,43 @@ export class CockpitSettingTab extends PluginSettingTab {
   }
 
   /** Radare als Liste: Name, Pfad zur state.json (~ erlaubt), Entfernen; darunter Hinzufügen (bei vollen Plätzen gesperrt). */
+  /** Status der node-pty-Binärdateien und der Knopf, der sie vom Release lädt (Abend 26). */
+  private nativeSection(): void {
+    const { containerEl } = this;
+    new Setting(containerEl).setName("Binärdateien").setHeading();
+    const dir = pluginDirOf(this.app, this.plugin.manifest);
+    const target = `${process.platform}-${process.arch}`;
+    const status = dir === null ? "Der Vault liegt nicht im Dateisystem, die Binärdateien lassen sich nicht ablegen." : nativeStatusText(nativeInstalled(dir, process.platform, process.arch), target);
+    const setting = new Setting(containerEl)
+      .setName("Terminal-Binärdateien (node-pty)")
+      .setDesc(`${status} Der Knopf lädt einmalig die Dateien für diesen Mac von github.com/nyko073006/glasscockpit (Release ${this.plugin.manifest.version}) und prüft sie gegen feste SHA256-Summen im Plugin. Nichts anderes wird geladen.`);
+    setting.addButton((b) =>
+      b
+        .setButtonText("Binärdateien laden")
+        .setDisabled(dir === null || this.nativeBusy)
+        .onClick(async () => {
+          if (dir === null || this.nativeBusy) return;
+          this.nativeBusy = true;
+          b.setDisabled(true);
+          try {
+            const r = await downloadNative(
+              { pluginDir: dir, platform: process.platform, arch: process.arch, version: this.plugin.manifest.version },
+              REAL_DOWNLOAD_DEPS,
+              (schritt) => setting.setDesc(schritt),
+            );
+            new Notice(
+              r.ok ? `Binärdateien geladen (${r.files} Dateien). Neue Sitzungen starten jetzt.` : `Binärdateien: ${r.reason}`,
+              r.ok ? 8000 : 15000,
+            );
+          } finally {
+            this.nativeBusy = false;
+            b.setDisabled(false);
+            this.display();
+          }
+        }),
+    );
+  }
+
   private radarSection(): void {
     new Setting(this.containerEl).setName("Radare").setHeading();
     new Setting(this.containerEl).setDesc(RADAR_VISIBLE_HINT);

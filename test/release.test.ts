@@ -3,7 +3,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { hashTree } from "../scripts/lib/native-checksums";
 import { packRelease } from "../scripts/lib/release";
+import { NATIVE_CHECKSUMS } from "../src/core/native-checksums";
+import { nativeAssetName, verifyNative } from "../src/core/native-verify";
 import { ROOT } from "./helpers/files";
 
 const PTY = join(ROOT, "node_modules", "node-pty");
@@ -124,5 +127,68 @@ describe("Abend 25 (2): Release-ZIP", () => {
     packRelease({ root: wurzel, ptyQuelle: PTY });
     expect(zipListe(zip).map((e) => e.name)).not.toContain("altlast.txt");
     expect(existsSync(join(wurzel, "dist", "glasscockpit"))).toBe(false);
+  });
+});
+
+describe("Abend 26 (3): Release-Assets für Store, BRAT und Download", () => {
+  const ZIELE = ["darwin-arm64", "darwin-x64"] as const;
+
+  it("die Dateinamen der Native-ZIPs sind die, die das Plugin herunterlädt", () => {
+    const wurzel = fakeWurzel();
+    packRelease({ root: wurzel, ptyQuelle: PTY });
+    for (const t of ZIELE) expect(existsSync(join(wurzel, "dist", nativeAssetName(t))), t).toBe(true);
+  });
+
+  it("legt main.js, manifest.json und styles.css einzeln neben die ZIPs in dist/", () => {
+    const wurzel = fakeWurzel();
+    packRelease({ root: wurzel, ptyQuelle: PTY });
+    expect(readFileSync(join(wurzel, "dist", "main.js"), "utf8")).toBe("// main");
+    expect(readFileSync(join(wurzel, "dist", "styles.css"), "utf8")).toBe("/* css */");
+    expect(readFileSync(join(wurzel, "dist", "manifest.json"), "utf8")).toBe(readFileSync(join(wurzel, "manifest.json"), "utf8"));
+  });
+
+  it.each(ZIELE)("dist/glasscockpit-native-%s.zip hat die Dateien von native/%s/ direkt an der Wurzel", (t) => {
+    const wurzel = fakeWurzel();
+    packRelease({ root: wurzel, ptyQuelle: PTY });
+    const zip = join(wurzel, "dist", `glasscockpit-native-${t}.zip`);
+    const dateien = zipListe(zip).filter((e) => !e.rechte.startsWith("d")).map((e) => e.name).sort();
+    expect(dateien).toEqual(Object.keys(NATIVE_CHECKSUMS[t]).sort());
+    const fremd = ZIELE.find((z) => z !== t);
+    expect(dateien.filter((n) => n.startsWith("native/") || n.startsWith("/") || n.includes(`prebuilds/${fremd}/`))).toEqual([]);
+  });
+
+  it.each(ZIELE)("%s: pty.node und spawn-helper 0755, die übrigen 0644", (t) => {
+    const wurzel = fakeWurzel();
+    packRelease({ root: wurzel, ptyQuelle: PTY });
+    const liste = zipListe(join(wurzel, "dist", `glasscockpit-native-${t}.zip`)).filter((e) => !e.rechte.startsWith("d"));
+    for (const e of liste) {
+      const ausfuehrbar = /(^|\/)(pty\.node|spawn-helper)$/.test(e.name);
+      expect(e.rechte, e.name).toBe(ausfuehrbar ? "-rwxr-xr-x" : "-rw-r--r--");
+    }
+  });
+
+  it.each(ZIELE)("%s: entpackt besteht der Baum verifyNative gegen die eingecheckten Summen", (t) => {
+    const wurzel = fakeWurzel();
+    packRelease({ root: wurzel, ptyQuelle: PTY });
+    const aus = mkdtempSync(join(tmpdir(), "glasscockpit-unzip-"));
+    aufraeumen.push(aus);
+    execFileSync("unzip", ["-q", join(wurzel, "dist", `glasscockpit-native-${t}.zip`), "-d", aus]);
+    expect(verifyNative(NATIVE_CHECKSUMS[t], hashTree(aus))).toEqual({ ok: true });
+  });
+
+  it("passen die eingecheckten Summen nicht zum Paket, bricht es ab und legt dist/ nicht an", () => {
+    const wurzel = fakeWurzel();
+    const falsch = structuredClone(NATIVE_CHECKSUMS) as Record<string, Record<string, string>>;
+    falsch["darwin-x64"]["package.json"] = "0".repeat(64);
+    expect(() => packRelease({ root: wurzel, ptyQuelle: PTY, checksums: falsch })).toThrow(/darwin-x64.*package\.json/s);
+    expect(existsSync(join(wurzel, "dist"))).toBe(false);
+  });
+
+  it("eine Summe, die im Paket gar nicht vorkommt (Datei fehlt im Paket), bricht ebenfalls ab", () => {
+    const wurzel = fakeWurzel();
+    const mehr = structuredClone(NATIVE_CHECKSUMS) as Record<string, Record<string, string>>;
+    mehr["darwin-arm64"]["lib/gibt-es-nicht.js"] = "1".repeat(64);
+    expect(() => packRelease({ root: wurzel, ptyQuelle: PTY, checksums: mehr })).toThrow("gibt-es-nicht.js");
+    expect(existsSync(join(wurzel, "dist"))).toBe(false);
   });
 });

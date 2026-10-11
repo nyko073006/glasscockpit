@@ -32,7 +32,7 @@ describe("Cockpit-Ansicht: eine Quelle, kein zweiter Lader", () => {
     expect(filesWith(/\bfetchSearch\(/)).toEqual(["src/host/research-card.ts", "src/host/research-fetch.ts"]);
     expect(filesWith(/\brunGitPull\(/)).toEqual(["src/host/git-pull.ts"]);
     expect(filesWith(/\breadResearchCache\(/)).toEqual(["src/host/research-card.ts", "src/host/research-fs.ts"]);
-    expect(filesWith(/\brequestUrl\b/)).toEqual(["src/host/research-fetch.ts", "src/host/telegram-send.ts"]);
+    expect(filesWith(/\brequestUrl\b/)).toEqual(["src/host/native-download-fetch.ts", "src/host/research-fetch.ts", "src/host/telegram-send.ts"]);
   });
 
   it("kein neuer Takt: setInterval nur dort, wo es schon vor Abend 15 stand", () => {

@@ -1,6 +1,6 @@
 {
   "name": "glasscockpit",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Run Claude Code sessions as terminal views inside Obsidian, with a cockpit dashboard.",
@@ -17,7 +17,8 @@
     "check:public": "node scripts/check-public.mjs",
     "release": "node scripts/release.mjs",
     "export-public": "node scripts/export-public.mjs",
-    "third-party": "node scripts/third-party.mjs"
+    "third-party": "node scripts/third-party.mjs",
+    "native-checksums": "node scripts/native-checksums.mjs"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

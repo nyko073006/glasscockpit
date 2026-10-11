@@ -1,4 +1,4 @@
-// Release-ZIP bauen: erst Build, dann check:public, dann packen nach dist/<id>-<version>.zip.
+// Release-Dateien bauen: erst Build, dann check:public, dann packen nach dist/ (Komplett-ZIP, zwei Native-ZIPs, Einzeldateien).
 // Keine Veröffentlichung: Tag und GitHub-Release macht ein Mensch nach der Abnahme.
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
@@ -17,7 +17,7 @@ for (const skript of ["build", "check:public"]) {
 
 try {
   const zip = packRelease({ root: ROOT, ptyQuelle: join(ROOT, "node_modules", "node-pty") });
-  console.log(`Release ok: ${zip}`);
+  console.log(`Release ok: ${zip} (Native-ZIPs und Einzeldateien daneben in dist/)`);
 } catch (fehler) {
   console.error(`Release abgebrochen: ${fehler instanceof Error ? fehler.message : fehler}`);
   process.exit(1);

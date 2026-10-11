@@ -16,11 +16,11 @@ describe("Research: Netz nur an zwei Stellen, ohne Token", () => {
     }
     expect("await requestUrl({ url })").not.toMatch(VERBOTEN);
   });
-  it("requestUrl kommt in src/ nur in research-fetch.ts und telegram-send.ts vor", () => {
+  it("requestUrl kommt in src/ nur in research-fetch.ts, telegram-send.ts und (Abend 26) native-download-fetch.ts vor", () => {
     const hits = listFilesRecursive(join(ROOT, "src"))
       .filter((f) => /requestUrl/.test(readFileSync(f, "utf8")))
       .map(relativeToRoot);
-    expect(hits).toEqual(["src/host/research-fetch.ts", "src/host/telegram-send.ts"]);
+    expect(hits).toEqual(["src/host/native-download-fetch.ts", "src/host/research-fetch.ts", "src/host/telegram-send.ts"]);
   });
   it.each(RESEARCH_FILES)("%s enthält nichts Verbotenes", (p) => {
     expect(read(p)).not.toMatch(VERBOTEN);

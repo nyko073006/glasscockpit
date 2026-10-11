@@ -127,6 +127,10 @@ export const DEFAULT_TELEGRAM_IDLE_MIN = 2;
 // Feste Technik-Invarianten, keine Einstellungen: Zeitlimits für ioreg und den Versand.
 export const IDLE_PROBE_TIMEOUT_MS = 3000;
 export const TELEGRAM_TIMEOUT_MS = 10000;
+// Download der node-pty-Binärdateien (Abend 26): ein Knopfdruck, ein ZIP von rund 40 KB je Plattform. Die Obergrenze
+// fängt eine falsche oder bösartige Antwort ab, bevor sie auf die Platte geschrieben wird.
+export const NATIVE_DOWNLOAD_TIMEOUT_MS = 120000;
+export const NATIVE_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024;
 
 // Usage-Karte (Abend 12). Abstand zwischen zwei Lesevorgängen (Schnappschuss und Transkripte), nur bei sichtbarem Dashboard.
 export const DEFAULT_USAGE_POLL_SEC = 60;

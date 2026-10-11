@@ -43,7 +43,9 @@ const KLASSEN: Klasse[] = [
     kind: "fehlt",
     muster: ["cannot find module", "no such file"],
     titel: "node-pty fehlt im Plugin-Ordner",
-    hinweis: "npm run deploy ausführen, dann Obsidian neu laden.",
+    hinweis:
+      "In den Einstellungen von Glasscockpit auf „Binärdateien laden“ klicken und danach die Sitzung neu starten. " +
+      "Wer aus dem Quelltext baut: npm run deploy, dann Obsidian neu laden.",
   },
 ];
 
