@@ -65,6 +65,22 @@ This copies `statusline/statusline-command.sh` to `~/.claude/statusline-command.
 
 Without the status line the plugin works, but the usage card and the context and token gauges stay empty.
 
+### Handoff signal (optional)
+
+A Stop hook shows a coloured banner "Session clearable" after an answer in which Claude reports the session as ready to hand off: a code block whose first line starts with `Handoff:`, or the word "clearable" without "not"/"nicht" before it. The banner only appears once the session has enough context and enough of your own messages. Both thresholds are settings ("Handoff frühestens ab Kontext (%)", default 10, and "Handoff frühestens ab Nachrichten", default 2). Slash commands do not count as messages. The hook reads the context from the status line; without it only the message threshold applies. It needs `python3`. The banner text is German.
+
+```sh
+npm run deploy:hook
+```
+
+This copies `hooks/clearable-banner.py` to `~/.claude/hooks/clearable-banner.py`. Then register it in `~/.claude/settings.json`:
+
+```json
+{ "hooks": { "Stop": [ { "hooks": [ { "type": "command", "command": "python3 \"$HOME/.claude/hooks/clearable-banner.py\" 2>/dev/null || true", "timeout": 10 } ] } ] } }
+```
+
+For Claude to set the signal, add an instruction to your `CLAUDE.md`, for example: "When the session is ready to hand off, end the answer with a code block that starts with `Handoff:`."
+
 ## Handoffs
 
 The plugin can continue a project from the handoff note of an earlier session. It is off until you set two paths.
@@ -117,6 +133,7 @@ This follows the disclosure rules of the Obsidian developer policies.
 - `~/.claude/cockpit/tokens-today.json` (today's output tokens for the status line; switch "Tokens für die Statuszeile schreiben", on by default), `thresholds.json` (context thresholds from your settings) and `research.json` (cache of GitHub results).
 - `~/.claude/ide/<port>.lock`: lock file of the IDE bridge (switch "IDE-Brücke", on by default). It lets Claude sessions started by the plugin see your selection and open notes. The server listens on `127.0.0.1` only. The lock file is removed on exit.
 - `npm run deploy:statusline` writes `~/.claude/statusline-command.sh`. You run that yourself.
+- `npm run deploy:hook` writes `~/.claude/hooks/clearable-banner.py`; you run that yourself too. The hook reads `~/.claude/cockpit/thresholds.json`, `sessions/*.json` and the session transcript, and appends a log to `~/.claude/hooks/clearable-banner.log`.
 
 **Writes inside the vault.** The plugin's `data.json` (settings, session list), the folder `native/darwin-<arch>/` inside the plugin folder when you press "Binärdateien laden" (plus a temporary folder `.native-download-*` there while it runs, removed afterwards), the task file when you press "Anlegen" or tick a task, and the result of `git pull` in the briefing folder.
 

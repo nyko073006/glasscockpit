@@ -36,6 +36,11 @@ export function ringFill(value: number, limit: number): number {
  * Inhalt von ~/.claude/cockpit/thresholds.json: die Kontext-Schwellen für das Statuszeilen-Skript (Festlegung 1,
  * eine Quelle). Das Plugin schreibt die Datei atomar.
  */
-export function thresholdsFileText(s: { contextWarn: number; contextHandoff: number }): string {
-  return JSON.stringify({ context_warn: s.contextWarn, context_handoff: s.contextHandoff }) + "\n";
+export type ThresholdSettings = { contextWarn: number; contextHandoff: number; clearableMinContextPct: number; clearableMinPrompts: number };
+
+export function thresholdsFileText(s: ThresholdSettings): string {
+  return JSON.stringify({
+    context_warn: s.contextWarn, context_handoff: s.contextHandoff,
+    clearable_min_context_pct: s.clearableMinContextPct, clearable_min_prompts: s.clearableMinPrompts,
+  }) + "\n";
 }

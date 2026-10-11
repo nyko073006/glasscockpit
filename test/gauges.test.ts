@@ -51,8 +51,10 @@ describe("ringFill", () => {
 
 describe("thresholdsFileText", () => {
   it("JSON mit context_warn und context_handoff, abschließender Umbruch", () => {
-    const text = thresholdsFileText({ contextWarn: 100000, contextHandoff: 120000 });
+    const text = thresholdsFileText({ contextWarn: 100000, contextHandoff: 120000, clearableMinContextPct: 15, clearableMinPrompts: 3 });
     expect(text.endsWith("\n")).toBe(true);
-    expect(JSON.parse(text)).toEqual({ context_warn: 100000, context_handoff: 120000 });
+    expect(JSON.parse(text)).toEqual({
+      context_warn: 100000, context_handoff: 120000, clearable_min_context_pct: 15, clearable_min_prompts: 3,
+    });
   });
 });

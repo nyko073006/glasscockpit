@@ -186,6 +186,10 @@ export const RESEARCH_TIMEOUT_MS = 15000;
 // Kontext-Schwellen: dieselben Werte wie CTX_WARN und CTX_HANDOFF im Statuszeilen-Skript, aus einer Quelle (thresholds.json).
 export const DEFAULT_CONTEXT_WARN = 150000;
 export const DEFAULT_CONTEXT_HANDOFF = 175000;
+// Handoff-Freigabe (Nutzerwunsch 10./11.10.2026): Eine Session gilt erst als übergabereif, wenn beides erreicht ist, damit
+// wirklich etwas passiert ist. Geht über thresholds.json an den Stop-Hook, der das clearable-Banner zeigt.
+export const DEFAULT_CLEARABLE_MIN_CONTEXT_PCT = 10;
+export const DEFAULT_CLEARABLE_MIN_PROMPTS = 2;
 // Output-Tokens je Tag: Median und p90 aus „Output-Kennzahlen.md“ (gemessen am 03.10.2026).
 export const DEFAULT_TOKENS_DAY_MEDIAN = 340000;
 export const DEFAULT_TOKENS_DAY_P90 = 870000;

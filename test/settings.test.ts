@@ -477,6 +477,16 @@ describe("Einstellungen Cockpit füllen (Abend 18)", () => {
     expect(parseSettings({ contextHandoff: 140000 }).settings).toMatchObject({ contextWarn: 150000, contextHandoff: 175000 });
     expect(parseSettings({ contextWarn: 120000 }).settings.contextWarn).toBe(120000);
   });
+  it("Handoff-Freigabe: Vorgabe 10 % Kontext und 2 Nachrichten, geklemmt auf 0–100 und 1–50", () => {
+    expect(DEFAULT_SETTINGS).toMatchObject({ clearableMinContextPct: 10, clearableMinPrompts: 2 });
+    expect(parseSettings({ clearableMinContextPct: 250, clearableMinPrompts: 0 }).settings)
+      .toMatchObject({ clearableMinContextPct: 100, clearableMinPrompts: 1 });
+    expect(parseSettings({ clearableMinContextPct: 0, clearableMinPrompts: 5 }).settings)
+      .toMatchObject({ clearableMinContextPct: 0, clearableMinPrompts: 5 });
+    expect(validateSetting("clearableMinPrompts", 0)).toBe("ganze Zahl von 1 bis 50");
+    expect(validateSetting("clearableMinContextPct", 101)).toBe("ganze Zahl von 0 bis 100");
+    expect(validateSetting("clearableMinContextPct", 0)).toBeNull();
+  });
   it("dependencyReason: Einzeländerung gegen das Paar", () => {
     const s = DEFAULT_SETTINGS;
     expect(dependencyReason(s, "contextWarn", 175000)).toBe("muss unter der Handoff-Schwelle liegen");

@@ -5,7 +5,7 @@ import {
   DEFAULT_TELEGRAM_CHAT_ID, DEFAULT_TELEGRAM_ENV_FILE, DEFAULT_TELEGRAM_IDLE_MIN, DEFAULT_TELEGRAM_ON_DONE, DEFAULT_TELEGRAM_ON_QUESTION,
   DEFAULT_USAGE_POLL_SEC, DEFAULT_WRITE_TOKENS_FILE, DEFAULT_RESEARCH_SEARCHES, DEFAULT_RESEARCH_MAX_AGE_MIN, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF, DEFAULT_FIXED_PROMPT, DEFAULT_SKIP_PERMISSIONS,
   DASHBOARD_LAYOUTS, DEFAULT_DASHBOARD_LAYOUT, COCKPIT_CROPS, DEFAULT_COCKPIT_CROP,
-  DEFAULT_CONTEXT_WARN, DEFAULT_CONTEXT_HANDOFF, DEFAULT_TOKENS_DAY_MEDIAN, DEFAULT_TOKENS_DAY_P90, DEFAULT_FOCUS_HEADING, DEFAULT_INBOX_DIR,
+  DEFAULT_CONTEXT_WARN, DEFAULT_CONTEXT_HANDOFF, DEFAULT_CLEARABLE_MIN_CONTEXT_PCT, DEFAULT_CLEARABLE_MIN_PROMPTS, DEFAULT_TOKENS_DAY_MEDIAN, DEFAULT_TOKENS_DAY_P90, DEFAULT_FOCUS_HEADING, DEFAULT_INBOX_DIR,
   DEFAULT_HUBS_DIR, DEFAULT_HANDOFFS_DIR, DEFAULT_HUB_SUFFIX, DEFAULT_HANDOFF_PROMPT,
   DEFAULT_INDEX_FILE, DEFAULT_LINT_AFTER_DAYS, DEFAULT_DAILY_DIR, DEFAULT_NEXT_EFFORT, DEFAULT_LINT_COMMAND, RADAR_SLOTS, EFFORT_STEPS,
 } from "./constants";
@@ -27,7 +27,8 @@ export interface CockpitSettings {
   researchSearches: string; researchMaxAgeMin: number;
   dashboardLayout: DashboardLayout;
   cockpitCrop: CockpitCrop;
-  contextWarn: number; contextHandoff: number; tokensDayMedian: number; tokensDayP90: number;
+  contextWarn: number; contextHandoff: number; clearableMinContextPct: number; clearableMinPrompts: number;
+  tokensDayMedian: number; tokensDayP90: number;
   focusHeading: string; inboxDir: string; indexFile: string; lintAfterDays: number; dailyDir: string;
   nextEffort: (typeof EFFORT_STEPS)[number]; radars: RadarEntry[]; lintCommand: string;
   hubsDir: string; handoffsDir: string; hubSuffix: string; handoffPrompt: string;
@@ -70,6 +71,8 @@ export const DEFAULT_SETTINGS: CockpitSettings = {
   cockpitCrop: DEFAULT_COCKPIT_CROP,
   contextWarn: DEFAULT_CONTEXT_WARN,
   contextHandoff: DEFAULT_CONTEXT_HANDOFF,
+  clearableMinContextPct: DEFAULT_CLEARABLE_MIN_CONTEXT_PCT,
+  clearableMinPrompts: DEFAULT_CLEARABLE_MIN_PROMPTS,
   tokensDayMedian: DEFAULT_TOKENS_DAY_MEDIAN,
   tokensDayP90: DEFAULT_TOKENS_DAY_P90,
   focusHeading: DEFAULT_FOCUS_HEADING,
@@ -103,6 +106,8 @@ const RANGES = {
   researchMaxAgeMin: [10, 1440],
   contextWarn: [1000, 1000000],
   contextHandoff: [1000, 1000000],
+  clearableMinContextPct: [0, 100],
+  clearableMinPrompts: [1, 50],
   tokensDayMedian: [1000, 100000000],
   tokensDayP90: [1000, 100000000],
   lintAfterDays: [1, 365],
@@ -194,6 +199,8 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   cockpitCrop: (v) => ((COCKPIT_CROPS as readonly unknown[]).includes(v) ? null : "crop oder full"),
   contextWarn: intIn(...RANGES.contextWarn),
   contextHandoff: intIn(...RANGES.contextHandoff),
+  clearableMinContextPct: intIn(...RANGES.clearableMinContextPct),
+  clearableMinPrompts: intIn(...RANGES.clearableMinPrompts),
   tokensDayMedian: intIn(...RANGES.tokensDayMedian),
   tokensDayP90: intIn(...RANGES.tokensDayP90),
   focusHeading: (v) => (typeof v === "string" && v.trim() !== "" && !/[\r\n]/.test(v) ? null : "eine Zeile, nicht leer"),

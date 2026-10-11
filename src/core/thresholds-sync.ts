@@ -1,8 +1,8 @@
-import { thresholdsFileText } from "./gauges";
+import { thresholdsFileText, type ThresholdSettings } from "./gauges";
 
 /**
  * Schwellen eine Quelle (Festlegung 1, Abend 18): Das Plugin schreibt contextWarn und contextHandoff nach thresholds.json,
- * das Statuszeilen-Skript liest sie. Geschrieben wird beim Laden und nur, wenn sich der Inhalt ändert. Ein Schreibfehler
+ * das Statuszeilen-Skript liest sie. Dazu die Handoff-Freigabe (Abend 26b) für den clearable-Stop-Hook. Geschrieben wird beim Laden und nur, wenn sich der Inhalt ändert. Ein Schreibfehler
  * geht ins Log und wird beim nächsten Aufruf erneut versucht; er wirft nie.
  */
 export class ThresholdsSync {
@@ -13,7 +13,7 @@ export class ThresholdsSync {
     this.deps = deps;
   }
 
-  async sync(s: { contextWarn: number; contextHandoff: number }): Promise<void> {
+  async sync(s: ThresholdSettings): Promise<void> {
     const text = thresholdsFileText(s);
     if (text === this.written) return;
     try {
