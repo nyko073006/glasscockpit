@@ -8,6 +8,7 @@ import {
 } from "../core/constants";
 import { type FoundLine, firstNonEmptyLine } from "../core/diagnose";
 import { OBSIDIAN_STATUS_BAR, bottomOverlap } from "../core/status-bar";
+import { type TerminalOptions, changedXtermOptions, xtermOptions } from "../core/terminal-options";
 import { type Dimensions, usableDimensions } from "../core/terminal-size";
 import { type ReadVar, buildTheme } from "../core/xterm-theme";
 import { createCssColorReader } from "./css-vars";
@@ -16,11 +17,6 @@ import { TerminalInput } from "./terminal-input";
 export type ResizeCallback = (cols: number, rows: number) => void;
 export type InputCallback = (data: string) => void;
 
-/** Schriftgröße und Scrollback kommen aus den Einstellungen und wirken auch auf offene Panes. */
-export interface TerminalOptions {
-  fontSize: number;
-  scrollback: number;
-}
 
 /**
  * xterm-Pane in einem Container. Nur FitAddon, kein WebGL: Es rendert der DOM-Renderer.
@@ -52,11 +48,10 @@ export class TerminalPane {
     this.readColor = createCssColorReader(container);
 
     this.term = new Terminal({
-      scrollback: options.scrollback,
+      ...xtermOptions(options),
       cursorBlink: true,
       // Die PTY liefert später selbst CRLF.
       convertEol: false,
-      fontSize: options.fontSize,
       lineHeight: TERMINAL_LINE_HEIGHT,
       fontFamily: TERMINAL_FONT_FAMILY,
       macOptionIsMeta: TERMINAL_MAC_OPTION_IS_META,
@@ -116,11 +111,10 @@ export class TerminalPane {
     }
   }
 
-  /** Schriftgröße und Scrollback live setzen, danach neu einpassen (die Zeichenzelle ändert sich). */
+  /** Schriftgröße, Scrollback und Mindestkontrast live setzen, danach neu einpassen (die Zeichenzelle ändert sich). */
   applyOptions(options: TerminalOptions): void {
     if (this.disposed) return;
-    if (this.term.options.fontSize !== options.fontSize) this.term.options.fontSize = options.fontSize;
-    if (this.term.options.scrollback !== options.scrollback) this.term.options.scrollback = options.scrollback;
+    Object.assign(this.term.options, changedXtermOptions(this.term.options, options));
     this.fit();
   }
 

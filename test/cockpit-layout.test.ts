@@ -71,7 +71,8 @@ describe("Bühne", () => {
   it("hat das Seitenverhältnis des Bilds (die volle Bühne), schwarzen Rand und ist Container für cqw", () => {
     const stage = q(".cockpit-stage");
     expect(stage.style.getPropertyValue("aspect-ratio").replace(/\s/g, "")).toBe("1536/1942");
-    expect(stage.style.getPropertyValue("container-type")).toBe("inline-size");
+    // container-type steht im Stylesheet (Linter: keine festen Stile per Skript).
+    expect(readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8")).toMatch(/\n\.cockpit-stage \{[^}]*container-type:\s*inline-size/);
     expect(q(".cockpit-stage-wrap")).toBeTruthy();
   });
 

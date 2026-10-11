@@ -73,6 +73,11 @@ export class CockpitSettingTab extends PluginSettingTab {
     );
     this.numberField("fontSize", "Schriftgröße", "Schriftgröße im Terminal in Pixeln (8 bis 32). Wirkt sofort auf offene Terminals.", s.fontSize);
     this.numberField("scrollback", "Scrollback (Zeilen)", "Wie viele Zeilen das Terminal nach oben aufbewahrt (500 bis 100000). Wirkt sofort auf offene Terminals.", s.scrollback);
+    this.numberField(
+      "minimumContrast", "Mindestkontrast im Terminal",
+      "Hebt Text, der zu blass auf dem Hintergrund steht, auf dieses Kontrastverhältnis an (1 bis 21, 1 = aus). Nötig im hellen Theme, weil Claude Code manche Texte fest weiß schickt. Wirkt sofort auf offene Terminals.",
+      s.minimumContrast, "0.5",
+    );
     this.textField(
       "handoffPrefix", "Präfix des Handoff-Blocks",
       "Ein Codeblock, dessen erste nichtleere Zeile so beginnt, steht oben im Terminal als fester Knopf „Handoff kopieren“, auch nach /clear, bis ein neuerer Block kommt. Groß- und Kleinschreibung zählt. Leer: kein Knopf (sofort). Ein neues Präfix gilt ab der nächsten Änderung des Transkripts.",
@@ -87,6 +92,7 @@ export class CockpitSettingTab extends PluginSettingTab {
     this.toggleField("alertBanner", "macOS-Banner", s.alertBanner);
     this.textField("soundFile", "Klangdatei", "Pfad zur Klangdatei, abgespielt mit afplay.", s.soundFile);
     this.numberField("alertGapMs", "Mindestabstand zwischen zwei Alarmen (ms)", "Höchstens ein Alarm je Sitzung in diesem Abstand.", s.alertGapMs);
+    this.numberField("bannerSeconds", "Banner ausblenden nach (Sekunden)", "So lange bleibt das macOS-Banner stehen (1 bis 60), dann verschwindet es von selbst und steht auch nicht in der Mitteilungszentrale. Je Sitzung gibt es höchstens ein Banner: Ein neues ersetzt das alte.", s.bannerSeconds);
 
     new Setting(containerEl).setName("Telegram").setHeading();
     this.toggleField("telegramOnDone", "Telegram, wenn eine Sitzung fertig ist", s.telegramOnDone);
@@ -169,25 +175,27 @@ export class CockpitSettingTab extends PluginSettingTab {
       b
         .setButtonText("Binärdateien laden")
         .setDisabled(dir === null || this.nativeBusy)
-        .onClick(async () => {
-          if (dir === null || this.nativeBusy) return;
-          this.nativeBusy = true;
-          b.setDisabled(true);
-          try {
-            const r = await downloadNative(
-              { pluginDir: dir, platform: process.platform, arch: process.arch, version: this.plugin.manifest.version },
-              REAL_DOWNLOAD_DEPS,
-              (schritt) => setting.setDesc(schritt),
-            );
-            new Notice(
-              r.ok ? `Binärdateien geladen (${r.files} Dateien). Neue Sitzungen starten jetzt.` : `Binärdateien: ${r.reason}`,
-              r.ok ? 8000 : 15000,
-            );
-          } finally {
-            this.nativeBusy = false;
-            b.setDisabled(false);
-            this.display();
-          }
+        .onClick(() => {
+          void (async () => {
+            if (dir === null || this.nativeBusy) return;
+            this.nativeBusy = true;
+            b.setDisabled(true);
+            try {
+              const r = await downloadNative(
+                { pluginDir: dir, platform: process.platform, arch: process.arch, version: this.plugin.manifest.version },
+                REAL_DOWNLOAD_DEPS,
+                (schritt) => { setting.setDesc(schritt); },
+              );
+              new Notice(
+                r.ok ? `Binärdateien geladen (${r.files} Dateien). Neue Sitzungen starten jetzt.` : `Binärdateien: ${r.reason}`,
+                r.ok ? 8000 : 15000,
+              );
+            } finally {
+              this.nativeBusy = false;
+              b.setDisabled(false);
+              this.display();
+            }
+          })();
         }),
     );
   }
@@ -301,10 +309,11 @@ export class CockpitSettingTab extends PluginSettingTab {
     this.addReset(setting, key);
   }
 
-  private numberField(key: NumKey, name: string, desc: string, value: number): void {
+  private numberField(key: NumKey, name: string, desc: string, value: number, step?: string): void {
     const setting = new Setting(this.containerEl).setName(name).setDesc(desc);
     setting.addText((t) => {
       t.inputEl.type = "number";
+      if (step) t.inputEl.step = step;
       t.setValue(String(value));
       let invalid = false;
       t.inputEl.addEventListener("change", () => {

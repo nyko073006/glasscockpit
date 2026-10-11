@@ -71,6 +71,10 @@ export const DEFAULT_RESUME_CONVERSATIONS = true;
 export const DEFAULT_REOPEN_AFTER_DISABLE = true;
 export const DEFAULT_FONT_SIZE = 13;
 export const DEFAULT_SCROLLBACK = 5000;
+/** Mindestkontrast (WCAG-Verhältnis) im Terminal; 1 = aus. Claude Code schickt Text fest weiß, im hellen Theme unsichtbar. */
+export const DEFAULT_MIN_CONTRAST = 4.5;
+/** Sekunden, nach denen ein macOS-Banner sich selbst schließt (sonst stapeln sie sich in der Mitteilungszentrale). */
+export const DEFAULT_BANNER_SECONDS = 6;
 // Beenden mit Eskalation: SIGHUP sofort, lebt der Prozess nach dieser Zeit noch, folgt SIGKILL. Technik-Invariante,
 // keine Einstellung: Gemessen am 05.10.2026 endet claude auf SIGHUP in unter 1 s; die Frist deckt nur Prozesse ab,
 // die SIGHUP ignorieren oder gerade beschäftigt sind. Eine längere Frist hält Neu starten nur unnötig auf.

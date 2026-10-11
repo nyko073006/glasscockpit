@@ -19,6 +19,7 @@ import { CodeBlockBar, copyCodeBlock } from "./code-block-bar";
 import type { SpawnPlan } from "./launcher";
 import type { NodePtyFactory } from "./pty-factory";
 import { RenameModal } from "./rename-modal";
+import type { TerminalOptions } from "../core/terminal-options";
 import { TerminalPane } from "./terminal-pane";
 import { TranscriptReader, type TranscriptResult } from "./transcript-reader";
 
@@ -228,7 +229,7 @@ export class TerminalView extends ItemView {
     // Doppelklick auf den Tab-Titel oder die Kopfzeile benennt um. registerDomEvent meldet beim Schließen ab.
     const leaf = this.leaf as LeafInternals;
     const targets = [leaf.tabHeaderInnerTitleEl ?? leaf.tabHeaderEl, (this as { titleEl?: HTMLElement }).titleEl];
-    if (!targets[0]) console.info("Glasscockpit: Tab-Titel nicht gefunden, Doppelklick zum Umbenennen fehlt dort");
+    if (!targets[0]) console.debug("Glasscockpit: Tab-Titel nicht gefunden, Doppelklick zum Umbenennen fehlt dort");
     for (const el of targets) {
       if (el) this.registerDomEvent(el, "dblclick", () => this.openRename());
     }
@@ -337,9 +338,9 @@ export class TerminalView extends ItemView {
     return record ? claudeIdOf(record) : id;
   }
 
-  private terminalOptions(): { fontSize: number; scrollback: number } {
-    const { fontSize, scrollback } = this.deps.settings();
-    return { fontSize, scrollback };
+  private terminalOptions(): TerminalOptions {
+    const { fontSize, scrollback, minimumContrast } = this.deps.settings();
+    return { fontSize, scrollback, minimumContrast };
   }
 
   writeTestOutput(): void {
@@ -538,7 +539,7 @@ export class TerminalView extends ItemView {
       if (s.alertBanner) {
         const id = this.sessionId;
         const name = (id ? this.deps.record(id)?.name : null) ?? this.title ?? "Claude";
-        showBanner(this.contentEl.win, "Glasscockpit", bannerText(name, signal), () => this.bringToFront());
+        showBanner(this.contentEl.win, id, "Glasscockpit", bannerText(name, signal), () => this.bringToFront(), s.bannerSeconds);
       }
     }
   }

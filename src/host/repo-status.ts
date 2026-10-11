@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { asError } from "../core/as-error";
 import { GIT_STATUS_TIMEOUT_MS } from "../core/constants";
 import { DAY_LOG_SEP } from "../core/day-stats";
 
@@ -33,10 +34,10 @@ export function runGitStatus(dir: string, env: Record<string, string>, timeoutMs
         "git",
         ["--no-optional-locks", "status", "--porcelain=v2", "--branch"],
         { cwd: dir, timeout: timeoutMs, env: { ...env, GIT_TERMINAL_PROMPT: "0" }, maxBuffer: 16 * 1024 * 1024 },
-        (err, stdout) => (err ? reject(err) : resolve(String(stdout))),
+        (err, stdout) => (err ? reject(asError(err)) : resolve(String(stdout))),
       );
     } catch (fehler) {
-      reject(fehler);
+      reject(asError(fehler));
     }
   });
 }
@@ -53,10 +54,10 @@ export function runGitDayLog(dir: string, since: Date, env: Record<string, strin
         "git",
         ["--no-optional-locks", "-c", "core.quotepath=false", "log", "--all", "--no-merges", `--since=${since.toISOString().replace(/\.\d+Z$/, "Z")}`, "--numstat", `--format=${DAY_LOG_SEP}%H`],
         { cwd: dir, timeout: timeoutMs, env: { ...env, GIT_TERMINAL_PROMPT: "0" }, maxBuffer: 64 * 1024 * 1024 },
-        (err, stdout) => (err ? reject(err) : resolve(String(stdout))),
+        (err, stdout) => (err ? reject(asError(err)) : resolve(String(stdout))),
       );
     } catch (fehler) {
-      reject(fehler);
+      reject(asError(fehler));
     }
   });
 }
@@ -73,14 +74,14 @@ export function runGitIdentity(dir: string, env: Record<string, string>, timeout
         ["--no-optional-locks", "rev-parse", "--path-format=absolute", "--git-common-dir"],
         { cwd: dir, timeout: timeoutMs, env: { ...env, GIT_TERMINAL_PROMPT: "0" } },
         (err, stdout) => {
-          if (err) return reject(err);
+          if (err) return reject(asError(err));
           let isMain = false;
           try { isMain = statSync(join(dir, ".git")).isDirectory(); } catch { /* ohne .git kein Hauptrepo */ }
           resolve({ commonDir: String(stdout).trim(), isMain });
         },
       );
     } catch (fehler) {
-      reject(fehler);
+      reject(asError(fehler));
     }
   });
 }

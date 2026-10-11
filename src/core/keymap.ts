@@ -7,7 +7,8 @@ export interface KeyInput {
   ctrlKey: boolean;
   shiftKey: boolean;
 }
-export type Platform = "darwin" | "win32" | "linux" | string;
+/** `process.platform` / `navigator.platform` wie geliefert, z. B. "darwin", "win32", "linux"; nur "darwin" belegt Tasten. */
+export type Platform = string;
 
 // Cmd und Alt jeweils allein; Shift/Ctrl dazu gehört xterm.
 const MAC_CMD: Record<string, string> = { Backspace: "\x15", ArrowLeft: "\x01", ArrowRight: "\x05" };

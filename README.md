@@ -104,6 +104,14 @@ The hub note may name the project's repo folder with `repo: ~/path/to/repo`. `~`
 
 Per project the newest open handoff counts. The field "Neue Sitzung" on the dashboard shows "N offen". The new-session menu lists each one as "Weiter" above the normal entries, and Enter without typing picks the top entry. The plugin sets `status: aufgenommen` (and `aufgenommen: <date>`) only once the session is running, so a failed start leaves the handoff open.
 
+## Minimum contrast in the terminal
+
+Claude Code sends some text (for example the question of a choice prompt) as fixed white. In a light Obsidian theme that text is invisible. The setting "Mindestkontrast im Terminal" (1 to 21, default 4.5, 1 = off) lifts text that is too pale for the background up to that contrast ratio. It applies at once to open terminals.
+
+## Banner auto-dismiss
+
+The macOS banner (setting "macOS-Banner") closes itself after "Banner ausblenden nach (Sekunden)" (1 to 60, default 6) and does not stay in Notification Center. Each session has at most one banner: a new one replaces the old one. Open banners are closed when the plugin is disabled. A click brings the session to the front. If `@electron/remote` is unavailable in Obsidian, the plugin falls back to the window's web notification; then closing is not guaranteed.
+
 ## Skip permission prompts
 
 The switch "Rechteabfragen überspringen" is off by default.

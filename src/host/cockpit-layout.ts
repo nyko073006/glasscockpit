@@ -91,7 +91,6 @@ export function createCockpitLayout(opts: CockpitLayoutOptions): CockpitLayout {
   const win = el(doc, "div", "cockpit-window");
   const stage = el(doc, "div", "cockpit-stage");
   stage.style.setProperty("aspect-ratio", `${IMAGE_W} / ${IMAGE_H}`);
-  stage.style.setProperty("container-type", "inline-size");
   const bg = el(doc, "img", "cockpit-bg");
   bg.setAttribute("src", opts.backgroundUrl);
   bg.setAttribute("alt", "");
@@ -249,17 +248,15 @@ export function createCockpitLayout(opts: CockpitLayoutOptions): CockpitLayout {
   for (const g of FIELDS) {
     const outer = el(doc, "div", `cockpit-field cockpit-field-${g.id} cockpit-tone-plain`);
     place(outer, g.rect);
-    // Die Boxen von Repos und Radaren überlappen: nur die Fläche im clip-path fängt Klicks (clip-path wirkt auch auf die Trefferprüfung).
-    outer.style.pointerEvents = "none";
+    // Die Boxen von Repos und Radaren überlappen: nur die Fläche im clip-path fängt Klicks (clip-path wirkt auch auf die Trefferprüfung);
+    // der äußere Rahmen ist im Stylesheet pointer-events: none, die Fläche auto.
     const clipEl = el(doc, "div", "cockpit-field-clip");
     clipEl.style.setProperty("clip-path", polygonCss(g.polygon));
-    clipEl.style.pointerEvents = "auto";
     const content = el(doc, "div", "cockpit-field-content");
     place(content, g.content);
     if (g.id === "focus") content.setAttribute("lang", "de"); // Silbentrennung (CSS hyphens) braucht die Sprache
     if (g.circle) {
       const ring = el(doc, "div", "cockpit-ring");
-      ring.style.setProperty("--fill", "0%");
       clipEl.append(ring);
     }
     clipEl.append(content);

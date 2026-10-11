@@ -87,9 +87,16 @@ describe("Flächen", () => {
   });
   it("die Klickfläche folgt dem clip-path: das äußere Rechteck fängt keine Klicks (überlappende Boxen)", () => {
     for (const f of FIELDS) {
-      expect(q(`.cockpit-field-${f.id}`).style.pointerEvents).toBe("none");
-      expect(clipOf(f.id).style.pointerEvents).toBe("auto");
+      // Steht im Stylesheet (Linter: keine festen Stile per Skript), nicht als Inline-Stil.
+      expect(q(`.cockpit-field-${f.id}`).style.pointerEvents).toBe("");
+      expect(clipOf(f.id).style.pointerEvents).toBe("");
     }
+    const css = readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8");
+    expect(css).toMatch(/\n\.cockpit-stage \.cockpit-field \{[^}]*pointer-events:\s*none/);
+    expect(css).toMatch(/\n\.cockpit-stage \.cockpit-field-clip \{[^}]*pointer-events:\s*auto/);
+  });
+  it("der Ring hat ohne Wert die Füllung 0 (Rückfall im Stylesheet)", () => {
+    expect(readFileSync(resolve(process.cwd(), "src/styles.css"), "utf8")).toMatch(/conic-gradient\(var\(--tone\) var\(--fill, 0%\)/);
   });
   it("ohne updateFeed bleiben die Flächen leer (nur Rahmen), nichts wirft", () => {
     const l2 = createCockpitLayout({ doc: document, backgroundUrl: "data:,", cards: Object.fromEntries(CARD_IDS.map((id) => [id, document.createElement("div")])) as unknown as Record<CardId, HTMLElement> });

@@ -4,8 +4,10 @@
 /** Verfolgte DEC-Private-Modi, 1049 zuerst: Er wechselt den Puffer, alles danach gilt im neuen. */
 export const TRACKED_MODES = [1049, 1000, 1002, 1003, 1006, 1004, 2004] as const;
 
+// eslint-disable-next-line no-control-regex -- ESC (\x1b) gehört zum Muster: Gesucht werden Escape-Sequenzen im PTY-Strom
 const SEQUENCE = /\x1b\[\?([\d;]+)([hl])/g;
 // Anfang einer Sequenz, die in der nächsten Portion weitergehen kann.
+// eslint-disable-next-line no-control-regex -- ESC ist das Suchziel, siehe oben
 const OPEN_TAIL = /\x1b(\[(\?[\d;]*)?)?$/;
 
 export class ModeTracker {

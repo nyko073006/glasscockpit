@@ -102,6 +102,14 @@ Die Hub-Notiz kann den Repo-Ordner des Projekts mit `repo: ~/pfad/zum/repo` nenn
 
 Pro Projekt zählt der neueste offene Handoff. Das Feld „Neue Sitzung“ im Dashboard zeigt „N offen“. Das Menü für neue Sitzungen führt jeden als „Weiter“ vor den normalen Einträgen, und Enter ohne Eingabe nimmt den obersten Eintrag. Das Plugin setzt `status: aufgenommen` (und `aufgenommen: <Datum>`) erst, wenn die Sitzung läuft; ein gescheiterter Start lässt den Handoff offen.
 
+## Mindestkontrast im Terminal
+
+Claude Code schickt manchen Text (etwa die Frage einer Auswahlmaske) fest in Weiß. In einem hellen Obsidian-Theme ist er dann unsichtbar. Die Einstellung „Mindestkontrast im Terminal“ (1 bis 21, Vorgabe 4,5, 1 = aus) hebt Text, der für den Hintergrund zu blass ist, auf dieses Kontrastverhältnis an. Sie wirkt sofort auf offene Terminals.
+
+## Banner ausblenden
+
+Das macOS-Banner (Einstellung „macOS-Banner“) schließt sich nach der Zeit „Banner ausblenden nach (Sekunden)“ von selbst (1 bis 60, Vorgabe 6) und steht danach nicht in der Mitteilungszentrale. Je Sitzung gibt es höchstens ein Banner: Ein neues ersetzt das alte. Beim Ausschalten des Plugins werden offene Banner geschlossen. Ein Klick holt die Sitzung nach vorn. Ist `@electron/remote` in Obsidian nicht verfügbar, zeigt das Plugin das Banner über das Fenster; dann gibt es keine Garantie, dass es sich schließt.
+
 ## Rechteabfragen überspringen
 
 Der Schalter „Rechteabfragen überspringen“ ist in der Vorgabe aus.

@@ -64,7 +64,7 @@ export class NativeLoader {
       // „Cannot find module“, der echte dlopen-Fehler ginge verloren. Der Modul-Cache teilt das Binary.
       req(paths.ptyNode);
       this.loaded = req(paths.indexJs) as PtyModule;
-      console.info(`Glasscockpit: node-pty geladen aus ${paths.nativeDir} (${xattr})`);
+      console.debug(`Glasscockpit: node-pty geladen aus ${paths.nativeDir} (${xattr})`);
       return { ok: true, pty: this.loaded };
     } catch (fehler) {
       console.error("Glasscockpit: node-pty nicht geladen", fehler, xattr);

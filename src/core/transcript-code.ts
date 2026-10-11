@@ -14,11 +14,13 @@ interface Eintrag {
 /** Text-Blöcke eines Eintrags; null, wenn er keine Haupt-Assistant-Antwort mit Text ist. */
 function textBloecke(e: Eintrag): string[] | null {
   if (e.type !== "assistant" || e.isSidechain === true) return null;
-  const content = e.message?.content;
+  const content: unknown = e.message?.content;
   if (!Array.isArray(content)) return null;
   const texte: string[] = [];
-  for (const b of content) {
-    if (b && b.type === "text" && typeof b.text === "string") texte.push(b.text);
+  for (const b of content as unknown[]) {
+    if (typeof b !== "object" || b === null) continue;
+    const { type, text } = b as { type?: unknown; text?: unknown };
+    if (type === "text" && typeof text === "string") texte.push(text);
   }
   return texte.length > 0 ? texte : null;
 }
@@ -29,7 +31,7 @@ function leseEintraege(jsonl: string): Eintrag[] {
   for (const zeile of jsonl.split("\n")) {
     if (zeile.trim() === "") continue;
     try {
-      const e = JSON.parse(zeile);
+      const e: unknown = JSON.parse(zeile);
       if (e && typeof e === "object") eintraege.push(e);
     } catch {
       // Halbe Zeile am Dateianfang oder Müll: überspringen.

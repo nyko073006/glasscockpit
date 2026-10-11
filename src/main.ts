@@ -22,6 +22,7 @@ import { readSessionId } from "./core/session-state";
 import { SessionStore } from "./core/session-store";
 import { expandHome } from "./core/settings";
 import { isUnset } from "./core/unset";
+import { closeAllBanners } from "./host/attention-alert";
 import { openCockpitSettings } from "./host/open-settings";
 import { HandoffKeeper } from "./core/transcript-poll";
 import { TokenCounter, TranscriptScanner } from "./core/usage";
@@ -138,7 +139,7 @@ export default class GlasscockpitPlugin extends Plugin {
     });
     const tracker = new ViewTracker((id) => {
       this.activity.forget(id);
-      return manager.kill(id);
+      void manager.kill(id);
     }, {
       set: (callback, ms) => window.setTimeout(callback, ms),
       clear: (handle) => window.clearTimeout(handle as number),
@@ -554,7 +555,7 @@ export default class GlasscockpitPlugin extends Plugin {
       });
       const dropped = new Set(plan.prune);
       const n = store.prune(records.filter((id) => !dropped.has(id)));
-      if (n > 0) console.info(`Glasscockpit: ${n} Sitzungseinträge ohne Tab entfernt`);
+      if (n > 0) console.debug(`Glasscockpit: ${n} Sitzungseinträge ohne Tab entfernt`);
       // Sofort leeren: Ein späterer Neustart soll nichts doppelt öffnen.
       store.setOpenAtUnload([]);
       store.setDashboardAtUnload(null);
@@ -570,6 +571,8 @@ export default class GlasscockpitPlugin extends Plugin {
   onunload(): void {
     // IDE-Brücke: Das Lockfile fällt sofort (synchron), der Server schließt danach.
     void this.ide?.stop();
+    // Offene Banner schließen, sonst bleiben sie in der Mitteilungszentrale stehen.
+    closeAllBanners();
     // Der Zähler-Takt gehört dem Plugin und endet mit ihm.
     if (this.usageTimer !== null) window.clearInterval(this.usageTimer);
     this.usageTimer = null;
@@ -1144,7 +1147,7 @@ export default class GlasscockpitPlugin extends Plugin {
   private async showDiagnosis(): Promise<void> {
     const launch = this.launcher ? formatLaunchInfo(await this.launcher.info()) : "Launcher fehlt.";
     const text = `${launch}\n\n${formatDiagnosis(this.terminalViews().map((view) => view.diagnose()))}`;
-    console.info(`Glasscockpit, Diagnose:\n${text}`);
+    console.debug(`Glasscockpit, Diagnose:\n${text}`);
     let copied = "";
     try {
       await navigator.clipboard.writeText(text);

@@ -1,15 +1,11 @@
+import { electronModule } from "./electron";
+
 interface ElectronBits {
   clipboard?: { readText(): string; writeText(text: string): void };
 }
 
 /** Electron liegt im Obsidian-Renderer vor; sonst (Test, Mobil) null. */
-function electron(): ElectronBits | null {
-  try {
-    return require("electron") as ElectronBits;
-  } catch {
-    return null;
-  }
-}
+const electron = (): ElectronBits | null => electronModule<ElectronBits>();
 
 /** Zwischenablage lesen: Electron, Rückfall navigator.clipboard des übergebenen Fensters (Pop-out). */
 export async function readClipboard(win: Window): Promise<string> {

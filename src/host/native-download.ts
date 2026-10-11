@@ -20,7 +20,7 @@ export interface DownloadDeps {
   /** Entfernt das Quarantäne-Attribut rekursiv. Wirft bei Fehler. */
   clearQuarantine(dir: string): Promise<void>;
   /** Nur für Tests (Fehler beim Tausch). Vorgabe: fs.rename. */
-  rename?(von: string, nach: string): Promise<void>;
+  rename?: (von: string, nach: string) => Promise<void>;
 }
 
 export interface DownloadOptions {

@@ -5,6 +5,7 @@ import type { Duplex } from "node:stream";
 import { join } from "node:path";
 import WebSocket, { WebSocketServer } from "ws";
 import { type IdeClientInfo, parseIdeConnected } from "../core/ide-clients";
+import { rawDataToString } from "../core/raw-data-text";
 import {
   IDE_AUTH_HEADER, IDE_NAME, IDE_SUBPROTOCOL, type IdeHandlers, authorized, dispatchRequest, lockContent, notification, parseLock,
   parseMessage, rpcError,
@@ -183,7 +184,7 @@ export class IdeServer {
     this.deps.onClientsChange?.();
     ws.on("message", (data, isBinary) => {
       if (isBinary) return;
-      void this.handle(client, data.toString()).catch((fehler: unknown) =>
+      void this.handle(client, rawDataToString(data)).catch((fehler: unknown) =>
         this.deps.warn(`Glasscockpit, IDE-Brücke: Nachricht nicht verarbeitet: ${fehler instanceof Error ? fehler.message : String(fehler)}`));
     });
     ws.on("close", () => {

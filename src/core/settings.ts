@@ -1,7 +1,7 @@
 import {
-  DEFAULT_ALERT_BANNER, DEFAULT_ALERT_GAP_MS, DEFAULT_HANDOFF_PREFIX, DEFAULT_BRIEFINGS_DIR, DEFAULT_CONTINUE_PROMPT, DEFAULT_PULL_INTERVAL_MIN, DEFAULT_ALERT_SOUND, DEFAULT_MARK_TAB, DEFAULT_MAX_SESSIONS,
+  DEFAULT_ALERT_BANNER, DEFAULT_ALERT_GAP_MS, DEFAULT_BANNER_SECONDS, DEFAULT_HANDOFF_PREFIX, DEFAULT_BRIEFINGS_DIR, DEFAULT_CONTINUE_PROMPT, DEFAULT_PULL_INTERVAL_MIN, DEFAULT_ALERT_SOUND, DEFAULT_MARK_TAB, DEFAULT_MAX_SESSIONS,
   DEFAULT_NOTIFY_ON_DONE, DEFAULT_NOTIFY_ON_QUESTION, DEFAULT_PROJECTS_ROOT, DEFAULT_SOUND_FILE,
-  DEFAULT_SKILL_BUTTONS, DEFAULT_TASKS_FILE, DEFAULT_RESUME_CONVERSATIONS, DEFAULT_REOPEN_AFTER_DISABLE, DEFAULT_FONT_SIZE, DEFAULT_SCROLLBACK,
+  DEFAULT_SKILL_BUTTONS, DEFAULT_TASKS_FILE, DEFAULT_RESUME_CONVERSATIONS, DEFAULT_REOPEN_AFTER_DISABLE, DEFAULT_FONT_SIZE, DEFAULT_SCROLLBACK, DEFAULT_MIN_CONTRAST,
   DEFAULT_TELEGRAM_CHAT_ID, DEFAULT_TELEGRAM_ENV_FILE, DEFAULT_TELEGRAM_IDLE_MIN, DEFAULT_TELEGRAM_ON_DONE, DEFAULT_TELEGRAM_ON_QUESTION,
   DEFAULT_USAGE_POLL_SEC, DEFAULT_WRITE_TOKENS_FILE, DEFAULT_RESEARCH_SEARCHES, DEFAULT_RESEARCH_MAX_AGE_MIN, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF, DEFAULT_FIXED_PROMPT, DEFAULT_SKIP_PERMISSIONS,
   DASHBOARD_LAYOUTS, DEFAULT_DASHBOARD_LAYOUT, COCKPIT_CROPS, DEFAULT_COCKPIT_CROP,
@@ -18,10 +18,10 @@ export interface RadarEntry { name: string; stateFile: string }
 
 export interface CockpitSettings {
   projectsRoot: string; maxSessions: number; reopenAfterDisable: boolean; notifyOnDone: boolean; notifyOnQuestion: boolean;
-  markTab: boolean; alertSound: boolean; alertBanner: boolean; soundFile: string; alertGapMs: number;
+  markTab: boolean; alertSound: boolean; alertBanner: boolean; soundFile: string; alertGapMs: number; bannerSeconds: number;
   briefingsDir: string; pullIntervalMin: number; continuePrompt: string;
   tasksFile: string; skillButtons: number; usagePollSec: number; writeTokensFile: boolean;
-  resumeConversations: boolean; fixedPrompt: boolean; skipPermissions: boolean; fontSize: number; scrollback: number;
+  resumeConversations: boolean; fixedPrompt: boolean; skipPermissions: boolean; fontSize: number; scrollback: number; minimumContrast: number;
   ideBridge: boolean; ideDiff: boolean; handoffPrefix: string;
   telegramOnDone: boolean; telegramOnQuestion: boolean; telegramEnvFile: string; telegramChatId: string; telegramIdleMin: number;
   researchSearches: string; researchMaxAgeMin: number;
@@ -45,6 +45,7 @@ export const DEFAULT_SETTINGS: CockpitSettings = {
   alertBanner: DEFAULT_ALERT_BANNER,
   soundFile: DEFAULT_SOUND_FILE,
   alertGapMs: DEFAULT_ALERT_GAP_MS,
+  bannerSeconds: DEFAULT_BANNER_SECONDS,
   briefingsDir: DEFAULT_BRIEFINGS_DIR,
   pullIntervalMin: DEFAULT_PULL_INTERVAL_MIN,
   continuePrompt: DEFAULT_CONTINUE_PROMPT,
@@ -57,6 +58,7 @@ export const DEFAULT_SETTINGS: CockpitSettings = {
   skipPermissions: DEFAULT_SKIP_PERMISSIONS,
   fontSize: DEFAULT_FONT_SIZE,
   scrollback: DEFAULT_SCROLLBACK,
+  minimumContrast: DEFAULT_MIN_CONTRAST,
   ideBridge: DEFAULT_IDE_BRIDGE,
   ideDiff: DEFAULT_IDE_DIFF,
   handoffPrefix: DEFAULT_HANDOFF_PREFIX,
@@ -97,11 +99,13 @@ type Check = (value: unknown) => string | null;
 const RANGES = {
   maxSessions: [1, 50],
   alertGapMs: [0, 60000],
+  bannerSeconds: [1, 60],
   pullIntervalMin: [0, 1440],
   skillButtons: [1, 30],
   usagePollSec: [10, 3600],
   fontSize: [8, 32],
   scrollback: [500, 100000],
+  minimumContrast: [1, 21],
   telegramIdleMin: [0, 240],
   researchMaxAgeMin: [10, 1440],
   contextWarn: [1000, 1000000],
@@ -117,6 +121,11 @@ type RangedKey = keyof typeof RANGES;
 
 const intIn = (min: number, max: number): Check => (v) =>
   typeof v === "number" && Number.isInteger(v) && v >= min && v <= max ? null : `ganze Zahl von ${min} bis ${max}`;
+/** Beliebige endliche Zahl im Bereich (Dezimalwerte erlaubt). */
+const numIn = (min: number, max: number): Check => (v) =>
+  typeof v === "number" && Number.isFinite(v) && v >= min && v <= max ? null : `Zahl von ${min} bis ${max}`;
+/** Schlüssel mit Dezimalwerten: Klemmen beim Laden gilt auch für nicht ganze Zahlen. */
+const DECIMAL_KEYS: ReadonlyArray<string> = ["minimumContrast"];
 const nonEmpty: Check = (v) => (typeof v === "string" && v.trim() !== "" ? null : "darf nicht leer sein");
 const flag: Check = (v) => (typeof v === "boolean" ? null : "muss an oder aus sein");
 
@@ -165,6 +174,7 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   alertBanner: flag,
   soundFile: nonEmpty,
   alertGapMs: intIn(...RANGES.alertGapMs),
+  bannerSeconds: intIn(...RANGES.bannerSeconds),
   briefingsDir: vaultDir,
   pullIntervalMin: intIn(...RANGES.pullIntervalMin),
   continuePrompt: nonEmpty,
@@ -182,6 +192,7 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   reopenAfterDisable: flag,
   fontSize: intIn(...RANGES.fontSize),
   scrollback: intIn(...RANGES.scrollback),
+  minimumContrast: numIn(...RANGES.minimumContrast),
   ideBridge: flag,
   ideDiff: flag,
   // Leer erlaubt (Knopf aus); sonst jeder Text. Das Präfix wird nur am Anfang der ersten nichtleeren Zeile eines Blocks verglichen.
@@ -230,7 +241,7 @@ const TEXT_KEYS: ReadonlyArray<keyof CockpitSettings> = ["projectsRoot", "soundF
 export function normalizeSetting<K extends keyof CockpitSettings>(key: K, value: CockpitSettings[K]): CockpitSettings[K] {
   if ((key === "briefingsDir" || key === "tasksFile" || key === "inboxDir" || key === "indexFile" || key === "dailyDir" || key === "hubsDir") && typeof value === "string") return stripSlashes(value) as CockpitSettings[K];
   // Nur am Ende gekürzt: führende Leerzeilen bleiben, damit „Zeile N“ der Meldungen mit dem Feld übereinstimmt.
-  if (key === "radars" && Array.isArray(value)) return (value as RadarEntry[]).map(trimRadar) as CockpitSettings[K];
+  if (key === "radars" && Array.isArray(value)) return value.map(trimRadar) as CockpitSettings[K];
   if (key === "researchSearches" && typeof value === "string") return value.trimEnd() as CockpitSettings[K];
   return TEXT_KEYS.includes(key) && typeof value === "string" ? (value.trim() as CockpitSettings[K]) : value;
 }
@@ -286,7 +297,7 @@ export function parseSettings(raw: unknown): SettingsParse {
     const range = (RANGES as Record<string, readonly [number, number]>)[key as RangedKey];
     const value = obj[key];
     // Ganze Zahl außerhalb der Grenzen: auf die Grenze klemmen statt verwerfen. Alles andere prüft validateSetting.
-    if (range && typeof value === "number" && Number.isInteger(value)) {
+    if (range && typeof value === "number" && (Number.isInteger(value) || (DECIMAL_KEYS.includes(key) && Number.isFinite(value)))) {
       settings[key] = Math.min(range[1], Math.max(range[0], value));
     } else if (validateSetting(key, obj[key]) === null) settings[key] = normalizeSetting(key, obj[key] as never);
     else invalid.push(key);

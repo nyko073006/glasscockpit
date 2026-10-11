@@ -1,3 +1,4 @@
+import { asError } from "./as-error";
 import { SAVE_DEBOUNCE_MS } from "./constants";
 import {
   addSession, pruneUnused, removeSession, renameSession, setClaudeId,
@@ -146,7 +147,7 @@ export class SessionStore {
     try {
       result = this.save(data);
     } catch (fehler) {
-      result = Promise.reject(fehler);
+      result = Promise.reject(asError(fehler));
     }
     const settled = result.catch((fehler: unknown) => { this.onSaveError?.(fehler); });
     this.inflight = Promise.all([this.inflight, settled]).then(() => undefined);

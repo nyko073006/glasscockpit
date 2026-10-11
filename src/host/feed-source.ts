@@ -108,7 +108,7 @@ export class CockpitFeedSource {
       safe("Vault-Lage", () => d.readVault(s, now), null),
       safe("Tagesfokus", () => d.readFocus(s, now), [] as string[]),
       safe("Handoffs", () => d.readHandoffs(s), this.handoffs),
-      Promise.all(radarFiles.map((f) => safe(`Radar ${f}`, () => d.readRadar(expandHome(f, home), nowMs), "red" as RadarFileLamp))),
+      Promise.all(radarFiles.map((f) => safe(`Radar ${f}`, () => d.readRadar(expandHome(f, home), nowMs), "red"))),
     ]);
     // Eigene IDs zur Sicherheit noch einmal filtern: Der Leser kennt sie, die Quelle verlässt sich nicht darauf.
     this.files = ownSessionFiles([...files.values()], d.ownClaudeIds());

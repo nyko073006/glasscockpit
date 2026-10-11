@@ -6,6 +6,7 @@ import { parseUriList, pathsFromText } from "../core/drop-sources";
 import { keyToSequence } from "../core/keymap";
 import { acceptPaste, preparePaste } from "../core/paste";
 import { readClipboard, writeClipboard } from "./clipboard";
+import { electronModule } from "./electron";
 
 export interface TerminalInputOptions {
   term: Terminal;
@@ -18,17 +19,11 @@ export interface TerminalInputOptions {
 }
 
 interface ElectronBits {
-  webUtils?: { getPathForFile(file: File): string };
+  webUtils?: { getPathForFile: (file: File) => string };
 }
 
 /** Electron liegt im Obsidian-Renderer vor; sonst (Test, Mobil) null. */
-function electron(): ElectronBits | null {
-  try {
-    return require("electron") as ElectronBits;
-  } catch {
-    return null;
-  }
-}
+const electron = (): ElectronBits | null => electronModule<ElectronBits>();
 
 /**
  * Eingabe der Pane: Mac-Tasten, Cmd+V/C/A, Drag-and-drop.
@@ -167,7 +162,7 @@ export class TerminalInput {
     const values: Record<string, string> = {};
     for (const type of dt.types) values[type] = dt.getData(type);
     const kurz = Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.length > 200 ? `${v.slice(0, 200)}… (${v.length} Zeichen)` : v]));
-    console.log("Glasscockpit: Drop dataTransfer.types", Array.from(dt.types), kurz, "files:", dt.files.length);
+    console.debug("Glasscockpit: Drop dataTransfer.types", Array.from(dt.types), kurz, "files:", dt.files.length);
 
     const files = Array.from(dt.files);
     const stages: Array<[string, () => string[]]> = [
@@ -200,7 +195,7 @@ export class TerminalInput {
     for (const [name, run] of stages) {
       const paths = run();
       if (paths.length === 0) continue;
-      console.log(`Glasscockpit: Drop über Stufe ${name}`, paths);
+      console.debug(`Glasscockpit: Drop über Stufe ${name}`, paths);
       this.opts.write(formatDroppedPaths(paths));
       return;
     }

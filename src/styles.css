@@ -828,6 +828,7 @@
    im clip-path (repos und radars überlappen in den Boxen). */
 .cockpit-stage .cockpit-field {
   position: absolute;
+  pointer-events: none;
   transition: filter 0.18s ease;
 }
 
@@ -839,6 +840,7 @@
 .cockpit-stage .cockpit-field-clip {
   position: absolute;
   inset: 0;
+  pointer-events: auto;
   outline: none;
 }
 

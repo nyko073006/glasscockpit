@@ -47,7 +47,7 @@ export function parseChatId(accessText: string | null): string | null {
   if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
   const list = (data as Record<string, unknown>).allowFrom;
   if (!Array.isArray(list) || list.length === 0) return null;
-  const first = list[0];
+  const first: unknown = list[0];
   const id = typeof first === "number" && Number.isInteger(first) ? String(first) : first;
   return typeof id === "string" && CHAT_ID_RE.test(id) ? id : null;
 }
@@ -100,7 +100,7 @@ export function describeResponse(status: number, bodyText: string): SendResult {
   let body: Body | null = null;
   try {
     const parsed: unknown = JSON.parse(bodyText);
-    if (typeof parsed === "object" && parsed !== null) body = parsed as Body;
+    if (typeof parsed === "object" && parsed !== null) body = parsed;
   } catch { /* kein JSON */ }
   if (status >= 200 && status < 300 && body?.ok === true) return { ok: true };
   const desc = typeof body?.description === "string" && body.description !== "" ? `: ${body.description}` : "";
