@@ -102,8 +102,9 @@ export class TranscriptReader {
       return { changed: war, blocks: [], handoff: null };
     }
     if (!force && !statChanged(this.stamp, next)) return { changed: false, blocks: [], handoff: null };
-    this.stamp = next;
     const text = await this.readTail(path, next.size);
+    // Erst nach gelungenem Lesen: wirft readTail, bleibt der alte Stand, und der nächste Aufruf liest erneut (Abend 29).
+    this.stamp = next;
     // Auf dem ohnehin gelesenen Text, ohne zweites Lesen: neue Funde ans Ende, ältere bleiben (bis MAX_TOOL_PATHS).
     this.paths = mergeRecent(this.paths, toolPaths(text, this.home), MAX_TOOL_PATHS);
     this.basesCache = null;

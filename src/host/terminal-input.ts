@@ -1,8 +1,8 @@
 import { existsSync } from "node:fs";
 import type { Terminal } from "@xterm/xterm";
 import { PASTE_DEBOUNCE_MS } from "../core/constants";
-import { formatDroppedPaths } from "../core/dropped-paths";
-import { parseUriList, pathsFromText } from "../core/drop-sources";
+import { planDrop } from "../core/dropped-paths";
+import { type NameResolver, parseUriList, pathsFromText } from "../core/drop-sources";
 import { keyToSequence } from "../core/keymap";
 import { acceptPaste, preparePaste } from "../core/paste";
 import { readClipboard, writeClipboard } from "./clipboard";
@@ -16,6 +16,10 @@ export interface TerminalInputOptions {
   write: (data: string) => void;
   /** Vault-Basis für Notizen aus der Dateiliste, null wenn es keine gibt. */
   vaultBase: () => string | null;
+  /** Name aus einer `obsidian://`-URL zum Vault-Pfad der Datei; null, wenn es sie nicht gibt. */
+  resolveName: NameResolver;
+  /** Meldung an den Nutzer (Notice), etwa für einen abgelehnten Pfad. */
+  notify: (text: string) => void;
 }
 
 interface ElectronBits {
@@ -188,7 +192,7 @@ export class TerminalInput {
         "4 (text/plain)",
         () => {
           const base = this.opts.vaultBase();
-          return pathsFromText(dt.getData("text/plain"), base ?? "", (abs) => base !== null && existsSync(abs));
+          return pathsFromText(dt.getData("text/plain"), base ?? "", (abs) => base !== null && existsSync(abs), this.opts.resolveName);
         },
       ],
     ];
@@ -196,7 +200,10 @@ export class TerminalInput {
       const paths = run();
       if (paths.length === 0) continue;
       console.debug(`Glasscockpit: Drop über Stufe ${name}`, paths);
-      this.opts.write(formatDroppedPaths(paths));
+      // Pfade, die Claude als @-Erwähnung nicht lesen kann, werden nicht eingefügt; die übrigen schon.
+      const { text, notice } = planDrop(paths);
+      if (notice) this.opts.notify(notice);
+      if (text) this.opts.write(text);
       return;
     }
     console.warn("Glasscockpit: Drop ohne auflösbaren Pfad");

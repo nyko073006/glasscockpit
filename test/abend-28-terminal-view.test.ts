@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, type CockpitSettings } from "../src/core/settings";
+import type { SessionRecord } from "../src/core/session-model";
 import type { TerminalDeps } from "../src/host/terminal-view";
 import { TranscriptReader } from "../src/host/transcript-reader";
 
@@ -65,6 +66,7 @@ interface Intern {
   pollTranscript(): Promise<void>;
   leave(): void;
   getDisplayText(): string;
+  refreshTitle(): void;
 }
 
 let root: string;
@@ -85,12 +87,12 @@ async function schreibe(zeilen: string[]): Promise<void> {
 }
 const haenge = (zeilen: string[]): Promise<void> => appendFile(join(root, "proj", `${ID}.jsonl`), zeilen.join("\n") + "\n");
 
-function aufbau(overrides: Partial<CockpitSettings> = {}, mitLeser = true) {
+function aufbau(overrides: Partial<CockpitSettings> = {}, mitLeser = true, recordOverrides: Partial<SessionRecord> = {}) {
   const settings: CockpitSettings = { ...DEFAULT_SETTINGS, ...overrides };
   const deps = {
     settings: () => settings,
     home: "/home/beispiel",
-    record: () => ({ id: COCKPIT_ID, name: "Sitzung", kind: "claude", cwd: "/tmp/beispiel", createdAt: "2026-10-12T10:00:00Z" }),
+    record: () => ({ id: COCKPIT_ID, name: "Sitzung", kind: "claude", cwd: "/tmp/beispiel", createdAt: "2026-10-12T10:00:00Z", claudeSessionId: ID, ...recordOverrides }),
     telegram: vi.fn(),
     activity: { record: vi.fn(), markSeen: vi.fn(), lastSignal: vi.fn(() => undefined) },
     alertGate: vi.fn(() => true),
@@ -282,7 +284,7 @@ describe("Abend 28 (Verhalten der View): Zahl im Tab-Titel", () => {
     expect(intern.getDisplayText()).not.toContain("⏳");
     intern.updateOpenTasks();
     expect(intern.openTasks).toBe(2);
-    expect(intern.getDisplayText()).toMatch(/^⏳ 2 Sitzung/);
+    expect(intern.getDisplayText()).toMatch(/^⏳ 2 11111111 · Sitzung$/);
     expect(leaf.updateHeader).toHaveBeenCalled();
   });
 
@@ -303,7 +305,7 @@ describe("Abend 28 (Verhalten der View): Zahl im Tab-Titel", () => {
     await haenge([ende(AGENT)]);
     await reader.read();
     intern.updateOpenTasks();
-    expect(intern.getDisplayText()).toMatch(/^⏳ 1 Sitzung/);
+    expect(intern.getDisplayText()).toMatch(/^⏳ 1 11111111 · Sitzung$/);
     intern.reader = null;
     intern.updateOpenTasks();
     expect(intern.openTasks).toBe(0);
@@ -316,7 +318,7 @@ describe("Abend 28 (Verhalten der View): Zahl im Tab-Titel", () => {
     await reader.read();
     intern.updateOpenTasks();
     intern.attention = "done";
-    expect(intern.getDisplayText()).toMatch(/^● ⏳ 1 Sitzung/);
+    expect(intern.getDisplayText()).toMatch(/^● ⏳ 1 11111111 · Sitzung$/);
   });
 
   it("der Poll zählt nach jedem Durchlauf neu, auch bei unveränderter Datei: ein abgelaufener Start verschwindet aus dem Titel", async () => {
@@ -325,12 +327,46 @@ describe("Abend 28 (Verhalten der View): Zahl im Tab-Titel", () => {
     await schreibe([agentStart(AGENT, 59)]);
     const { intern } = aufbau({ quietMaxAgeMin: 60 });
     await intern.pollTranscript();
-    expect(intern.getDisplayText()).toMatch(/^⏳ 1 Sitzung/);
+    expect(intern.getDisplayText()).toMatch(/^⏳ 1 11111111 · Sitzung$/);
     // Zwei Minuten später, die Datei ist dieselbe: der Start ist 61 Minuten alt und zählt nicht mehr.
     vi.setSystemTime(new Date("2026-10-12T12:02:00.000Z"));
     await intern.pollTranscript();
     expect(intern.openTasks).toBe(0);
     expect(intern.getDisplayText()).not.toContain("⏳");
+  });
+
+  it("auch wenn das Lesen im Poll dauerhaft wirft, altert die Zahl aus: ein abgelaufener Start verschwindet aus dem Titel (Abend 29)", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-12T12:00:00.000Z"));
+    await schreibe([agentStart(AGENT, 59)]);
+    const { intern, reader } = aufbau({ quietMaxAgeMin: 60 });
+    await intern.pollTranscript();
+    expect(intern.getDisplayText()).toMatch(/^⏳ 1 11111111 · Sitzung$/);
+    // Ab jetzt ist das Transkript nicht mehr lesbar; der Leser behält seinen letzten Stand.
+    const fehler = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(reader, "read").mockRejectedValue(new Error("nicht lesbar"));
+    // Zwei Minuten später ist der Start 61 Minuten alt und zählt nicht mehr.
+    vi.setSystemTime(new Date("2026-10-12T12:02:00.000Z"));
+    await intern.pollTranscript();
+    expect(fehler).toHaveBeenCalled();
+    expect(intern.openTasks).toBe(0);
+    expect(intern.getDisplayText()).not.toContain("⏳");
+  });
+
+  it("Sitzungswechsel während des Lesens (Fehler oder nicht): der alte Poll zählt die Zahl des neuen Lesers nicht um (Abend 29)", async () => {
+    await schreibe([agentStart(AGENT)]);
+    const { intern, reader } = aufbau();
+    await intern.pollTranscript();
+    expect(intern.openTasks).toBe(1);
+    const fehler = vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(reader, "read").mockImplementation(async () => {
+      intern.reader = null; // /clear oder leave während des Lesens
+      throw new Error("nicht lesbar");
+    });
+    const update = vi.spyOn(intern as unknown as { updateOpenTasks(): void }, "updateOpenTasks");
+    await intern.pollTranscript();
+    expect(fehler).toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
   });
 
   it("verlässt die View die Sitzung (leave), steht keine Zahl mehr im Titel", async () => {
@@ -344,5 +380,37 @@ describe("Abend 28 (Verhalten der View): Zahl im Tab-Titel", () => {
     expect(intern.reader).toBeNull();
     expect(leaf.updateHeader).toHaveBeenCalled();
     expect(intern.getDisplayText()).not.toContain("⏳");
+  });
+});
+
+describe("Abend 29: Tab-Titel „ID · Name“ und Tooltip", () => {
+  const ID8 = ID.slice(0, 8);
+
+  it("der Tab zeigt die Kurz-ID vorn, dann den Namen; Marken stehen davor", () => {
+    const { intern } = aufbau({}, false);
+    expect(intern.getDisplayText()).toBe(`${ID8} · Sitzung`);
+    intern.attention = "question";
+    expect(intern.getDisplayText()).toBe(`? ${ID8} · Sitzung`);
+  });
+
+  it("Wächter: refreshTitle schreibt ID, Name und Ordner als aria-label an den Tab-Kopf, genau wie in der Kopfzeile", () => {
+    const { intern, leaf } = aufbau({}, false, { name: "claude 4", cwd: "/home/beispiel/projekt-a" });
+    const titleEl = { setText: vi.fn() };
+    (intern as unknown as { titleEl: typeof titleEl }).titleEl = titleEl;
+    intern.refreshTitle();
+    const erwartet = `${ID8} · claude 4 · ~/projekt-a`;
+    expect(leaf.updateHeader).toHaveBeenCalled();
+    expect(leaf.tabHeaderEl.setAttr).toHaveBeenCalledWith("aria-label", erwartet);
+    expect(titleEl.setText).toHaveBeenCalledWith(erwartet);
+  });
+
+  it("Wächter: das aria-label ist nie leer und nennt immer ID, Name und Ordner", () => {
+    const { intern, leaf } = aufbau({}, false);
+    intern.refreshTitle();
+    const aufrufe = leaf.tabHeaderEl.setAttr.mock.calls.filter((c) => c[0] === "aria-label");
+    expect(aufrufe).toHaveLength(1);
+    const label = String(aufrufe[0][1]);
+    expect(label).not.toBe("");
+    for (const teil of [ID8, "Sitzung", "/tmp/beispiel"]) expect(label, teil).toContain(teil);
   });
 });

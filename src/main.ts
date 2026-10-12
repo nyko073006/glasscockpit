@@ -703,16 +703,14 @@ export default class GlasscockpitPlugin extends Plugin {
   /** Kippschalter: ist eine der beiden Telegram-Arten an, werden beide aus, sonst beide an. Gibt den neuen Zustand zurück. */
   private toggleTelegram(store: SessionStore): boolean {
     const on = toggledTelegram(store.settings());
-    store.updateSetting("telegramOnDone", on);
-    store.updateSetting("telegramOnQuestion", on);
+    store.updateSettings({ telegramOnDone: on, telegramOnQuestion: on });
     return on;
   }
 
   /** Kippschalter: ist Ton oder macOS-Banner an, werden beide aus, sonst beide an. Gibt den neuen Zustand zurück. */
   private toggleSound(store: SessionStore): boolean {
     const on = toggledSound(store.settings());
-    store.updateSetting("alertSound", on);
-    store.updateSetting("alertBanner", on);
+    store.updateSettings({ alertSound: on, alertBanner: on });
     return on;
   }
 

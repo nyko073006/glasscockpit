@@ -94,9 +94,28 @@ export class SessionStore {
   }
 
   updateSetting<K extends keyof CockpitSettings>(key: K, value: CockpitSettings[K]): { ok: true } | { ok: false; reason: string } {
-    const reason = validateSetting(key, value) ?? dependencyReason(this.current, key, value);
-    if (reason !== null) return { ok: false, reason };
-    this.current = applyDependencies({ ...this.current, [key]: normalizeSetting(key, value) });
+    return this.updateSettings({ [key]: value } as Partial<CockpitSettings>);
+  }
+
+  /**
+   * Mehrere Einstellungen in einem Zug (Kippschalter setzen zwei Felder): alles oder nichts, ein Speichern, ein Event.
+   * Jedes Feld wird gegen den Zustand geprüft, in dem die übrigen Felder des Patches schon gelten; ist eines ungültig,
+   * wird keines übernommen und nichts gemeldet. Ein leerer Patch ändert nichts und meldet nichts.
+   */
+  updateSettings(patch: Partial<CockpitSettings>): { ok: true } | { ok: false; reason: string } {
+    const entries = Object.entries(patch) as Array<[keyof CockpitSettings, CockpitSettings[keyof CockpitSettings]]>;
+    if (entries.length === 0) return { ok: true };
+    for (const [key, value] of entries) {
+      const reason = validateSetting(key, value);
+      if (reason !== null) return { ok: false, reason };
+    }
+    const normalized = Object.fromEntries(entries.map(([key, value]) => [key, normalizeSetting(key, value)])) as Partial<CockpitSettings>;
+    for (const [key, value] of entries) {
+      const { [key]: _eigener, ...uebrige } = normalized;
+      const reason = dependencyReason({ ...this.current, ...uebrige }, key, value);
+      if (reason !== null) return { ok: false, reason };
+    }
+    this.current = applyDependencies({ ...this.current, ...normalized });
     this.schedule();
     for (const cb of [...this.settingsListeners]) cb(this.settings());
     return { ok: true };

@@ -73,9 +73,9 @@ describe("Abend 28: Stille Zwischenstände verkabelt", () => {
     }
   });
 
-  it("pollTranscript rechnet updateOpenTasks nach jedem Poll, auch ohne neuen Stand, nur für den aktuellen Leser", () => {
+  it("pollTranscript rechnet updateOpenTasks nach jedem Poll, auch ohne neuen Stand und nach einem Lesefehler (finally), nur für den aktuellen Leser", () => {
     const body = method(view, "private async pollTranscript(");
-    expect(body).toMatch(/if \(this\.reader === reader && result\.changed\) this\.applyResult\(result\);\s*(\/\/[^\n]*\s*)*if \(this\.reader === reader\) this\.updateOpenTasks\(\);/);
+    expect(body).toMatch(/if \(this\.reader === reader && result\.changed\) this\.applyResult\(result\);\s*\} finally \{\s*(\/\/[^\n]*\s*)*if \(this\.reader === reader\) this\.updateOpenTasks\(\);/);
   });
 
   it("updateOpenTasks fragt den aktuellen Leser mit Jetzt und Höchstalter in Minuten und frischt den Titel nur bei Änderung auf", () => {

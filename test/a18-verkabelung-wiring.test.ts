@@ -51,18 +51,18 @@ describe("Abend 18 Verkabelung: main.ts", () => {
     expect(src("src/host/terminal-view.ts")).not.toMatch(/private bringToFront/);
   });
 
-  it("Effort: die gewählte Stufe direkt, gespeichert über store.updateSetting; Telegram über toggledTelegram, beide Schalter", () => {
+  it("Effort: die gewählte Stufe direkt, gespeichert über store.updateSetting; Telegram über toggledTelegram, beide Schalter in einem updateSettings", () => {
     expect(main).toMatch(/setEffort:\s*\(step\)\s*=>\s*\{\s*const result = store\.updateSetting\("nextEffort", step\)/);
     expect(main).toMatch(/store\.updateSetting\("nextEffort"/);
     expect(main).toMatch(/toggledTelegram\(store\.settings\(\)\)/);
-    expect(main).toMatch(/updateSetting\("telegramOnDone", on\)/);
-    expect(main).toMatch(/updateSetting\("telegramOnQuestion", on\)/);
+    expect(main).toMatch(/store\.updateSettings\(\{\s*telegramOnDone: on,\s*telegramOnQuestion: on\s*\}\)/);
+    expect(main).not.toMatch(/updateSetting\("telegramOn/);
   });
 
   it("Ton: toggledSound, beide Einstellungen, Command „Ton an/aus“ mit Notice", () => {
     expect(main).toMatch(/toggledSound\(store\.settings\(\)\)/);
-    expect(main).toMatch(/updateSetting\("alertSound", on\)/);
-    expect(main).toMatch(/updateSetting\("alertBanner", on\)/);
+    expect(main).toMatch(/store\.updateSettings\(\{\s*alertSound: on,\s*alertBanner: on\s*\}\)/);
+    expect(main).not.toMatch(/updateSetting\("alert(Sound|Banner)"/);
     expect(main).toMatch(/toggleSound:\s*\(\)\s*=>\s*\{\s*this\.toggleSound\(store\)/);
     expect(main).toMatch(/id:\s*"toggle-sound",\s*name:\s*"Ton an\/aus"/);
     expect(main).toMatch(/new Notice\(`Ton \$\{on \? "an" : "aus"\}`\)/);

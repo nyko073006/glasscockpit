@@ -151,8 +151,8 @@ describe("Sitzungswechsel nach /clear", () => {
     expect(now.id).toBe("c1");
     expect(store.all()[0].claudeSessionId).toBe(NEW);
     expect(claudeIdOf(now)).toBe(NEW);
-    expect(tabTitle(now.name, claudeIdOf(now))).toBe("claude 4 · 90ef2efe");
-    expect(headerTitle(now.name, claudeIdOf(now), now.cwd, "/h")).toContain("90ef2efe");
+    expect(tabTitle(now.name, claudeIdOf(now))).toBe("90ef2efe · claude 4");
+    expect(headerTitle(now.name, claudeIdOf(now), now.cwd, "/h")).toBe("90ef2efe · claude 4 · /v");
   });
   it("der Leser mit der neuen ID findet nur die neue Datei, nicht die alte", async () => {
     const root = mkdtempSync(join(tmpdir(), "cockpit-sw-"));
@@ -181,6 +181,12 @@ describe("markedTitle mit offenen Hintergrundaufgaben (Abend 28)", () => {
     expect(markedTitle("Name", null, 2)).toBe("⏳ 2 Name");
     expect(markedTitle("Name", "question", 1)).toBe("? ⏳ 1 Name");
     expect(markedTitle("Name", "done", 3)).toBe("● ⏳ 3 Name");
+  });
+  it("Marken und Zahl stehen vor der ID, nie dazwischen (Abend 29: ID · Name)", () => {
+    const titel = tabTitle("claude 4", "90ef2efe-1111-4222-8333-444455556666");
+    expect(markedTitle(titel, null, 2)).toBe("⏳ 2 90ef2efe · claude 4");
+    expect(markedTitle(titel, "question", 1)).toBe("? ⏳ 1 90ef2efe · claude 4");
+    expect(markedTitle(titel, "done")).toBe("● 90ef2efe · claude 4");
   });
   it("Null, negative und ungültige Zahlen zeigen nichts an", () => {
     for (const open of [0, -1, Number.NaN]) expect(markedTitle("Name", null, open), String(open)).toBe("Name");

@@ -32,10 +32,21 @@ function joinInVault(vaultBase: string, relative: string): string | null {
 const HAS_EXTENSION = /\.[A-Za-z0-9]+$/;
 
 /**
- * Obsidian-Drop auflösen: `obsidian://open?vault=…&file=…` (Notizen ohne Endung sind .md)
- * oder ein vault-relativer Pfad mit Endung, der wirklich existiert. Sonst null.
+ * Löst einen Namen aus `obsidian://…&file=` auf: der Vault-Pfad der Datei oder null, wenn es sie nicht gibt.
+ * Der Host nimmt `app.metadataCache.getFirstLinkpathDest(name, "")`; er kennt Notizen ohne Endung und Namen ohne Ordner.
  */
-export function resolveObsidianDrop(text: string, vaultBase: string, exists: (abs: string) => boolean): string | null {
+export type NameResolver = (name: string) => string | null;
+
+/**
+ * Obsidian-Drop auflösen: `obsidian://open?vault=…&file=…` (der Name geht an den Resolver, eingefügt wird nur,
+ * was es im Vault gibt) oder ein vault-relativer Pfad mit Endung, der wirklich existiert. Sonst null.
+ */
+export function resolveObsidianDrop(
+  text: string,
+  vaultBase: string,
+  exists: (abs: string) => boolean,
+  resolveName: NameResolver,
+): string | null {
   const trimmed = text.trim();
   if (!trimmed || /[\r\n]/.test(trimmed)) return null;
 
@@ -47,11 +58,13 @@ export function resolveObsidianDrop(text: string, vaultBase: string, exists: (ab
       return null;
     }
     const file = url.searchParams.get("file");
-    if (!file) return null;
+    if (!file || file.split("/").includes("..")) return null;
     const vault = url.searchParams.get("vault");
     const vaultName = vaultBase.replace(/\/+$/, "").split("/").pop();
-    if (vault && vaultName && vault !== vaultName) return null;
-    return joinInVault(vaultBase, HAS_EXTENSION.test(file) ? file : `${file}.md`);
+    if (!vaultName) return null; // Ohne Vault-Basis (Host kennt keine) gäbe es einen Pfad ab `/`.
+    if (vault && vault !== vaultName) return null;
+    const found = resolveName(file);
+    return found === null ? null : joinInVault(vaultBase, found);
   }
 
   if (trimmed.includes("://") || trimmed.startsWith("/") || trimmed.startsWith("~")) return null;
@@ -61,9 +74,9 @@ export function resolveObsidianDrop(text: string, vaultBase: string, exists: (ab
 }
 
 /** Stufe text/plain: Pfadform gilt als Pfad, sonst Obsidian-Auflösung, sonst nichts. */
-export function pathsFromText(text: string, vaultBase: string, exists: (abs: string) => boolean): string[] {
+export function pathsFromText(text: string, vaultBase: string, exists: (abs: string) => boolean, resolveName: NameResolver): string[] {
   const trimmed = text.trim();
   if (isPathLike(trimmed)) return [trimmed];
-  const resolved = resolveObsidianDrop(trimmed, vaultBase, exists);
+  const resolved = resolveObsidianDrop(trimmed, vaultBase, exists, resolveName);
   return resolved ? [resolved] : [];
 }

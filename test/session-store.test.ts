@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SessionStore } from "../src/core/session-store";
 import type { CockpitData, SessionRecord } from "../src/core/session-model";
-import { DEFAULT_SETTINGS } from "../src/core/settings";
+import { DEFAULT_SETTINGS, validateSetting } from "../src/core/settings";
 import { FakeTimers } from "./helpers/fakes";
 
 const rec = (id: string, name = "claude"): SessionRecord => ({ id, name, kind: "claude", cwd: "/v", createdAt: "t" });
@@ -65,6 +65,106 @@ describe("SessionStore: ideDiff braucht ideBridge (06.10.2026)", () => {
     expect(store.settings().ideDiff).toBe(false);
     timers.advance(300);
     expect(saves).toHaveLength(before);
+  });
+});
+
+describe("SessionStore.updateSettings: mehrere Felder in einem Zug (Abend 29)", () => {
+  it.each([
+    ["Telegram", { telegramOnDone: true, telegramOnQuestion: true }, (s: typeof DEFAULT_SETTINGS) => [s.telegramOnDone, s.telegramOnQuestion]],
+    ["Ton", { alertSound: false, alertBanner: false }, (s: typeof DEFAULT_SETTINGS) => [s.alertSound, s.alertBanner]],
+  ])("Kippschalter %s: genau ein Event, beide Felder sind darin schon neu", (_name, patch, pick) => {
+    const { store } = setup();
+    const seen: boolean[][] = [];
+    store.onSettingsChange((s) => seen.push(pick(s)));
+    expect(pick(store.settings())).not.toEqual(Object.values(patch));
+    expect(store.updateSettings(patch)).toEqual({ ok: true });
+    expect(seen).toEqual([Object.values(patch)]);
+    expect(pick(store.settings())).toEqual(Object.values(patch));
+  });
+  it("speichert einmal, beide Felder stehen darin", () => {
+    const { store, saves, timers } = setup();
+    store.updateSettings({ telegramOnDone: true, telegramOnQuestion: true });
+    expect(saves).toHaveLength(0);
+    timers.advance(300);
+    expect(saves).toHaveLength(1);
+    expect(saves[0].settings).toMatchObject({ telegramOnDone: true, telegramOnQuestion: true });
+  });
+  it("ein ungültiges Feld: { ok: false, reason }, nichts übernommen, kein Event, nichts gespeichert (in jeder Reihenfolge)", () => {
+    for (const patch of [{ telegramOnDone: true, contextWarn: -1 }, { contextWarn: -1, telegramOnDone: true }]) {
+      const { store, saves, timers } = setup();
+      const seen: unknown[] = [];
+      store.onSettingsChange((s) => seen.push(s));
+      const reason = validateSetting("contextWarn", -1);
+      expect(reason).not.toBeNull();
+      expect(store.updateSettings(patch)).toEqual({ ok: false, reason });
+      expect(store.settings()).toEqual(DEFAULT_SETTINGS);
+      expect(seen).toHaveLength(0);
+      timers.advance(1000);
+      expect(saves).toHaveLength(0);
+    }
+  });
+  it("Abhängigkeit wird gegen den Zustand mit den übrigen Patch-Feldern geprüft: Brücke aus + Diff an wird abgelehnt, nichts übernommen", () => {
+    const { store, saves, timers } = setup();
+    const seen: unknown[] = [];
+    store.onSettingsChange((s) => seen.push(s));
+    expect(store.updateSettings({ ideBridge: false, ideDiff: true })).toEqual({ ok: false, reason: "braucht die IDE-Brücke" });
+    expect(store.settings().ideBridge).toBe(true);
+    expect(store.settings().ideDiff).toBe(false);
+    expect(seen).toHaveLength(0);
+    timers.advance(1000);
+    expect(saves).toHaveLength(0);
+  });
+  it("Brücke an + Diff an in einem Patch geht, obwohl die Brücke vorher aus war; ein Event", () => {
+    const { store } = setup();
+    store.updateSetting("ideBridge", false);
+    const seen: boolean[][] = [];
+    store.onSettingsChange((s) => seen.push([s.ideBridge, s.ideDiff]));
+    expect(store.updateSetting("ideDiff", true).ok).toBe(false);
+    expect(store.updateSettings({ ideDiff: true, ideBridge: true })).toEqual({ ok: true });
+    expect(seen).toEqual([[true, true]]);
+  });
+  it("Schwellenpaar zusammen verschoben geht (einzeln nicht), umgekehrt wird abgelehnt", () => {
+    const { store } = setup();
+    expect(store.updateSetting("contextWarn", 180000).ok).toBe(false);
+    const seen: number[][] = [];
+    store.onSettingsChange((s) => seen.push([s.contextWarn, s.contextHandoff]));
+    expect(store.updateSettings({ contextWarn: 180000, contextHandoff: 190000 })).toEqual({ ok: true });
+    expect(seen).toEqual([[180000, 190000]]);
+    expect(store.updateSettings({ contextWarn: 195000, contextHandoff: 185000 })).toEqual({ ok: false, reason: "muss unter der Handoff-Schwelle liegen" });
+    expect(store.settings()).toMatchObject({ contextWarn: 180000, contextHandoff: 190000 });
+    expect(seen).toHaveLength(1);
+  });
+  it("Brücke aus im Patch schaltet ideDiff mit ab, das eine Event sieht schon beides", () => {
+    const { store } = setup();
+    store.updateSetting("ideDiff", true);
+    const seen: boolean[][] = [];
+    store.onSettingsChange((s) => seen.push([s.ideBridge, s.ideDiff, s.telegramOnDone]));
+    expect(store.updateSettings({ ideBridge: false, telegramOnDone: true })).toEqual({ ok: true });
+    expect(seen).toEqual([[false, false, true]]);
+  });
+  it("Textfelder werden je Feld normalisiert wie bei updateSetting", () => {
+    const { store } = setup();
+    store.updateSettings({ briefingsDir: "/Briefings/", soundFile: "  ping.aiff  ", telegramOnDone: true });
+    expect(store.settings()).toMatchObject({ briefingsDir: "Briefings", soundFile: "ping.aiff", telegramOnDone: true });
+  });
+  it("leerer Patch: { ok: true }, kein Event, kein Speichern", () => {
+    const { store, saves, timers } = setup();
+    const seen: unknown[] = [];
+    store.onSettingsChange((s) => seen.push(s));
+    expect(store.updateSettings({})).toEqual({ ok: true });
+    expect(seen).toHaveLength(0);
+    timers.advance(1000);
+    expect(saves).toHaveLength(0);
+    expect(store.settings()).toEqual(DEFAULT_SETTINGS);
+  });
+  it("updateSetting bleibt ein Patch mit einem Feld: gleiche Rückgabe, ein Event", () => {
+    const { store } = setup();
+    const seen: number[] = [];
+    store.onSettingsChange((s) => seen.push(s.maxSessions));
+    expect(store.updateSetting("maxSessions", 7)).toEqual({ ok: true });
+    expect(seen).toEqual([7]);
+    expect(store.updateSetting("contextWarn", -1)).toEqual({ ok: false, reason: validateSetting("contextWarn", -1) });
+    expect(seen).toEqual([7]);
   });
 });
 

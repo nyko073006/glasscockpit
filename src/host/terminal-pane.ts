@@ -13,7 +13,7 @@ import { type TerminalOptions, changedXtermOptions, xtermOptions } from "../core
 import { type Dimensions, usableDimensions } from "../core/terminal-size";
 import { type ReadVar, buildTheme } from "../core/xterm-theme";
 import { createCssColorReader } from "./css-vars";
-import { TerminalInput } from "./terminal-input";
+import { TerminalInput, type TerminalInputOptions } from "./terminal-input";
 
 export type ResizeCallback = (cols: number, rows: number) => void;
 export type InputCallback = (data: string) => void;
@@ -41,7 +41,14 @@ export class TerminalPane {
   private sink: InputCallback | null = null;
   private readonly input: TerminalInput;
 
-  constructor(container: HTMLElement, onResize: ResizeCallback, vaultBase: () => string | null, options: TerminalOptions) {
+  constructor(
+    container: HTMLElement,
+    onResize: ResizeCallback,
+    vaultBase: () => string | null,
+    options: TerminalOptions,
+    /** Was der Drop vom Host braucht: Namen auflösen und Meldungen zeigen (Abend 29). */
+    drop: Pick<TerminalInputOptions, "resolveName" | "notify">,
+  ) {
     this.onResize = onResize;
     this.container = container;
     // Der Container muss bemaßt sein (position absolute, inset 0), sonst misst xterm 0 px.
@@ -65,6 +72,7 @@ export class TerminalPane {
       container,
       write: (data) => this.sink?.(data),
       vaultBase,
+      ...drop,
     });
     // Diagnose „leere Pane“: Zeichnet xterm überhaupt?
     this.term.onRender(() => this.renders++);

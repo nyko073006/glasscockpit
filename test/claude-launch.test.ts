@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   buildArgs,
   buildEnv,
-  defaultSessionName,
   findBinary,
   headerTitle,
   notFoundMessage,
@@ -123,16 +122,14 @@ describe("buildEnv", () => {
 });
 
 describe("Namen und Titel", () => {
-  it("Startname: Ordnername und Uhrzeit mit führenden Nullen", () => {
-    expect(defaultSessionName("Vault", new Date(2026, 9, 4, 9, 5))).toBe("Vault 09:05");
+  it("Tab-Titel: die ersten 8 Zeichen der ID vorn, dann der Name", () => {
+    expect(tabTitle("Vault 09:05", "0f4b7c1e-2d3a-4b5c-8d9e-0123456789ab")).toBe("0f4b7c1e · Vault 09:05");
+    expect(tabTitle("claude 4", "90ef2efe-1111-4222-8333-444455556666")).toBe("90ef2efe · claude 4");
   });
 
-  it("Tab-Titel: Name und die ersten 8 Zeichen der ID", () => {
-    expect(tabTitle("Vault 09:05", "0f4b7c1e-2d3a-4b5c-8d9e-0123456789ab")).toBe("Vault 09:05 · 0f4b7c1e");
-  });
-
-  it("Tab-Titel ohne Namen ist nie nur „claude“", () => {
-    expect(tabTitle("", "0f4b7c1e-2d3a")).toBe("Claude · 0f4b7c1e");
+  it("Tab-Titel ohne Namen (leer oder nur Leerzeichen) heißt Claude, nie leer", () => {
+    expect(tabTitle("", "0f4b7c1e-2d3a")).toBe("0f4b7c1e · Claude");
+    expect(tabTitle("   ", "0f4b7c1e-2d3a")).toBe("0f4b7c1e · Claude");
   });
 });
 
@@ -159,7 +156,7 @@ describe("resume, settings, Titel mit Ordner", () => {
     expect(shortPath("/Users/alex/x", "/Users/alex")).toBe("~/x");
     expect(shortPath("/Users/alex", "/Users/alex")).toBe("~");
     expect(shortPath("/Users/alexX", "/Users/alex")).toBe("/Users/alexX");
-    expect(headerTitle("Briefing", "1234567890", "/Users/alex/v", "/Users/alex")).toBe("Briefing · 12345678 · ~/v");
+    expect(headerTitle("Briefing", "1234567890", "/Users/alex/v", "/Users/alex")).toBe("12345678 · Briefing · ~/v");
   });
 });
 

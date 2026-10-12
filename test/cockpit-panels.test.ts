@@ -632,7 +632,7 @@ describe("neue Flächen (Abend 18): Geometrie", () => {
     }
   });
 
-  // Seit 19b prüft der Überlappungstest PANELS und FIELDS gemeinsam: jedes Paar aus allen 22 Flächen, nicht nur Felder gegen Panels.
+  // Seit 19b prüft der Überlappungstest PANELS und FIELDS gemeinsam: jedes Paar aus allen 21 Flächen, nicht nur Felder gegen Panels.
   type Belegt = [string, Set<number>, Rect];
   const belegung = (): Belegt[] => [
     ...PANELS.map((p) => [p.id, pixels(p.rect, p.polygon), p.rect] as Belegt),

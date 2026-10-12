@@ -319,6 +319,14 @@ export class DashboardView extends ItemView {
         component = new Component();
         this.addChild(component);
         await MarkdownRenderer.render(this.app, text, rendered, file.path, component);
+        // Obsidians Renderer setzt a.internal-link mit data-href, hängt aber keinen Klick-Handler an: geöffnet wird hier, in einem neuen Tab, damit das Dashboard stehen bleibt.
+        rendered.addEventListener("click", (e) => {
+          const link = (e.target as HTMLElement | null)?.closest("a.internal-link");
+          const ziel = link?.getAttribute("data-href");
+          if (!ziel) return;
+          e.preventDefault();
+          void this.app.workspace.openLinkText(ziel, file.path, "tab");
+        });
         if (gen !== this.generation) {
           this.removeChild(component);
           return;

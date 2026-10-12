@@ -3,7 +3,7 @@ import { TASKS_RELOAD_DEBOUNCE_MS } from "../core/constants";
 import { Observable } from "../core/observable";
 import { createDebounce } from "../core/debounce";
 import type { CockpitSettings } from "../core/settings";
-import { TASKS_TEMPLATE, displayText, parentFolders, taskRows, toggleTask, type TaskRow } from "../core/tasks";
+import { REASON_ALREADY_DONE, REASON_ALREADY_OPEN, TASKS_TEMPLATE, parentFolders, taskRows, textParts, toggleTask, type TaskRow } from "../core/tasks";
 
 export interface TasksCardDeps {
   settings: () => CockpitSettings;
@@ -129,13 +129,16 @@ export class TasksCard {
     }
     try {
       await this.app.vault.process(file, (data) => {
-        const result = toggleTask(data, row.line, row.text);
+        const result = toggleTask(data, row.line, row.text, row.done);
         if (!result.ok) throw new TaskChangedError(result.reason);
         return result.content;
       });
     } catch (fehler) {
-      if (fehler instanceof TaskChangedError) new Notice(`Die Datei hat sich geändert: ${fehler.message}`);
-      else new Notice(`Aufgabe nicht umgeschaltet: ${fehler instanceof Error ? fehler.message : String(fehler)}`, 10000);
+      if (fehler instanceof TaskChangedError) {
+        // Schon im gewünschten Zustand (zweiter Klick eines Doppelklicks) ist kein fremder Eingriff: nur der Grund, ohne „Datei geändert“.
+        const schonErreicht = fehler.message === REASON_ALREADY_DONE || fehler.message === REASON_ALREADY_OPEN;
+        new Notice(schonErreicht ? fehler.message : `Die Datei hat sich geändert: ${fehler.message}`);
+      } else new Notice(`Aufgabe nicht umgeschaltet: ${fehler instanceof Error ? fehler.message : String(fehler)}`, 10000);
     }
     // Keine optimistische Anzeige: die neue Darstellung kommt über das changed-Ereignis.
   }
@@ -168,7 +171,20 @@ export class TasksCard {
       const line = body.createDiv({ cls: row.done ? "cockpit-task cockpit-task-done" : "cockpit-task" });
       line.style.paddingLeft = `${row.depth * 20}px`;
       line.createSpan({ text: row.done ? "☑" : "☐", cls: "cockpit-task-box" });
-      line.createSpan({ text: displayText(row.text), cls: "cockpit-task-text" });
+      const textEl = line.createSpan({ cls: "cockpit-task-text" });
+      for (const part of textParts(row.text)) {
+        if (part.kind === "text") {
+          textEl.append(part.text);
+          continue;
+        }
+        const a = textEl.createEl("a", { text: part.anzeige, cls: "internal-link", attr: { "data-href": part.ziel } });
+        a.addEventListener("click", (e) => {
+          // Der Link ist nicht Teil der Umschaltfläche: nicht in die Zeile weiterreichen. Neuer Tab, damit das Dashboard stehen bleibt.
+          e.stopPropagation();
+          e.preventDefault();
+          void this.app.workspace.openLinkText(part.ziel, this.deps.settings().tasksFile, "tab");
+        });
+      }
       line.addEventListener("click", () => void this.toggle(row));
     }
   }

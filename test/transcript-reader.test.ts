@@ -1,7 +1,7 @@
 import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_LINK_BASES, MAX_TOOL_PATHS, TRANSCRIPT_TAIL_BYTES } from "../src/core/constants";
 import { HandoffKeeper, barItems } from "../src/core/transcript-poll";
 import { TranscriptReader, transcriptExists } from "../src/host/transcript-reader";
@@ -37,6 +37,46 @@ describe("TranscriptReader", () => {
     await schreibeAntwort();
     const result = await new TranscriptReader(ID, root).read();
     expect(result.blocks).toEqual([{ lang: "sh", code: "ls -la" }]);
+  });
+});
+
+describe("TranscriptReader: Lesefehler lassen den alten Stand (Abend 29)", () => {
+  // readTail ist privat; der Leser wirft genau einmal, danach liest er wirklich (spyOn ruft nach dem Einmal-Fehler das Original).
+  const proto = TranscriptReader.prototype as unknown as { readTail(path: string, size: number): Promise<string> };
+
+  it("wirft das Lesen, geht der Fehler an den Aufrufer, und der nächste Aufruf ohne force liest erneut, obwohl Größe und mtime gleich sind", async () => {
+    await schreibeAntwort();
+    const reader = new TranscriptReader(ID, root);
+    const spy = vi.spyOn(proto, "readTail").mockRejectedValueOnce(new Error("EIO"));
+    try {
+      await expect(reader.read()).rejects.toThrow("EIO");
+      const zweiter = await reader.read();
+      expect(zweiter.changed).toBe(true);
+      expect(zweiter.blocks).toEqual([{ lang: "sh", code: "ls -la" }]);
+      expect(spy).toHaveBeenCalledTimes(2);
+      // Erst das gelungene Lesen setzt den Stand: jetzt ist die Datei unverändert.
+      expect(await reader.read()).toEqual({ changed: false, blocks: [], handoff: null });
+      expect(spy).toHaveBeenCalledTimes(2);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("wächst die Datei und das Lesen scheitert, liest der nächste Aufruf das neue Ende und behält den Stand davor", async () => {
+    await schreibeAntwort();
+    const reader = new TranscriptReader(ID, root);
+    expect((await reader.read()).blocks).toEqual([{ lang: "sh", code: "ls -la" }]);
+    const mehr = { type: "assistant", message: { id: "m2", content: [{ type: "text", text: "```sh\npwd\n```" }] } };
+    await appendFile(join(root, "proj", `${ID}.jsonl`), JSON.stringify(mehr) + "\n");
+    const spy = vi.spyOn(proto, "readTail").mockRejectedValueOnce(new Error("EIO"));
+    try {
+      await expect(reader.read()).rejects.toThrow("EIO");
+      const zweiter = await reader.read();
+      expect(zweiter.changed).toBe(true);
+      expect(zweiter.blocks).toEqual([{ lang: "sh", code: "pwd" }]);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });
 

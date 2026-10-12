@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { composeFeed, ownSessionFiles, sessionFilesToDelete, soundOn, telegramOn, toggledSound, toggledTelegram, tokensToday, type FeedParts } from "../src/core/feed-compose";
 import type { SessionFile } from "../src/core/session-file";
+import { SessionStore } from "../src/core/session-store";
+import { DEFAULT_SETTINGS, type CockpitSettings } from "../src/core/settings";
+import { FakeTimers } from "./helpers/fakes";
 
 const ID_A = "90ef2efe-1234-4abc-8def-0123456789ab";
 const ID_B = "11111111-2222-4333-8444-555555555555";
@@ -123,5 +126,40 @@ describe("sessionFilesToDelete: älter als 24 h", () => {
   });
   it("nur .json-Dateien, sonst nichts anfassen", () => {
     expect(sessionFilesToDelete([e("notiz.txt", 0, 0), e(".tmp", 0, 0), e("x.json.123.tmp", null, 0)], now)).toEqual([]);
+  });
+});
+
+describe("Kippschalter über den Store (Abend 29): wie toggleTelegram und toggleSound in main.ts", () => {
+  const storeWith = (over: Partial<CockpitSettings>) => new SessionStore(
+    { schemaVersion: 1, sessions: [], settings: { ...DEFAULT_SETTINGS, ...over }, recentSkills: [], openAtUnload: [], dashboardAtUnload: null },
+    async () => {}, new FakeTimers(), 300,
+  );
+  it("Telegram aus einem Mischzustand: ein Event, darin beide Felder schon aus", () => {
+    const store = storeWith({ telegramOnDone: true, telegramOnQuestion: false });
+    const seen: boolean[][] = [];
+    store.onSettingsChange((x) => seen.push([x.telegramOnDone, x.telegramOnQuestion]));
+    const on = toggledTelegram(store.settings());
+    store.updateSettings({ telegramOnDone: on, telegramOnQuestion: on });
+    expect(on).toBe(false);
+    expect(seen).toEqual([[false, false]]);
+  });
+  it("Ton aus einem Mischzustand: ein Event, darin beide Felder schon aus", () => {
+    const store = storeWith({ alertSound: true, alertBanner: false });
+    const seen: boolean[][] = [];
+    store.onSettingsChange((x) => seen.push([x.alertSound, x.alertBanner]));
+    const on = toggledSound(store.settings());
+    store.updateSettings({ alertSound: on, alertBanner: on });
+    expect(on).toBe(false);
+    expect(seen).toEqual([[false, false]]);
+  });
+  it("beide Schalter von aus nach an: je ein Event, nie ein Zwischenzustand", () => {
+    const store = storeWith({ telegramOnDone: false, telegramOnQuestion: false, alertSound: false, alertBanner: false });
+    const seen: boolean[][] = [];
+    store.onSettingsChange((x) => seen.push([x.telegramOnDone, x.telegramOnQuestion, x.alertSound, x.alertBanner]));
+    const tg = toggledTelegram(store.settings());
+    store.updateSettings({ telegramOnDone: tg, telegramOnQuestion: tg });
+    const snd = toggledSound(store.settings());
+    store.updateSettings({ alertSound: snd, alertBanner: snd });
+    expect(seen).toEqual([[true, true, false, false], [true, true, true, true]]);
   });
 });

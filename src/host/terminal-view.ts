@@ -219,6 +219,11 @@ export class TerminalView extends ItemView {
       (cols, rows) => this.handle?.resize(cols, rows),
       () => this.deps.vaultBase(),
       this.terminalOptions(),
+      {
+        // Name aus einer obsidian://-URL: Obsidian findet die Datei auch im Unterordner; null, wenn es sie nicht gibt.
+        resolveName: (name) => this.app.metadataCache.getFirstLinkpathDest(name, "")?.path ?? null,
+        notify: (text) => void new Notice(text),
+      },
     );
     // Pfade per Cmd+Klick (Abend 27): Einstellung und Startordner werden bei jeder Abfrage frisch gelesen.
     const pane = this.pane;
@@ -325,12 +330,16 @@ export class TerminalView extends ItemView {
     if (!reader || this.polling) return;
     this.polling = true;
     try {
-      // Das Präfix pro Aufruf frisch aus den Einstellungen; der Handoff-Block entsteht auf dem ohnehin gelesenen Text.
-      const result = await reader.read(false, this.deps.settings().handoffPrefix);
-      // Sitzung kann während des Lesens gewechselt haben.
-      if (this.reader === reader && result.changed) this.applyResult(result);
-      // Nach jedem Poll, auch ohne neuen Stand: Ein Start ohne Ende fällt nach dem Höchstalter von selbst aus der Zahl.
-      if (this.reader === reader) this.updateOpenTasks();
+      try {
+        // Das Präfix pro Aufruf frisch aus den Einstellungen; der Handoff-Block entsteht auf dem ohnehin gelesenen Text.
+        const result = await reader.read(false, this.deps.settings().handoffPrefix);
+        // Sitzung kann während des Lesens gewechselt haben.
+        if (this.reader === reader && result.changed) this.applyResult(result);
+      } finally {
+        // Nach jedem Poll, auch ohne neuen Stand und auch nach einem Lesefehler (der Leser behält seinen letzten Stand): Ein Start
+        // ohne Ende fällt nach dem Höchstalter von selbst aus der Zahl, sonst bliebe „⏳ N“ bei einem dauerhaften Fehler stehen.
+        if (this.reader === reader) this.updateOpenTasks();
+      }
     } catch (fehler) {
       console.error("Glasscockpit: Transkript nicht lesbar", fehler);
     } finally {

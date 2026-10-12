@@ -81,15 +81,9 @@ export function buildEnv(
   return env;
 }
 
-/** Vorgabe für --name: Ordnername und Uhrzeit, etwa „Vault 09:05“. */
-export function defaultSessionName(folder: string, now: Date): string {
-  const two = (n: number) => String(n).padStart(2, "0");
-  return `${folder} ${two(now.getHours())}:${two(now.getMinutes())}`;
-}
-
-/** Tab-Titel: Name und Kurz-ID, nie nur „claude“. */
+/** Tab-Titel: Kurz-ID vorn, dann der Name („90ef2efe · claude 4“). Obsidian kürzt schmale Tabs vom Ende her, die ID soll stehen bleiben. */
 export function tabTitle(name: string, sessionId: string): string {
-  return `${name.trim() || "Claude"} · ${sessionId.slice(0, 8)}`;
+  return `${sessionId.slice(0, 8)} · ${name.trim() || "Claude"}`;
 }
 
 export function notFoundMessage(name: string, dirs: readonly string[]): string {
@@ -104,7 +98,7 @@ export function shortPath(path: string, home: string): string {
   return path.startsWith(`${base}/`) ? `~${path.slice(base.length)}` : path;
 }
 
-/** Kopfzeile der Terminal-View: Tab-Titel und Ordner. */
+/** Kopfzeile und Tooltip der Terminal-View: ID, Name und Ordner („90ef2efe · claude 4 · ~/projekt“). */
 export function headerTitle(name: string, sessionId: string, cwd: string, home: string): string {
   return `${tabTitle(name, sessionId)} · ${shortPath(cwd, home)}`;
 }
