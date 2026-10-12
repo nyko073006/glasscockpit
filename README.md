@@ -108,6 +108,12 @@ Per project the newest open handoff counts. The field "Neue Sitzung" on the dash
 
 Claude Code sends some text (for example the question of a choice prompt) as fixed white. In a light Obsidian theme that text is invisible. The setting "Mindestkontrast im Terminal" (1 to 21, default 4.5, 1 = off) lifts text that is too pale for the background up to that contrast ratio. It applies at once to open terminals.
 
+## Open paths with Cmd+click
+
+File paths in the terminal open with Cmd+click: absolute, with `~` or relative to the session's start folder, each optionally with `:line` or `:line:column`. While Cmd is held, a path is underlined, but only if it exists as a file. Files in the vault open as a tab, all others in a window with a plain-text editor: Cmd+S saves, Esc closes. If the file changed since it was opened (for example by Claude), the window asks before overwriting. Files larger than "Datei-Viewer: Höchstgröße (MB)" (default 2) and binary files are not shown. Turn it off with "Pfade per Cmd+Klick öffnen". In shell sessions the start folder still applies after `cd`.
+
+If a relative path is not in the start folder, the cockpit looks for it in the folders Claude has worked in during this session: `cd` targets and the folders of files it read or edited. So when Claude names `src/main.ts:10` from a repo in a vault session, it becomes a link. If several of these folders have the file, for example the repo and a worktree, it opens from the folder Claude worked in most recently; the window title shows the full path. Turn it off with "Relative Pfade auch in Claudes Ordnern suchen".
+
 ## Banner auto-dismiss
 
 The macOS banner (setting "macOS-Banner") closes itself after "Banner ausblenden nach (Sekunden)" (1 to 60, default 6) and does not stay in Notification Center. Each session has at most one banner: a new one replaces the old one. Open banners are closed when the plugin is disabled. A click brings the session to the front. If `@electron/remote` is unavailable in Obsidian, the plugin falls back to the window's web notification; then closing is not guaranteed.
@@ -131,14 +137,16 @@ This follows the disclosure rules of the Obsidian developer policies.
 - `afplay` for the alert sound, `xattr` for the quarantine flag, `ps` to find the parent process for the IDE bridge.
 
 **Reads outside the vault.**
-- `~/.claude/projects/`: the Claude transcripts, to count tokens, find the last code block and show the active session.
+- `~/.claude/projects/`: the Claude transcripts, to count tokens, find the last code block, show the active session and know the folders Claude worked in (for relative paths).
 - `~/.claude/skills/`, `agents/`, `commands/`, `settings.json` and `plugins/installed_plugins.json`: to list skills, agents and commands in the launcher. The same folders under the vault and the project folder are read too.
 - `~/.claude/cockpit/`: `usage.json` and `sessions/*.json` (written by the status line script), plus the plugin's own files below.
 - Telegram only if enabled: the `.env` file named in settings (default `~/.claude/channels/telegram/.env`) for the bot token, and `access.json` next to it for the chat ID. The token is read for each message and never stored by the plugin.
 - Radar state files at the paths you enter.
+- Paths shown in the terminal: on hover only a `stat` on the paths of that line, the content only after Cmd+click (switch "Pfade per Cmd+Klick öffnen").
 
 **Writes outside the vault.**
 - `~/.claude/cockpit/tokens-today.json` (today's output tokens for the status line; switch "Tokens für die Statuszeile schreiben", on by default), `thresholds.json` (context thresholds from your settings) and `research.json` (cache of GitHub results).
+- The file you save with Cmd+S in the file viewer, and only that one (switch "Pfade per Cmd+Klick öffnen", on by default). It is written to a temporary file in the same folder, which is then renamed.
 - `~/.claude/ide/<port>.lock`: lock file of the IDE bridge (switch "IDE-Brücke", on by default). It lets Claude sessions started by the plugin see your selection and open notes. The server listens on `127.0.0.1` only. The lock file is removed on exit.
 - `npm run deploy:statusline` writes `~/.claude/statusline-command.sh`. You run that yourself.
 - `npm run deploy:hook` writes `~/.claude/hooks/clearable-banner.py`; you run that yourself too. The hook reads `~/.claude/cockpit/thresholds.json`, `sessions/*.json` and the session transcript, and appends a log to `~/.claude/hooks/clearable-banner.log`.

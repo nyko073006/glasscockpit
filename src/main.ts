@@ -50,6 +50,9 @@ import { NativeLoader } from "./host/native-loader";
 import { NodePtyFactory } from "./host/pty-factory";
 import { TelegramNotifier } from "./host/telegram-notify";
 import { TerminalView } from "./host/terminal-view";
+import { openTerminalPath } from "./host/file-links";
+import { FileViewerModal } from "./host/file-viewer-modal";
+import { openVaultFile } from "./host/vault-open";
 import { transcriptFs, writeFileAtomic } from "./host/usage-fs";
 
 /** `app.commands` steht nicht in der öffentlichen obsidian.d.ts, die Funktion gibt es seit Jahren (Hotkeys, Befehlspalette). */
@@ -207,6 +210,14 @@ export default class GlasscockpitPlugin extends Plugin {
           },
           adoptClaudeId: (sessionId, claudeId) => store.setClaudeSessionId(sessionId, claudeId),
           handoffs: this.handoffs,
+          openPath: (target, refocus) => void openTerminalPath(target, {
+            vaultBase: () => {
+              const adapter = this.app.vault.adapter;
+              return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
+            },
+            openInVault: async (rel, t) => (await openVaultFile(this.app, rel, t.line === null ? null : { line: t.line, col: t.col })) !== null,
+            openInModal: (t) => new FileViewerModal(this.app, t, { maxMb: store.settings().fileViewerMaxMb, home: homedir(), onClosed: refocus }).open(),
+          }),
           alertGate: (sessionId) => {
             const now = Date.now();
             if (!alertDue(this.lastAlertAt.get(sessionId) ?? null, now, store.settings().alertGapMs)) return false;

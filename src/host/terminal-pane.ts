@@ -1,5 +1,5 @@
 import { FitAddon } from "@xterm/addon-fit";
-import { Terminal } from "@xterm/xterm";
+import { type ILinkProvider, Terminal } from "@xterm/xterm";
 import {
   CSS_PREFIX,
   TERMINAL_FONT_FAMILY,
@@ -7,6 +7,7 @@ import {
   TERMINAL_MAC_OPTION_IS_META,
 } from "../core/constants";
 import { type FoundLine, firstNonEmptyLine } from "../core/diagnose";
+import { bufferRowOf, type CellRow } from "../core/file-links";
 import { OBSIDIAN_STATUS_BAR, bottomOverlap } from "../core/status-bar";
 import { type TerminalOptions, changedXtermOptions, xtermOptions } from "../core/terminal-options";
 import { type Dimensions, usableDimensions } from "../core/terminal-size";
@@ -149,6 +150,29 @@ export class TerminalPane {
   onOsc(ident: number, handler: (data: string) => boolean): () => void {
     const sub = this.term.parser.registerOscHandler(ident, handler);
     return () => sub.dispose();
+  }
+
+  /**
+   * Link-Provider anmelden (Datei-Viewer, Abend 27). setModifier hört Cmd an der Pane (keydown/keyup in der Capture-Phase,
+   * vor xterm), damit ein Link unter der Maus beim Drücken unterstrichen wird. Gibt die Abmeldung zurück.
+   */
+  registerLinkProvider(provider: ILinkProvider & { setModifier?: (meta: boolean) => void }): () => void {
+    const sub = this.term.registerLinkProvider(provider);
+    const onKey = (event: KeyboardEvent): void => provider.setModifier?.(event.metaKey);
+    this.container.addEventListener("keydown", onKey, true);
+    this.container.addEventListener("keyup", onKey, true);
+    return () => {
+      sub.dispose();
+      this.container.removeEventListener("keydown", onKey, true);
+      this.container.removeEventListener("keyup", onKey, true);
+    };
+  }
+
+  /** Pufferzeile y (ab 1, wie xterms IBufferRange) als Zellen; null außerhalb des Puffers. */
+  bufferRow(y: number): CellRow | null {
+    if (this.disposed) return null;
+    const line = this.term.buffer.active.getLine(y - 1);
+    return line ? bufferRowOf(line, this.term.cols) : null;
   }
 
   /** Maße nach dem letzten tauglichen fit(), sonst null. */

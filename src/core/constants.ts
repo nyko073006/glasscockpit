@@ -155,6 +155,16 @@ export const DEFAULT_IDE_BRIDGE = true;
 // Diff-Ansicht (Abend 17). An heißt: Claude wartet bei jeder Dateiänderung auf Annehmen oder Ablehnen in Obsidian. Deshalb
 // Vorgabe aus; nur mit ideBridge zusammen wirksam.
 export const DEFAULT_IDE_DIFF = false;
+// Datei-Viewer (Abend 27): Pfade im Terminal per Cmd+Klick öffnen; Höchstgröße in MB, darüber ein Hinweis statt Inhalt.
+export const DEFAULT_FILE_LINKS = true;
+export const DEFAULT_FILE_VIEWER_MAX_MB = 2;
+// Relative Pfade über Claudes Ordner (Abend 27b): an heißt, ein relativer Pfad, der im Startordner keine Datei ist, wird auch in den
+// Ordnern aus Claudes Werkzeugaufrufen dieser Sitzung gesucht (bei mehreren Treffern der Ordner, in dem Claude zuletzt gearbeitet hat).
+export const DEFAULT_FILE_LINKS_CLAUDE_DIRS = true;
+// So viele Pfade aus Werkzeugaufrufen merkt sich ein Transkript-Leser (die ältesten fallen zuerst raus) und so viele Basisordner
+// (die Pfade selbst und ihre Elternordner, neueste zuerst) gibt er heraus; jeder Basisordner kostet ein statSync je Kandidat.
+export const MAX_TOOL_PATHS = 32;
+export const MAX_LINK_BASES = 64;
 // Eingabezeile fest (Abend 19f): an startet Claude im Vollbild (Alternate Screen, Maus in Claude). Vorgabe aus = klassisch mit
 // xterm-Scrollback und xterm-Textauswahl. Wirkt für neu gestartete Sitzungen.
 export const DEFAULT_FIXED_PROMPT = false;

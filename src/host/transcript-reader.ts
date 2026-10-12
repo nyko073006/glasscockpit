@@ -1,7 +1,8 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { TRANSCRIPT_SEARCH_MS, TRANSCRIPT_TAIL_BYTES } from "../core/constants";
+import { MAX_LINK_BASES, MAX_TOOL_PATHS, TRANSCRIPT_SEARCH_MS, TRANSCRIPT_TAIL_BYTES } from "../core/constants";
+import { linkBases as baseFolders, mergeRecent, toolPaths } from "../core/file-links";
 import { type CodeBlock, extractCodeBlocks, lastAnswerText, lastHandoffBlock } from "../core/transcript-code";
 import { type FileStamp, mayRescan, statChanged, tailStart } from "../core/transcript-poll";
 
@@ -47,13 +48,27 @@ export class TranscriptReader {
   private path: string | null = null;
   private stamp: FileStamp | null = null;
   private lastSearchAt: number | null = null;
+  /** Pfade aus Claudes Werkzeugaufrufen (Abend 27b), chronologisch; sie bleiben, auch wenn der Aufruf aus dem gelesenen Ende fällt. */
+  private paths: string[] = [];
+  /** linkBases(), bis sich paths ändert. */
+  private basesCache: string[] | null = null;
 
   private readonly sessionId: string;
   private readonly root: string;
+  private readonly home: string;
 
-  constructor(sessionId: string, root: string = join(homedir(), ".claude", "projects")) {
+  constructor(sessionId: string, root: string = join(homedir(), ".claude", "projects"), home: string = homedir()) {
     this.sessionId = sessionId;
     this.root = root;
+    this.home = home;
+  }
+
+  /**
+   * Basisordner für relative Pfade in dieser Sitzung (Ordner aus cd, Lesen, Schreiben, Suchen), neueste zuerst. Jeder Leser
+   * gehört zu einer Claude-ID, nach /clear beginnt der neue Leser leer.
+   */
+  linkBases(): string[] {
+    return (this.basesCache ??= baseFolders(this.paths, this.home, MAX_LINK_BASES));
   }
 
   /**
@@ -77,6 +92,9 @@ export class TranscriptReader {
     if (!force && !statChanged(this.stamp, next)) return { changed: false, blocks: [], handoff: null };
     this.stamp = next;
     const text = await this.readTail(path, next.size);
+    // Auf dem ohnehin gelesenen Text, ohne zweites Lesen: neue Funde ans Ende, ältere bleiben (bis MAX_TOOL_PATHS).
+    this.paths = mergeRecent(this.paths, toolPaths(text, this.home), MAX_TOOL_PATHS);
+    this.basesCache = null;
     const answer = lastAnswerText(text);
     return { changed: true, blocks: answer ? extractCodeBlocks(answer) : [], handoff: lastHandoffBlock(text, handoffPrefix) };
   }

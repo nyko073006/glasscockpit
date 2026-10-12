@@ -21,6 +21,8 @@ import type { NodePtyFactory } from "./pty-factory";
 import { RenameModal } from "./rename-modal";
 import type { TerminalOptions } from "../core/terminal-options";
 import { TerminalPane } from "./terminal-pane";
+import { FileLinkProvider, type LinkTarget } from "./file-links";
+import { isFileSync } from "./file-viewer-fs";
 import { TranscriptReader, type TranscriptResult } from "./transcript-reader";
 
 /** Was die View vom Plugin bekommt. Die Sitzungen gehören dem Plugin, nicht der View. */
@@ -62,6 +64,8 @@ export interface TerminalDeps {
   adoptClaudeId: (sessionId: string, claudeId: string) => Change;
   /** Letzter Handoff-Block je Cockpit-Sitzung (Abend 19b), vom Plugin gehalten und von allen Views der Sitzung geteilt. */
   handoffs: HandoffKeeper;
+  /** Datei-Viewer (Abend 27): Pfad aus einem Cmd+Klick öffnen (Vault-Tab oder Fenster); refocus holt danach den Fokus zurück. */
+  openPath: (target: LinkTarget, refocus: () => void) => void;
 }
 
 /** Was zur Laufzeit am Leaf hängt, aber nicht in obsidian.d.ts steht. */
@@ -100,6 +104,7 @@ export class TerminalView extends ItemView {
   private unbindMigrate: (() => void) | null = null;
   private unbindRecords: (() => void) | null = null;
   private unbindSettings: (() => void) | null = null;
+  private unbindLinks: (() => void) | null = null;
   // Benachrichtigung (nur Claude-Sitzungen).
   private attention: AttentionSignal | null = null;
   // Erst nach dem Parsen des Replays scharf: Der Ring-Puffer enthält alte Signale.
@@ -212,6 +217,21 @@ export class TerminalView extends ItemView {
       () => this.deps.vaultBase(),
       this.terminalOptions(),
     );
+    // Pfade per Cmd+Klick (Abend 27): Einstellung und Startordner werden bei jeder Abfrage frisch gelesen.
+    const pane = this.pane;
+    this.unbindLinks = pane.registerLinkProvider(
+      new FileLinkProvider({
+        row: (y) => pane.bufferRow(y),
+        cwd: () => (this.sessionId ? this.deps.record(this.sessionId)?.cwd ?? null : null),
+        home: this.deps.home,
+        enabled: () => this.deps.settings().fileLinks,
+        isFile: isFileSync,
+        // Relative Pfade auch in Claudes Ordnern (Abend 27b): Schalter und Ordner des aktuellen Lesers (neue Claude-ID = neuer Leser).
+        claudeDirs: () => this.deps.settings().fileLinksClaudeDirs,
+        bases: () => this.reader?.linkBases() ?? [],
+        open: (target) => this.deps.openPath(target, () => this.pane?.focus()),
+      }),
+    );
     // Schriftgröße und Scrollback wirken sofort auf offene Panes; ein leeres Handoff-Präfix blendet den festen Knopf sofort aus.
     this.unbindSettings = this.deps.onSettingsChange(() => {
       this.pane?.applyOptions(this.terminalOptions());
@@ -257,6 +277,8 @@ export class TerminalView extends ItemView {
     this.unbindRecords = null;
     this.unbindSettings?.();
     this.unbindSettings = null;
+    this.unbindLinks?.();
+    this.unbindLinks = null;
     this.pane?.dispose();
     this.pane = null;
     this.bar?.remove();

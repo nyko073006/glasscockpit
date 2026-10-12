@@ -1,4 +1,5 @@
 import { type App, MarkdownView } from "obsidian";
+import { openVaultFile } from "./vault-open";
 import { type IdeHandlers, type SelectionParams, type ToolResult, fileUrl, jsonResult, mentionLines, selectionParams, textResult } from "../core/ide-protocol";
 
 // IDE-Brücke (Abend 16): Was Claude Code vom Editor sehen darf, aus der Obsidian-API. Gelesen wird immer frisch.
@@ -117,16 +118,9 @@ export class IdeEditor {
     return jsonResult({ success: true, folders: [{ name: base.slice(base.lastIndexOf("/") + 1), uri: fileUrl(base), path: base }], rootPath: base });
   }
 
-  /**
-   * Notiz öffnen, ohne dem Terminal den Fokus zu nehmen: schon offen, dann nur nach vorn; sonst neuer Tab im Hintergrund,
-   * dann nach vorn. (Nie das aktive Leaf ersetzen: Es könnte das Terminal sein.)
-   */
+  /** Notiz öffnen, ohne dem Terminal den Fokus zu nehmen; gemeinsam mit den Pfad-Links im Terminal (vault-open.ts). */
   private async openFile(path: string): Promise<ToolResult> {
-    const file = this.app.vault.getFileByPath(path);
-    if (!file) throw new Error(`Datei nicht im Vault: ${path}`);
-    const leaf = this.viewOf(path)?.leaf ?? this.app.workspace.getLeaf("tab");
-    if (leaf.view.getViewType() !== "markdown" || (leaf.view as MarkdownView).file?.path !== path) await leaf.openFile(file, { active: false });
-    await this.app.workspace.revealLeaf(leaf);
+    if (!(await openVaultFile(this.app, path))) throw new Error(`Datei nicht im Vault oder nicht als Tab darstellbar: ${path}`);
     return textResult(`Opened file: ${path}`);
   }
 }

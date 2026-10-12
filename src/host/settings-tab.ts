@@ -83,6 +83,18 @@ export class CockpitSettingTab extends PluginSettingTab {
       "Ein Codeblock, dessen erste nichtleere Zeile so beginnt, steht oben im Terminal als fester Knopf „Handoff kopieren“, auch nach /clear, bis ein neuerer Block kommt. Groß- und Kleinschreibung zählt. Leer: kein Knopf (sofort). Ein neues Präfix gilt ab der nächsten Änderung des Transkripts.",
       s.handoffPrefix,
     );
+    this.toggleField(
+      "fileLinks", "Pfade per Cmd+Klick öffnen", s.fileLinks,
+      "An: Dateipfade im Terminal (absolut, mit ~ oder relativ zum Startordner der Sitzung, auch mit :zeile) öffnen per Cmd+Klick. Dateien im Vault als Tab, alle anderen in einem Fenster zum Lesen und Ändern (Cmd+S speichert, Esc schließt). Ein einfacher Klick markiert weiter Text. Wirkt sofort.",
+    );
+    this.toggleField(
+      "fileLinksClaudeDirs", "Relative Pfade auch in Claudes Ordnern suchen", s.fileLinksClaudeDirs,
+      "Liegt ein relativer Pfad nicht im Startordner, sucht das Cockpit ihn in den Ordnern, in denen Claude in dieser Sitzung gearbeitet hat (cd, gelesene und bearbeitete Dateien). Haben mehrere die Datei, gilt der, in dem Claude zuletzt gearbeitet hat.",
+    );
+    this.numberField(
+      "fileViewerMaxMb", "Datei-Viewer: Höchstgröße (MB)",
+      "Größere Dateien zeigt das Fenster nicht, nur einen Hinweis (1 bis 50).", s.fileViewerMaxMb,
+    );
 
     new Setting(containerEl).setName("Benachrichtigung").setHeading();
     this.toggleField("notifyOnDone", "Wenn eine Sitzung fertig ist", s.notifyOnDone);
