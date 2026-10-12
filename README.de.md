@@ -116,6 +116,12 @@ Liegt ein relativer Pfad nicht im Startordner, sucht das Cockpit ihn in den Ordn
 
 Das macOS-Banner (Einstellung „macOS-Banner“) schließt sich nach der Zeit „Banner ausblenden nach (Sekunden)“ von selbst (1 bis 60, Vorgabe 6) und steht danach nicht in der Mitteilungszentrale. Je Sitzung gibt es höchstens ein Banner: Ein neues ersetzt das alte. Beim Ausschalten des Plugins werden offene Banner geschlossen. Ein Klick holt die Sitzung nach vorn. Ist `@electron/remote` in Obsidian nicht verfügbar, zeigt das Plugin das Banner über das Fenster; dann gibt es keine Garantie, dass es sich schließt.
 
+## Stille Zwischenstände
+
+Ein Chat, der Agents, Workflows oder Hintergrund-Befehle startet, beendet seine Antwort, und jeder fertige Agent weckt ihn wieder auf, damit er einen Zwischenstand schreibt. Ohne Filter würde jede dieser Antworten melden. Mit „Zwischenstände bei laufenden Agents nicht melden“ (in der Vorgabe an) bleibt ein Antwortende still, solange noch etwas im Hintergrund läuft: kein Telegram, kein Ton, kein Banner, keine Markierung am Tab. Gemeldet wird erst die Antwort, nach der nichts mehr läuft. Fragen melden sich immer. Der Tab zeigt vor seinem Titel, wie viele Hintergrundaufgaben laufen, als „⏳ 2“ („Laufende Hintergrundaufgaben im Tab zeigen (⏳)“).
+
+Das Plugin liest das aus dem Claude-Transkript: Eine Aufgabe läuft vom Start (ein im Hintergrund gestarteter Agent oder Workflow, ein Bash-Befehl mit `run_in_background`, ein in den Hintergrund verschobenes MCP-Werkzeug, ein per SendMessage fortgesetzter Agent) bis zur Fertig-Meldung. Ein Start ohne Fertig-Meldung zählt nach „Höchstalter einer Hintergrundaufgabe (Minuten)“ (1 bis 1440, Vorgabe 60) nicht mehr, damit eine verlorene Meldung eine Sitzung nicht für immer stumm schaltet. Das Monitor-Werkzeug erkennt es nicht; ein Antwortende dahinter meldet wie bisher.
+
 ## Rechteabfragen überspringen
 
 Der Schalter „Rechteabfragen überspringen“ ist in der Vorgabe aus.
@@ -135,7 +141,7 @@ Das folgt den Offenlegungsregeln der Obsidian-Entwicklerrichtlinien.
 - `afplay` für den Alarmton, `xattr` für das Quarantäne-Flag, `ps` für den Elternprozess der IDE-Brücke.
 
 **Liest außerhalb des Vaults.**
-- `~/.claude/projects/`: die Claude-Transkripte, um Tokens zu zählen, den letzten Codeblock zu finden, die aktive Sitzung zu zeigen und die Ordner zu kennen, in denen Claude gearbeitet hat (für relative Pfade).
+- `~/.claude/projects/`: die Claude-Transkripte, um Tokens zu zählen, den letzten Codeblock zu finden, die aktive Sitzung zu zeigen, die Ordner zu kennen, in denen Claude gearbeitet hat (für relative Pfade), und zu wissen, welche Hintergrundaufgaben noch laufen (stille Zwischenstände).
 - `~/.claude/skills/`, `agents/`, `commands/`, `settings.json` und `plugins/installed_plugins.json`: für die Listen im Launcher. Dieselben Ordner im Vault und im Projektordner werden ebenfalls gelesen.
 - `~/.claude/cockpit/`: `usage.json` und `sessions/*.json` (schreibt das Statuszeilen-Skript) sowie die eigenen Dateien unten.
 - Nur bei aktivem Telegram: die `.env`-Datei aus den Einstellungen (Vorgabe `~/.claude/channels/telegram/.env`) für das Bot-Token und `access.json` daneben für die Chat-ID. Das Token wird bei jeder Nachricht neu gelesen und vom Plugin nie gespeichert.

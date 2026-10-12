@@ -113,10 +113,23 @@ export function alertDue(lastAt: number | null, now: number, gapMs: number): boo
   return lastAt === null || now - lastAt >= gapMs;
 }
 
-export function markedTitle(title: string, signal: AttentionSignal | null): string {
-  if (signal === "done") return `● ${title}`;
-  if (signal === "question") return `? ${title}`;
-  return title;
+/**
+ * Tab-Titel: eine Markierung (● fertig, ? Frage), dann bei offenen Hintergrundaufgaben „⏳ <Zahl> “ (Abend 28), dann der Titel.
+ * Ohne dritten Parameter oder bei 0 und ungültigen Zahlen bleibt es beim bisherigen Titel.
+ */
+export function markedTitle(title: string, signal: AttentionSignal | null, open = 0): string {
+  const mark = signal === "done" ? "● " : signal === "question" ? "? " : "";
+  const tasks = open > 0 ? `⏳ ${open} ` : "";
+  return `${mark}${tasks}${title}`;
+}
+
+/**
+ * Stille Zwischenstände (Abend 28): Ein Antwortende (done), hinter dem noch Hintergrundaufgaben laufen, meldet nichts; gemeldet
+ * wird erst das done, nach dem nichts mehr läuft. Eine Frage ist nie still, sie wartet auf den Nutzer. quietOn ist die Einstellung
+ * quietWhileAgents. Eine ungültige Zahl (NaN, negativ) ist nicht still: im Zweifel melden.
+ */
+export function doneIsQuiet(signal: AttentionSignal, quietOn: boolean, open: number): boolean {
+  return signal === "done" && quietOn && open > 0;
 }
 
 export function bannerText(name: string, signal: AttentionSignal): string {

@@ -64,6 +64,12 @@ export const DEFAULT_ALERT_SOUND = true;
 export const DEFAULT_ALERT_BANNER = true;
 export const DEFAULT_SOUND_FILE = "/System/Library/Sounds/Glass.aiff";
 export const DEFAULT_ALERT_GAP_MS = 3000;
+// Stille Zwischenstände (Abend 28): Solange Agents, Workflows oder Hintergrund-Befehle laufen, meldet ein Antwortende nichts (Fragen
+// immer). Ein Start ohne Fertig-Meldung zählt nach DEFAULT_QUIET_MAX_AGE_MIN Minuten nicht mehr als laufend, damit eine verlorene
+// Meldung nicht für immer stumm schaltet. Der Tab zeigt die Zahl der laufenden Aufgaben (⏳).
+export const DEFAULT_QUIET_WHILE_AGENTS = true;
+export const DEFAULT_QUIET_MAX_AGE_MIN = 60;
+export const DEFAULT_SHOW_OPEN_TASKS = true;
 
 // Härtung (Abend 11). Vorgaben der Einstellungen im Abschnitt „Terminal“; gelesen wird store.settings().
 export const DEFAULT_RESUME_CONVERSATIONS = true;
@@ -165,6 +171,9 @@ export const DEFAULT_FILE_LINKS_CLAUDE_DIRS = true;
 // (die Pfade selbst und ihre Elternordner, neueste zuerst) gibt er heraus; jeder Basisordner kostet ein statSync je Kandidat.
 export const MAX_TOOL_PATHS = 32;
 export const MAX_LINK_BASES = 64;
+// Stille Zwischenstände (Abend 28): So viele Starts und Enden von Hintergrundaufgaben merkt sich ein Transkript-Leser, die ältesten
+// fallen zuerst raus, damit der Speicher nicht wächst. Technik-Invariante, keine Einstellung.
+export const MAX_BG_TASKS = 256;
 // Eingabezeile fest (Abend 19f): an startet Claude im Vollbild (Alternate Screen, Maus in Claude). Vorgabe aus = klassisch mit
 // xterm-Scrollback und xterm-Textauswahl. Wirkt für neu gestartete Sitzungen.
 export const DEFAULT_FIXED_PROMPT = false;

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -201,5 +201,92 @@ describe("transcriptExists", () => {
 
   it("false, wenn die Wurzel fehlt", async () => {
     expect(await transcriptExists(ID, join(root, "gibt-es-nicht"))).toBe(false);
+  });
+});
+
+describe("TranscriptReader: offene Hintergrundaufgaben (Abend 28)", () => {
+  const T0 = Date.parse("2026-10-12T10:00:00.000Z");
+  const MIN = 60_000;
+  const A = "toolu_01AAAAAAAAAAAAAAAAAAAAAA";
+  const B = "toolu_01BBBBBBBBBBBBBBBBBBBBBB";
+  const start = (id: string, at = T0) =>
+    JSON.stringify({
+      type: "user", timestamp: new Date(at).toISOString(),
+      message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: "Async agent launched successfully." }] },
+      toolUseResult: { isAsync: true, status: "async_launched", agentId: "a1b2c3", description: "Beispiel" },
+    });
+  const ende = (id: string) =>
+    JSON.stringify({
+      type: "queue-operation", operation: "enqueue", timestamp: new Date(T0 + MIN).toISOString(),
+      content: `<task-notification>\n<task-id>b1</task-id>\n<tool-use-id>${id}</tool-use-id>\n<status>completed</status>\n</task-notification>`,
+    });
+  const datei = () => join(root, "proj", `${ID}.jsonl`);
+  async function schreibe(zeilen: string[]): Promise<void> {
+    await mkdir(join(root, "proj"), { recursive: true });
+    await writeFile(datei(), zeilen.join("\n") + "\n");
+  }
+  async function haenge(zeilen: string[]): Promise<void> {
+    await appendFile(datei(), zeilen.join("\n") + "\n");
+  }
+
+  it("ein neuer Leser beginnt leer", () => {
+    expect(new TranscriptReader(ID, root).openTasks(T0, 60 * MIN)).toBe(0);
+  });
+
+  it("zählt Starts ohne Ende aus dem gelesenen Transkript", async () => {
+    await schreibe([start(A), start(B)]);
+    const reader = new TranscriptReader(ID, root);
+    await reader.read();
+    expect(reader.openTasks(T0 + MIN, 60 * MIN)).toBe(2);
+  });
+
+  it("ein Ende in einem späteren read schließt die Aufgabe", async () => {
+    await schreibe([start(A), start(B)]);
+    const reader = new TranscriptReader(ID, root);
+    await reader.read();
+    await haenge([ende(A)]);
+    expect((await reader.read()).changed).toBe(true);
+    expect(reader.openTasks(T0 + 2 * MIN, 60 * MIN)).toBe(1);
+    await haenge([ende(B)]);
+    await reader.read();
+    expect(reader.openTasks(T0 + 2 * MIN, 60 * MIN)).toBe(0);
+  });
+
+  it("das Höchstalter wirkt beim Abfragen, ohne dass das Transkript sich ändert", async () => {
+    await schreibe([start(A)]);
+    const reader = new TranscriptReader(ID, root);
+    await reader.read();
+    expect(reader.openTasks(T0 + 60 * MIN, 60 * MIN)).toBe(1);
+    expect(reader.openTasks(T0 + 60 * MIN + 1, 60 * MIN)).toBe(0);
+  });
+
+  it("der Zustand bleibt, auch wenn der Start aus dem gelesenen Ende der Datei fällt", async () => {
+    await schreibe([start(A)]);
+    const reader = new TranscriptReader(ID, root);
+    await reader.read();
+    // Mehr als das gelesene Ende: der Start liegt danach nicht mehr im Text, den read() sieht.
+    const fueller = JSON.stringify({ type: "assistant", message: { id: "f", content: [{ type: "text", text: "x".repeat(1000) }] } });
+    await haenge(Array.from({ length: Math.ceil(TRANSCRIPT_TAIL_BYTES / 1000) + 5 }, () => fueller));
+    await reader.read();
+    expect(reader.openTasks(T0 + MIN, 60 * MIN)).toBe(1);
+    // Das Ende steht im neuen Teil und schließt den alten Start.
+    await haenge([ende(A)]);
+    await reader.read();
+    expect(reader.openTasks(T0 + MIN, 60 * MIN)).toBe(0);
+  });
+
+  it("force liest dieselbe Datei erneut, ohne etwas doppelt zu zählen", async () => {
+    await schreibe([start(A)]);
+    const reader = new TranscriptReader(ID, root);
+    await reader.read();
+    await reader.read(true);
+    await reader.read(true);
+    expect(reader.openTasks(T0 + MIN, 60 * MIN)).toBe(1);
+  });
+
+  it("fehlende Datei: keine Aufgaben, kein Fehler", async () => {
+    const reader = new TranscriptReader(ID, root);
+    await reader.read(true);
+    expect(reader.openTasks(T0, 60 * MIN)).toBe(0);
   });
 });

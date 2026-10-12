@@ -1,6 +1,7 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { BackgroundTasks, scanBackgroundTasks } from "../core/background-tasks";
 import { MAX_LINK_BASES, MAX_TOOL_PATHS, TRANSCRIPT_SEARCH_MS, TRANSCRIPT_TAIL_BYTES } from "../core/constants";
 import { linkBases as baseFolders, mergeRecent, toolPaths } from "../core/file-links";
 import { type CodeBlock, extractCodeBlocks, lastAnswerText, lastHandoffBlock } from "../core/transcript-code";
@@ -52,6 +53,8 @@ export class TranscriptReader {
   private paths: string[] = [];
   /** linkBases(), bis sich paths ändert. */
   private basesCache: string[] | null = null;
+  /** Hintergrundaufgaben (Abend 28): Starts und Enden aus jedem gelesenen Ende der Datei, über Lesevorgänge hinweg gemerkt. */
+  private readonly tasks = new BackgroundTasks();
 
   private readonly sessionId: string;
   private readonly root: string;
@@ -69,6 +72,15 @@ export class TranscriptReader {
    */
   linkBases(): string[] {
     return (this.basesCache ??= baseFolders(this.paths, this.home, MAX_LINK_BASES));
+  }
+
+  /**
+   * Hintergrundaufgaben (Agents, Workflows, Bash, MCP), die laut Transkript noch laufen: Start ohne Ende, höchstens maxAgeMs alt
+   * (Abend 28). Der Zustand bleibt über Lesevorgänge erhalten, denn read() sieht nur das Ende der Datei; ein neuer Leser
+   * (neue Claude-ID nach /clear) beginnt leer.
+   */
+  openTasks(nowMs: number, maxAgeMs: number): number {
+    return this.tasks.open(nowMs, maxAgeMs);
   }
 
   /**
@@ -95,6 +107,7 @@ export class TranscriptReader {
     // Auf dem ohnehin gelesenen Text, ohne zweites Lesen: neue Funde ans Ende, ältere bleiben (bis MAX_TOOL_PATHS).
     this.paths = mergeRecent(this.paths, toolPaths(text, this.home), MAX_TOOL_PATHS);
     this.basesCache = null;
+    this.tasks.merge(scanBackgroundTasks(text));
     const answer = lastAnswerText(text);
     return { changed: true, blocks: answer ? extractCodeBlocks(answer) : [], handoff: lastHandoffBlock(text, handoffPrefix) };
   }

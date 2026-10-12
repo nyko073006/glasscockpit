@@ -99,6 +99,15 @@ export class CockpitSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("Benachrichtigung").setHeading();
     this.toggleField("notifyOnDone", "Wenn eine Sitzung fertig ist", s.notifyOnDone);
     this.toggleField("notifyOnQuestion", "Wenn eine Sitzung eine Frage hat", s.notifyOnQuestion);
+    this.toggleField(
+      "quietWhileAgents", "Zwischenstände bei laufenden Agents nicht melden", s.quietWhileAgents,
+      "Solange Agents, Workflows oder Hintergrund-Befehle laufen, meldet ein Antwortende nichts. Fragen melden sich immer.",
+    );
+    this.numberField(
+      "quietMaxAgeMin", "Höchstalter einer Hintergrundaufgabe (Minuten)",
+      "Ein Start ohne Fertig-Meldung zählt nach dieser Zeit nicht mehr als laufend (1 bis 1440).", s.quietMaxAgeMin,
+    );
+    this.toggleField("showOpenTasks", "Laufende Hintergrundaufgaben im Tab zeigen (⏳)", s.showOpenTasks);
     this.toggleField("markTab", "Markierung am Tab", s.markTab);
     this.toggleField("alertSound", "Ton", s.alertSound);
     this.toggleField("alertBanner", "macOS-Banner", s.alertBanner);

@@ -1,7 +1,7 @@
 {
   "id": "glasscockpit",
   "name": "Glasscockpit",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "minAppVersion": "1.13.0",
   "description": "Run Claude Code sessions as terminal views with a cockpit dashboard.",
   "author": "nyko073006",

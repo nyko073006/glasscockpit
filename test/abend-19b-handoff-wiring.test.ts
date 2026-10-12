@@ -32,9 +32,11 @@ describe("Abend 19b Handoff-Knopf: Verdrahtung (Host nur per Textprüfung, echte
   });
 
   it("jeder neue Stand geht durch applyResult: Poll und Command „Letzten Codeblock kopieren“", () => {
-    expect(view.match(/this\.applyResult\(result\)/g)).toHaveLength(2);
+    // Abend 28: dazu die Prüfung beim Antwortende (doneAfterCheck), die frisch liest.
+    expect(view.match(/this\.applyResult\(result\)/g)).toHaveLength(3);
     expect(methode(view, "private async pollTranscript()")).toMatch(/result\.changed\) this\.applyResult\(result\)/);
     expect(methode(view, "async copyLastCodeBlock()")).toMatch(/this\.applyResult\(result\)/);
+    expect(methode(view, "private async doneAfterCheck()")).toMatch(/this\.applyResult\(result\)/);
     // Die Leiste wird nirgends mehr ohne den Handoff gesetzt.
     expect(ohneKommentare(view).match(/this\.bar\?\.set\(/g)).toHaveLength(1);
   });
@@ -55,14 +57,16 @@ describe("Abend 19b Handoff-Knopf: Verdrahtung (Host nur per Textprüfung, echte
 
   it("ein leeres Präfix schaltet den Knopf aus: beim Zeichnen geprüft, und eine Einstellungsänderung zeichnet sofort neu (nur mit Leser)", () => {
     expect(view).toMatch(/const on = this\.deps\.settings\(\)\.handoffPrefix\.trim\(\) !== "";\s*this\.bar\?\.set\(blocks, on && id !== null \? this\.deps\.handoffs\.get\(id\) : null\);/);
-    expect(view).toMatch(/onSettingsChange\(\(\) => \{\s*this\.pane\?\.applyOptions\(this\.terminalOptions\(\)\);\s*if \(this\.reader\) this\.renderBar\(\);\s*\}\)/);
+    expect(view).toMatch(/onSettingsChange\(\(\) => \{\s*this\.pane\?\.applyOptions\(this\.terminalOptions\(\)\);\s*if \(this\.reader\) this\.renderBar\(\);\s*(this\.updateOpenTasks\(\);\s*this\.refreshTitle\(\);\s*)?\}\)/);
   });
 
   it("Rechnen nur im vorhandenen Poll: das Präfix kommt pro Aufruf frisch, der Leser rechnet auf dem gelesenen Text und öffnet die Datei nicht noch einmal", () => {
-    expect(view.match(/read\((true|false), this\.deps\.settings\(\)\.handoffPrefix\)/g)).toHaveLength(2);
+    // Drei Leser mit frischem Präfix: Poll, Command „Letzten Codeblock kopieren“ und (Abend 28) die Prüfung beim Antwortende.
+    expect(view.match(/read\((true|false), this\.deps\.settings\(\)\.handoffPrefix\)/g)).toHaveLength(3);
     expect(reader).toMatch(/const answer = lastAnswerText\(text\);[\s\S]*lastHandoffBlock\(text, handoffPrefix\)/);
     expect(reader.match(/this\.readTail\(/g)).toHaveLength(1);
-    expect(ohneKommentare(reader).match(/\bopen\(/g)).toHaveLength(1);
+    // Der Dateiaufruf open(path, "r"); ein Methodenaufruf wie this.tasks.open(…) (Abend 28) öffnet keine Datei.
+    expect(ohneKommentare(reader).match(/(?<![.\w])open\(/g)).toHaveLength(1);
     // Kein neuer Timer in der View: der Poll-Takt ist der eine, der schon da war.
     expect(ohneKommentare(view).match(/setInterval/g)).toHaveLength(1);
     expect(ohneKommentare(view)).not.toMatch(/setTimeout\([^)]*[Hh]andoff/);

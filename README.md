@@ -118,6 +118,12 @@ If a relative path is not in the start folder, the cockpit looks for it in the f
 
 The macOS banner (setting "macOS-Banner") closes itself after "Banner ausblenden nach (Sekunden)" (1 to 60, default 6) and does not stay in Notification Center. Each session has at most one banner: a new one replaces the old one. Open banners are closed when the plugin is disabled. A click brings the session to the front. If `@electron/remote` is unavailable in Obsidian, the plugin falls back to the window's web notification; then closing is not guaranteed.
 
+## Quiet intermediate results
+
+A chat that starts agents, workflows or background commands ends its answer, and every finished agent wakes it up again to write an intermediate result. Without a filter each of those answers would notify you. With "Zwischenstände bei laufenden Agents nicht melden" (on by default) an answer that ends while something still runs in the background stays silent: no Telegram, no sound, no banner, no mark on the tab. Only the answer after which nothing runs any more is reported. Questions are always reported. The tab shows how many background tasks are running as "⏳ 2" before its title ("Laufende Hintergrundaufgaben im Tab zeigen (⏳)").
+
+The plugin reads this from the Claude transcript: a task counts as running from its start (an agent or workflow started in the background, a Bash command with `run_in_background`, an MCP tool moved to the background, an agent continued with SendMessage) until its completion notice appears. A start without a completion notice stops counting after "Höchstalter einer Hintergrundaufgabe (Minuten)" (1 to 1440, default 60), so a lost notice cannot silence a session for good. The Monitor tool is not recognised; an answer behind it is reported as before.
+
 ## Skip permission prompts
 
 The switch "Rechteabfragen überspringen" is off by default.
@@ -137,7 +143,7 @@ This follows the disclosure rules of the Obsidian developer policies.
 - `afplay` for the alert sound, `xattr` for the quarantine flag, `ps` to find the parent process for the IDE bridge.
 
 **Reads outside the vault.**
-- `~/.claude/projects/`: the Claude transcripts, to count tokens, find the last code block, show the active session and know the folders Claude worked in (for relative paths).
+- `~/.claude/projects/`: the Claude transcripts, to count tokens, find the last code block, show the active session, know the folders Claude worked in (for relative paths) and know which background tasks still run (quiet intermediate results).
 - `~/.claude/skills/`, `agents/`, `commands/`, `settings.json` and `plugins/installed_plugins.json`: to list skills, agents and commands in the launcher. The same folders under the vault and the project folder are read too.
 - `~/.claude/cockpit/`: `usage.json` and `sessions/*.json` (written by the status line script), plus the plugin's own files below.
 - Telegram only if enabled: the `.env` file named in settings (default `~/.claude/channels/telegram/.env`) for the bot token, and `access.json` next to it for the chat ID. The token is read for each message and never stored by the plugin.

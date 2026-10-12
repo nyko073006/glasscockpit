@@ -1,6 +1,6 @@
 import {
   DEFAULT_ALERT_BANNER, DEFAULT_ALERT_GAP_MS, DEFAULT_BANNER_SECONDS, DEFAULT_HANDOFF_PREFIX, DEFAULT_BRIEFINGS_DIR, DEFAULT_CONTINUE_PROMPT, DEFAULT_PULL_INTERVAL_MIN, DEFAULT_ALERT_SOUND, DEFAULT_MARK_TAB, DEFAULT_MAX_SESSIONS,
-  DEFAULT_NOTIFY_ON_DONE, DEFAULT_NOTIFY_ON_QUESTION, DEFAULT_PROJECTS_ROOT, DEFAULT_SOUND_FILE,
+  DEFAULT_NOTIFY_ON_DONE, DEFAULT_NOTIFY_ON_QUESTION, DEFAULT_PROJECTS_ROOT, DEFAULT_SOUND_FILE, DEFAULT_QUIET_WHILE_AGENTS, DEFAULT_QUIET_MAX_AGE_MIN, DEFAULT_SHOW_OPEN_TASKS,
   DEFAULT_SKILL_BUTTONS, DEFAULT_TASKS_FILE, DEFAULT_RESUME_CONVERSATIONS, DEFAULT_REOPEN_AFTER_DISABLE, DEFAULT_FONT_SIZE, DEFAULT_SCROLLBACK, DEFAULT_MIN_CONTRAST,
   DEFAULT_TELEGRAM_CHAT_ID, DEFAULT_TELEGRAM_ENV_FILE, DEFAULT_TELEGRAM_IDLE_MIN, DEFAULT_TELEGRAM_ON_DONE, DEFAULT_TELEGRAM_ON_QUESTION,
   DEFAULT_USAGE_POLL_SEC, DEFAULT_WRITE_TOKENS_FILE, DEFAULT_RESEARCH_SEARCHES, DEFAULT_RESEARCH_MAX_AGE_MIN, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF, DEFAULT_FILE_LINKS, DEFAULT_FILE_LINKS_CLAUDE_DIRS, DEFAULT_FILE_VIEWER_MAX_MB, DEFAULT_FIXED_PROMPT, DEFAULT_SKIP_PERMISSIONS,
@@ -18,6 +18,7 @@ export interface RadarEntry { name: string; stateFile: string }
 
 export interface CockpitSettings {
   projectsRoot: string; maxSessions: number; reopenAfterDisable: boolean; notifyOnDone: boolean; notifyOnQuestion: boolean;
+  quietWhileAgents: boolean; quietMaxAgeMin: number; showOpenTasks: boolean;
   markTab: boolean; alertSound: boolean; alertBanner: boolean; soundFile: string; alertGapMs: number; bannerSeconds: number;
   briefingsDir: string; pullIntervalMin: number; continuePrompt: string;
   tasksFile: string; skillButtons: number; usagePollSec: number; writeTokensFile: boolean;
@@ -41,6 +42,9 @@ export const DEFAULT_SETTINGS: CockpitSettings = {
   reopenAfterDisable: DEFAULT_REOPEN_AFTER_DISABLE,
   notifyOnDone: DEFAULT_NOTIFY_ON_DONE,
   notifyOnQuestion: DEFAULT_NOTIFY_ON_QUESTION,
+  quietWhileAgents: DEFAULT_QUIET_WHILE_AGENTS,
+  quietMaxAgeMin: DEFAULT_QUIET_MAX_AGE_MIN,
+  showOpenTasks: DEFAULT_SHOW_OPEN_TASKS,
   markTab: DEFAULT_MARK_TAB,
   alertSound: DEFAULT_ALERT_SOUND,
   alertBanner: DEFAULT_ALERT_BANNER,
@@ -104,6 +108,7 @@ const RANGES = {
   maxSessions: [1, 50],
   alertGapMs: [0, 60000],
   bannerSeconds: [1, 60],
+  quietMaxAgeMin: [1, 1440],
   pullIntervalMin: [0, 1440],
   skillButtons: [1, 30],
   usagePollSec: [10, 3600],
@@ -174,6 +179,9 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   maxSessions: intIn(...RANGES.maxSessions),
   notifyOnDone: flag,
   notifyOnQuestion: flag,
+  quietWhileAgents: flag,
+  quietMaxAgeMin: intIn(...RANGES.quietMaxAgeMin),
+  showOpenTasks: flag,
   markTab: flag,
   alertSound: flag,
   alertBanner: flag,

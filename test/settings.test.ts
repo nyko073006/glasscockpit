@@ -595,3 +595,38 @@ describe("Handoff-Einstellungen (Abend 19h)", () => {
     expect(validateSetting("handoffPrompt", "Handoff: {datei}")).toBeNull();
   });
 });
+
+describe("Stille Zwischenstände (Abend 28)", () => {
+  it("Vorgaben: Schalter an, Höchstalter 60 Minuten, Anzeige im Tab an", () => {
+    expect(DEFAULT_SETTINGS.quietWhileAgents).toBe(true);
+    expect(DEFAULT_SETTINGS.quietMaxAgeMin).toBe(60);
+    expect(DEFAULT_SETTINGS.showOpenTasks).toBe(true);
+  });
+  it("quietWhileAgents und showOpenTasks: nur Wahrheitswerte, aus bleibt aus, Unsinn fällt auf die Vorgabe und wird gemeldet", () => {
+    for (const key of ["quietWhileAgents", "showOpenTasks"] as const) {
+      expect(validateSetting(key, true), key).toBeNull();
+      expect(validateSetting(key, false), key).toBeNull();
+      for (const unsinn of ["ja", 1, 0, null]) expect(validateSetting(key, unsinn), `${key} ${String(unsinn)}`).not.toBeNull();
+      expect(parseSettings({ [key]: false }).settings[key], key).toBe(false);
+      const r = parseSettings({ [key]: "ja" });
+      expect(r.invalid, key).toEqual([key]);
+      expect(r.settings[key], key).toBe(true);
+    }
+  });
+  it("quietMaxAgeMin: ganze Zahl von 1 bis 1440", () => {
+    for (const ok of [1, 60, 1440]) expect(validateSetting("quietMaxAgeMin", ok), String(ok)).toBeNull();
+    for (const falsch of [0, -5, 1441, 1.5, "60", null, Number.NaN, Infinity]) {
+      expect(validateSetting("quietMaxAgeMin", falsch), String(falsch)).not.toBeNull();
+    }
+  });
+  it("quietMaxAgeMin beim Laden: gültige Werte bleiben, ganze Zahlen außerhalb werden geklemmt, Unsinn fällt auf die Vorgabe", () => {
+    expect(parseSettings({ quietMaxAgeMin: 90 }).settings.quietMaxAgeMin).toBe(90);
+    expect(parseSettings({ quietMaxAgeMin: 0 })).toMatchObject({ settings: { quietMaxAgeMin: 1 }, invalid: [] });
+    expect(parseSettings({ quietMaxAgeMin: 99999 })).toMatchObject({ settings: { quietMaxAgeMin: 1440 }, invalid: [] });
+    for (const unsinn of ["60", 1.5, null, Number.NaN]) {
+      const r = parseSettings({ quietMaxAgeMin: unsinn });
+      expect(r.settings.quietMaxAgeMin, String(unsinn)).toBe(60);
+      expect(r.invalid, String(unsinn)).toEqual(["quietMaxAgeMin"]);
+    }
+  });
+});

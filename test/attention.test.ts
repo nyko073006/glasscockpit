@@ -166,3 +166,48 @@ describe("Sitzungswechsel nach /clear", () => {
     expect(neu.blocks.map((b) => b.code)).toEqual(["neu-code"]);
   });
 });
+
+// ---- Abend 28: stille Zwischenstände ----
+import { type AttentionSignal, doneIsQuiet } from "../src/core/attention";
+
+describe("markedTitle mit offenen Hintergrundaufgaben (Abend 28)", () => {
+  it("ohne Aufgaben bleibt alles wie bisher, auch ohne dritten Parameter", () => {
+    expect(markedTitle("Name", null)).toBe("Name");
+    expect(markedTitle("Name", "done")).toBe("● Name");
+    expect(markedTitle("Name", "question")).toBe("? Name");
+    expect(markedTitle("Name", "done", 0)).toBe("● Name");
+  });
+  it("offene Aufgaben: ⏳ und Zahl direkt vor dem Titel, eine Markierung davor", () => {
+    expect(markedTitle("Name", null, 2)).toBe("⏳ 2 Name");
+    expect(markedTitle("Name", "question", 1)).toBe("? ⏳ 1 Name");
+    expect(markedTitle("Name", "done", 3)).toBe("● ⏳ 3 Name");
+  });
+  it("Null, negative und ungültige Zahlen zeigen nichts an", () => {
+    for (const open of [0, -1, Number.NaN]) expect(markedTitle("Name", null, open), String(open)).toBe("Name");
+  });
+});
+
+describe("doneIsQuiet (Abend 28): wann ein Antwortende nichts meldet", () => {
+  const faelle: Array<[AttentionSignal, boolean, number, boolean]> = [
+    // Signal, Schalter, offene Aufgaben, still?
+    ["done", true, 2, true],
+    ["done", true, 1, true],
+    ["done", true, 0, false],
+    ["done", false, 2, false],
+    ["done", false, 0, false],
+    ["question", true, 2, false],
+    ["question", true, 0, false],
+    ["question", false, 2, false],
+    ["question", false, 0, false],
+  ];
+  it.each(faelle)("%s, Schalter %s, %i offen: still = %s", (signal, an, offen, still) => {
+    expect(doneIsQuiet(signal, an, offen)).toBe(still);
+  });
+  it("eine Frage ist nie still, egal wie viele Aufgaben laufen", () => {
+    for (const offen of [0, 1, 2, 256]) for (const an of [true, false]) expect(doneIsQuiet("question", an, offen)).toBe(false);
+  });
+  it("negative oder ungültige Zahl: nicht still (im Zweifel melden)", () => {
+    expect(doneIsQuiet("done", true, -1)).toBe(false);
+    expect(doneIsQuiet("done", true, Number.NaN)).toBe(false);
+  });
+});

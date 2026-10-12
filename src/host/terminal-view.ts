@@ -1,5 +1,5 @@
 import { ItemView, type Menu, Notice, type ViewStateResult, type WorkspaceLeaf } from "obsidian";
-import { ATTENTION_OSC, type AttentionSignal, bannerText, claudeIdChange, markedTitle, parseSignal, react, repeatsQuestion } from "../core/attention";
+import { ATTENTION_OSC, type AttentionSignal, bannerText, claudeIdChange, doneIsQuiet, markedTitle, parseSignal, react, repeatsQuestion } from "../core/attention";
 import type { ActivitySignal } from "../core/session-activity";
 import { CSS_PREFIX, DIAG_SNAPSHOT_MS, TRANSCRIPT_POLL_MS, VIEW_TYPE_TERMINAL } from "../core/constants";
 import type { PaneProbe, ViewDiagnosis } from "../core/diagnose";
@@ -109,6 +109,8 @@ export class TerminalView extends ItemView {
   private attention: AttentionSignal | null = null;
   // Erst nach dem Parsen des Replays scharf: Der Ring-Puffer enthält alte Signale.
   private attentionArmed = false;
+  // Laufende Hintergrundaufgaben (Abend 28), Rohzahl aus dem Leser; getDisplayText zeigt sie nur mit showOpenTasks.
+  private openTasks = 0;
   private focusWin: Window | null = null;
   private readonly onWindowFocus = (): void => {
     if (this.app.workspace.getActiveViewOfType(TerminalView) === this) this.clearAttention();
@@ -125,8 +127,9 @@ export class TerminalView extends ItemView {
 
   getDisplayText(): string {
     const record = this.sessionId ? this.deps.record(this.sessionId) : null;
-    if (record && this.sessionId) return markedTitle(tabTitle(record.name, claudeIdOf(record)), this.attention);
-    return markedTitle(this.title ?? "Glasscockpit Terminal", this.attention);
+    const open = this.deps.settings().showOpenTasks ? this.openTasks : 0;
+    if (record && this.sessionId) return markedTitle(tabTitle(record.name, claudeIdOf(record)), this.attention, open);
+    return markedTitle(this.title ?? "Glasscockpit Terminal", this.attention, open);
   }
 
   getIcon(): string {
@@ -233,9 +236,12 @@ export class TerminalView extends ItemView {
       }),
     );
     // Schriftgröße und Scrollback wirken sofort auf offene Panes; ein leeres Handoff-Präfix blendet den festen Knopf sofort aus.
+    // Höchstalter und Anzeige der Hintergrundaufgaben (Abend 28) wirken sofort auf den Tab-Titel.
     this.unbindSettings = this.deps.onSettingsChange(() => {
       this.pane?.applyOptions(this.terminalOptions());
       if (this.reader) this.renderBar();
+      this.updateOpenTasks();
+      this.refreshTitle();
     });
 
     // Hell/Dunkel und Akzentfarbe: Obsidian meldet beides über css-change.
@@ -323,6 +329,8 @@ export class TerminalView extends ItemView {
       const result = await reader.read(false, this.deps.settings().handoffPrefix);
       // Sitzung kann während des Lesens gewechselt haben.
       if (this.reader === reader && result.changed) this.applyResult(result);
+      // Nach jedem Poll, auch ohne neuen Stand: Ein Start ohne Ende fällt nach dem Höchstalter von selbst aus der Zahl.
+      if (this.reader === reader) this.updateOpenTasks();
     } catch (fehler) {
       console.error("Glasscockpit: Transkript nicht lesbar", fehler);
     } finally {
@@ -346,6 +354,21 @@ export class TerminalView extends ItemView {
     const id = this.sessionId;
     const on = this.deps.settings().handoffPrefix.trim() !== "";
     this.bar?.set(blocks, on && id !== null ? this.deps.handoffs.get(id) : null);
+  }
+
+  /** Laufende Hintergrundaufgaben des aktuellen Lesers neu zählen; bei Änderung den Tab-Titel auffrischen. */
+  private updateOpenTasks(): void {
+    const open = this.reader?.openTasks(Date.now(), this.deps.settings().quietMaxAgeMin * 60_000) ?? 0;
+    if (open === this.openTasks) return;
+    this.openTasks = open;
+    this.refreshTitle();
+  }
+
+  /** Ohne Leser (Sitzung verlassen, neue Claude-ID) steht keine Zahl mehr im Titel. */
+  private resetOpenTasks(): void {
+    if (this.openTasks === 0) return;
+    this.openTasks = 0;
+    this.refreshTitle();
   }
 
   currentSessionId(): string | null {
@@ -483,6 +506,7 @@ export class TerminalView extends ItemView {
     this.stopPoll();
     this.reader = null;
     this.readerId = null;
+    this.resetOpenTasks();
     this.barBlocks = [];
     this.bar?.clear();
     this.clearAttention();
@@ -535,12 +559,53 @@ export class TerminalView extends ItemView {
     if (!next || next === this.readerId) return;
     this.reader = new TranscriptReader(next);
     this.readerId = next;
+    this.resetOpenTasks();
     this.renderBar([]);
     this.startPoll();
   }
 
-  /** Hook-Signal von Claude: markieren und, wenn der Tab verdeckt ist, Ton und Banner. */
+  /**
+   * Hook-Signal von Claude (Abend 28, Stille Zwischenstände): Ein Antwortende (done) prüft vorher, ob noch Hintergrundaufgaben
+   * laufen; nur dann bleibt es still. Eine Frage und alles ohne Leser oder mit ausgeschaltetem Schalter geht direkt durch.
+   */
   private onAttention(signal: AttentionSignal): void {
+    if (signal === "done" && this.deps.settings().quietWhileAgents && this.reader) {
+      void this.doneAfterCheck();
+      return;
+    }
+    this.notifyAttention(signal);
+  }
+
+  /**
+   * Antwortende prüfen: Transkript frisch lesen, Aufgaben zählen. Laufen noch welche, meldet es nichts (kein Telegram, kein Ton,
+   * kein Banner, keine Markierung); die Lampe bleibt auf „arbeitet“. Ein Lesefehler oder ein Sitzungswechsel während des Lesens
+   * melden wie bisher: im Zweifel melden statt verschlucken. Telegram gibt es nur in notifyAttention.
+   */
+  private async doneAfterCheck(): Promise<void> {
+    const reader = this.reader;
+    let quiet = false;
+    try {
+      if (reader) {
+        const result = await reader.read(true, this.deps.settings().handoffPrefix);
+        // Sitzung kann während des Lesens gewechselt haben.
+        if (this.reader === reader) {
+          this.applyResult(result);
+          this.updateOpenTasks();
+          quiet = doneIsQuiet("done", this.deps.settings().quietWhileAgents, this.openTasks);
+        }
+      }
+    } catch (fehler) {
+      console.error("Glasscockpit: Transkript nicht lesbar, das Antwortende wird gemeldet", fehler);
+    }
+    if (quiet) {
+      if (this.sessionId !== null) this.deps.activity.record(this.sessionId, "busy");
+      return;
+    }
+    this.notifyAttention("done");
+  }
+
+  /** Meldung an den Nutzer: Telegram, Markierung am Tab und, wenn der Tab verdeckt ist, Ton und Banner. */
+  private notifyAttention(signal: AttentionSignal): void {
     if (this.sessionId !== null && repeatsQuestion(this.deps.activity.lastSignal(this.sessionId), signal)) return;
     const s = this.deps.settings();
     const r = react({
