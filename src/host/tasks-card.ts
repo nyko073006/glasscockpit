@@ -4,6 +4,7 @@ import { Observable } from "../core/observable";
 import { createDebounce } from "../core/debounce";
 import type { CockpitSettings } from "../core/settings";
 import { REASON_ALREADY_DONE, REASON_ALREADY_OPEN, TASKS_TEMPLATE, parentFolders, taskRows, textParts, toggleTask, type TaskRow } from "../core/tasks";
+import { handleInternalLinks } from "./internal-link";
 
 export interface TasksCardDeps {
   settings: () => CockpitSettings;
@@ -178,12 +179,8 @@ export class TasksCard {
           continue;
         }
         const a = textEl.createEl("a", { text: part.anzeige, cls: "internal-link", attr: { "data-href": part.ziel } });
-        a.addEventListener("click", (e) => {
-          // Der Link ist nicht Teil der Umschaltfläche: nicht in die Zeile weiterreichen. Neuer Tab, damit das Dashboard stehen bleibt.
-          e.stopPropagation();
-          e.preventDefault();
-          void this.app.workspace.openLinkText(part.ziel, this.deps.settings().tasksFile, "tab");
-        });
+        // Der Link ist nicht Teil der Umschaltfläche: Klick und Mittelklick gehen nicht in die Zeile weiter.
+        handleInternalLinks(this.app, a, { ziel: () => part.ziel, quelle: () => this.deps.settings().tasksFile, stopPropagation: true });
       }
       line.addEventListener("click", () => void this.toggle(row));
     }

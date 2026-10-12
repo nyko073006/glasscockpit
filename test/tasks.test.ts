@@ -270,6 +270,15 @@ describe("textParts", () => {
       { kind: "link", ziel: "C", anzeige: "C" },
     ]);
   });
+  it("leerer Alias ([[ziel|]]) zeigt das Ziel wie [[ziel]], sonst entstünde ein Link ohne Text (Abend 30)", () => {
+    expect(textParts("[[Ziel|]]")).toEqual([{ kind: "link", ziel: "Ziel", anzeige: "Ziel" }]);
+    expect(textParts("Siehe [[Ziel#Abschnitt|]] jetzt")).toEqual([
+      { kind: "text", text: "Siehe " },
+      { kind: "link", ziel: "Ziel#Abschnitt", anzeige: "Ziel#Abschnitt" },
+      { kind: "text", text: " jetzt" },
+    ]);
+    expect(displayText("[[Index|]]")).toBe("Index");
+  });
   it("leeres Ziel ohne Anzeige ([[]], [[|]]) bleibt wie geschrieben im Text stehen", () => {
     expect(textParts("a [[]] b")).toEqual([{ kind: "text", text: "a [[]] b" }]);
     expect(textParts("[[|]]")).toEqual([{ kind: "text", text: "[[|]]" }]);

@@ -76,6 +76,12 @@ const click = (target: Element): MouseEvent => {
   target.dispatchEvent(ev);
   return ev;
 };
+/** Mittelklick (Abend 30): Der Browser meldet ihn als auxclick mit button 1, nicht als click; button 2 ist die rechte Taste. */
+const mittelklick = (target: Element, button = 1): MouseEvent => {
+  const ev = new win.MouseEvent("auxclick", { bubbles: true, cancelable: true, button }) as unknown as MouseEvent;
+  target.dispatchEvent(ev);
+  return ev;
+};
 /** Lässt async-Pfade (toggle, openLinkText) durchlaufen, bevor "nicht passiert" geprüft wird. */
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));
 const all = (root: ParentNode, sel: string): HTMLElement[] => [...root.querySelectorAll<HTMLElement>(sel)];
@@ -161,6 +167,34 @@ describe("Aufgabenkarte: Wikilinks klickbar", () => {
     click(link(0, 1));
     await flush();
     expect(openLinkText).toHaveBeenCalledWith("Zweite Notiz", FILE, "tab");
+    expect(process).not.toHaveBeenCalled();
+  });
+
+  it("Mittelklick auf den Link öffnet das Ziel genau einmal im neuen Tab, verhindert den Standard und erreicht die Zeile nicht (Abend 30)", async () => {
+    const anZeile = vi.fn();
+    zeile(0).addEventListener("auxclick", anZeile);
+    const ev = mittelklick(link(0, 0));
+    await flush();
+    expect(openLinkText).toHaveBeenCalledTimes(1);
+    expect(openLinkText).toHaveBeenCalledWith("Notiz#Abschnitt", FILE, "tab");
+    expect(ev.defaultPrevented).toBe(true);
+    expect(anZeile).not.toHaveBeenCalled();
+    expect(process).not.toHaveBeenCalled();
+    expect(data).toBe(START);
+  });
+
+  it("rechte Taste (auxclick, button 2) auf den Link öffnet nichts und lässt den Standard (Kontextmenü) stehen", async () => {
+    const ev = mittelklick(link(0, 0), 2);
+    await flush();
+    expect(openLinkText).not.toHaveBeenCalled();
+    expect(ev.defaultPrevented).toBe(false);
+    expect(process).not.toHaveBeenCalled();
+  });
+
+  it("Öffnen scheitert: Notice mit Ziel und Grund, die Aufgabe bleibt, wie sie ist (Abend 30)", async () => {
+    openLinkText.mockRejectedValueOnce(new Error("kaputt"));
+    click(link(0, 1));
+    await vi.waitFor(() => expect(notices).toEqual(["Link lässt sich nicht öffnen: Zweite Notiz (kaputt)"]));
     expect(process).not.toHaveBeenCalled();
   });
 
@@ -266,6 +300,7 @@ describe("Briefing: Wikilinks klickbar", () => {
   let intern: { opened: boolean; expanded: boolean; cardEl: HTMLElement | null; loadBriefings(): Promise<void> };
 
   beforeEach(async () => {
+    notices.length = 0;
     vi.mocked(MarkdownRenderer.render).mockImplementation(async (_app, _md, el) => {
       el.innerHTML =
         '<p>Heute <a class="internal-link" data-href="Notiz#Abschnitt" href="Notiz#Abschnitt"><strong>Anzeige</strong></a>' +
@@ -306,6 +341,29 @@ describe("Briefing: Wikilinks klickbar", () => {
     expect(openLinkText).toHaveBeenCalledTimes(1);
     expect(openLinkText).toHaveBeenCalledWith("Notiz#Abschnitt", PFAD, "tab");
     expect(ev.defaultPrevented).toBe(true);
+  });
+
+  it("Mittelklick auf einen internen Link öffnet ihn genau einmal im neuen Tab, Standard verhindert (Abend 30)", async () => {
+    const ev = mittelklick(text().querySelector("a.internal-link strong")!);
+    await flush();
+    expect(openLinkText).toHaveBeenCalledTimes(1);
+    expect(openLinkText).toHaveBeenCalledWith("Notiz#Abschnitt", PFAD, "tab");
+    expect(ev.defaultPrevented).toBe(true);
+  });
+
+  it("rechte Taste auf einen internen Link und Mittelklick auf Text oder externen Link tun nichts, der Standard bleibt", async () => {
+    const rechts = mittelklick(text().querySelector("a.internal-link")!, 2);
+    const aufText = mittelklick(text().querySelector("p")!);
+    const aufExtern = mittelklick(text().querySelector("a.external-link")!);
+    await flush();
+    expect(openLinkText).not.toHaveBeenCalled();
+    expect([rechts.defaultPrevented, aufText.defaultPrevented, aufExtern.defaultPrevented]).toEqual([false, false, false]);
+  });
+
+  it("Öffnen wirft: Notice mit Ziel und Grund statt einer unbehandelten Ablehnung (Abend 30)", async () => {
+    openLinkText.mockImplementationOnce(() => { throw new Error("weg"); });
+    click(text().querySelector("a.internal-link")!);
+    await vi.waitFor(() => expect(notices).toEqual(["Link lässt sich nicht öffnen: Notiz#Abschnitt (weg)"]));
   });
 
   it("Klick auf Text oder externen Link tut nichts (kein Öffnen, Standard bleibt)", async () => {

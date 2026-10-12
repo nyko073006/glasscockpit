@@ -5,8 +5,15 @@ import {
   type Change, type CockpitData, type DashboardMemo, type SessionRecord,
 } from "./session-model";
 import { pushRecent } from "./recents";
-import { applyDependencies, dependencyReason, normalizeSetting, validateSetting, type CockpitSettings } from "./settings";
+import { DEFAULT_SETTINGS, applyDependencies, dependencyReason, normalizeSetting, validateSetting, type CockpitSettings } from "./settings";
 import type { TimerApi } from "./view-tracker";
+
+/** Feste Prüfreihenfolge in updateSettings (Abend 30): die Schlüssel von DEFAULT_SETTINGS, unbekannte zuletzt. */
+const SETTING_ORDER: readonly string[] = Object.keys(DEFAULT_SETTINGS);
+const settingRank = (key: string): number => {
+  const i = SETTING_ORDER.indexOf(key);
+  return i === -1 ? SETTING_ORDER.length : i;
+};
 
 /** Hält Sitzungen und Einstellungen im Speicher und schreibt sie entprellt (nachlaufend) weg. */
 export class SessionStore {
@@ -101,9 +108,12 @@ export class SessionStore {
    * Mehrere Einstellungen in einem Zug (Kippschalter setzen zwei Felder): alles oder nichts, ein Speichern, ein Event.
    * Jedes Feld wird gegen den Zustand geprüft, in dem die übrigen Felder des Patches schon gelten; ist eines ungültig,
    * wird keines übernommen und nichts gemeldet. Ein leerer Patch ändert nichts und meldet nichts.
+   * Geprüft wird in der Reihenfolge der Schlüssel von DEFAULT_SETTINGS, nicht in der des Patches: Sind mehrere Felder
+   * ungültig, gewinnt in jeder Schreibweise dieselbe Begründung.
    */
   updateSettings(patch: Partial<CockpitSettings>): { ok: true } | { ok: false; reason: string } {
-    const entries = Object.entries(patch) as Array<[keyof CockpitSettings, CockpitSettings[keyof CockpitSettings]]>;
+    const entries = (Object.entries(patch) as Array<[keyof CockpitSettings, CockpitSettings[keyof CockpitSettings]]>)
+      .sort(([a], [b]) => settingRank(a) - settingRank(b));
     if (entries.length === 0) return { ok: true };
     for (const [key, value] of entries) {
       const reason = validateSetting(key, value);

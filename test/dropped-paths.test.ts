@@ -57,6 +57,20 @@ describe("planDrop", () => {
       notice: 'Pfad mit " kann Claude nicht als @-Erwähnung lesen: a "b" c.txt',
     });
   });
+  it("steckt das \" in einem Ordner, nennt die Meldung den Pfad ab diesem Ordner (Abend 30)", () => {
+    expect(planDrop(['/Users/n/Desktop/a"b c/x.txt'])).toEqual({
+      text: "",
+      notice: 'Pfad mit " kann Claude nicht als @-Erwähnung lesen: a"b c/x.txt',
+    });
+    expect(planDrop(['/v/a"b/c d/e"f/x.txt', "/v/ok.txt"])).toEqual({
+      text: "@/v/ok.txt ",
+      notice: 'Pfad mit " kann Claude nicht als @-Erwähnung lesen: a"b/c d/e"f/x.txt',
+    });
+    expect(planDrop(['/v/a"b/x y.txt', '/v/c d/e"f.txt'])).toEqual({
+      text: "",
+      notice: 'Claude kann Pfade mit " nicht als @-Erwähnung lesen: a"b/x y.txt, e"f.txt',
+    });
+  });
   it("alle abgelehnt: kein Text, die Meldung nennt alle Dateinamen", () => {
     expect(planDrop(['/a/a "b" c.txt', '/b/d "e" f.txt'])).toEqual({
       text: "",

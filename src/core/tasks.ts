@@ -98,7 +98,7 @@ export type TextPart = { kind: "text"; text: string } | { kind: "link"; ziel: st
 
 /**
  * Zerlegt einen Aufgabentext in Fließtext und Wikilinks: [[ziel]] hat Ziel und Anzeige ziel, [[ziel|alias]] die Anzeige alias,
- * ein Abschnitt ([[ziel#Abschnitt]]) bleibt im Ziel. Ein leeres Ziel ([[|alias]]) ist kein Link, es gibt nichts zu öffnen:
+ * ein leerer Alias ([[ziel|]]) die Anzeige ziel (ein Link ohne Text wäre nicht anklickbar), ein Abschnitt ([[ziel#Abschnitt]]) bleibt im Ziel. Ein leeres Ziel ([[|alias]]) ist kein Link, es gibt nichts zu öffnen:
  * der Alias steht als Text da, ohne Alias ([[]]) bleibt die Klammer wie geschrieben. Keine leeren Textteile, Text neben Text
  * wird zusammengefasst; andere Markdown-Formate bleiben roh im Text.
  */
@@ -114,7 +114,7 @@ export function textParts(text: string): TextPart[] {
   for (const m of text.matchAll(/\[\[([^\]|]*)(?:\|([^\]]*))?\]\]/g)) {
     addText(text.slice(from, m.index));
     const ziel = m[1];
-    const anzeige = m[2] ?? ziel;
+    const anzeige = m[2] || ziel;
     if (ziel !== "") parts.push({ kind: "link", ziel, anzeige });
     else addText(anzeige !== "" ? anzeige : m[0]);
     from = m.index + m[0].length;

@@ -1,6 +1,6 @@
 {
   "name": "glasscockpit",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "type": "module",
   "description": "Run Claude Code sessions as terminal views with a cockpit dashboard.",

@@ -34,14 +34,17 @@ export interface DropPlan {
   notice: string | null;
 }
 
-function fileName(pfad: string): string {
-  return pfad.slice(pfad.lastIndexOf("/") + 1);
+/** Was die Meldung von einem abgelehnten Pfad nennt: den Pfad ab dem ersten Teil mit `"` (Ordner oder Dateiname), ohne `"` den Dateinamen. */
+function shownPart(pfad: string): string {
+  const teile = pfad.split("/");
+  const i = teile.findIndex((teil) => teil.includes('"'));
+  return teile.slice(i === -1 ? -1 : i).join("/");
 }
 
-/** Meldung für abgelehnte Pfade, mit den Dateinamen. Nichts abgelehnt: null. */
+/** Meldung für abgelehnte Pfade, je Pfad ab dem Teil mit `"` (steckt es in einem Ordner, steht der Ordner mit da). Nichts abgelehnt: null. */
 function rejectedNotice(rejected: string[]): string | null {
   if (rejected.length === 0) return null;
-  const namen = rejected.map(fileName).join(", ");
+  const namen = rejected.map(shownPart).join(", ");
   return rejected.length === 1
     ? `Pfad mit " kann Claude nicht als @-Erwähnung lesen: ${namen}`
     : `Claude kann Pfade mit " nicht als @-Erwähnung lesen: ${namen}`;
