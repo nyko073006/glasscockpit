@@ -60,7 +60,7 @@ describe("runGitDayLog (echtes git, kein Netz)", () => {
     execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", msg], {
       cwd: dir, stdio: "pipe", env: { ...env, GIT_AUTHOR_DATE: when.toISOString(), GIT_COMMITTER_DATE: when.toISOString() },
     });
-  it("nur Commits ab der Mitternacht, alle Branches, ohne Merges; Zählung per parseDayLog", async () => {
+  it("nur Commits ab der Mitternacht, alle lokalen Branches, ohne Merges; Zählung per parseDayLog", async () => {
     const now = new Date();
     const heute = new Date(startOfLocalDay(now).getTime() + 60_000);
     const gestern = new Date(startOfLocalDay(now).getTime() - 60_000);
@@ -80,7 +80,7 @@ describe("runGitDayLog (echtes git, kein Netz)", () => {
     execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "merge", "-q", "--no-ff", "-m", "merge", "nebenzweig"], { cwd: dir, stdio: "pipe", env: { ...env, GIT_COMMITTER_DATE: heute.toISOString(), GIT_AUTHOR_DATE: heute.toISOString() } });
     const out = await runGitDayLog(dir, startOfLocalDay(now), env);
     // zwei Commits heute (der Merge fehlt, der gestrige auch); +2 (neu.ts, README.md zählt nicht) und -2 (alt.ts von 3 auf 1 Zeile)
-    expect(parseDayLog(out)).toEqual({ commits: 2, loc: 0 });
+    expect(parseDayLog(out, startOfLocalDay(now))).toEqual({ commits: 2, loc: 0 });
   });
   it("Repo-Pfad mit Leerzeichen und Umlaut funktioniert", async () => {
     const d = join(dir, "mit Leer zeichen ü");
@@ -90,12 +90,79 @@ describe("runGitDayLog (echtes git, kein Netz)", () => {
     git(d, "add", ".");
     git(d, "commit", "-q", "-m", "x");
     const now = new Date();
-    expect(parseDayLog(await runGitDayLog(d, startOfLocalDay(now), env))).toEqual({ commits: 1, loc: 3 });
+    expect(parseDayLog(await runGitDayLog(d, startOfLocalDay(now), env), startOfLocalDay(now))).toEqual({ commits: 1, loc: 3 });
   });
   it("kein Repo: lehnt ab; Zeitlimit per Option", async () => {
     await expect(runGitDayLog(dir, new Date(), env)).rejects.toBeDefined();
     git(dir, "init", "-q", "-b", "main");
     await expect(runGitDayLog(dir, new Date(), env, 1)).rejects.toBeDefined();
+  });
+});
+
+describe("runGitDayLog zählt nur lokale Arbeit von heute (Abend 31, echtes git)", () => {
+  const commitAt = (author: Date, committer: Date, msg: string) =>
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", msg], {
+      cwd: dir, stdio: "pipe", env: { ...env, GIT_AUTHOR_DATE: author.toISOString(), GIT_COMMITTER_DATE: committer.toISOString() },
+    });
+  const count = async () => {
+    const since = startOfLocalDay(new Date());
+    return parseDayLog(await runGitDayLog(dir, since, env), since);
+  };
+  const basis = async () => {
+    git(dir, "init", "-q", "-b", "main");
+    await writeFile(join(dir, "a.ts"), "1\n");
+    git(dir, "add", ".");
+    git(dir, "commit", "-q", "-m", "basis");
+  };
+
+  it("ein Commit nur auf einem Remote-Branch zählt nicht (Squash-Merge mit stehengebliebenem PR-Branch)", async () => {
+    await basis();
+    git(dir, "checkout", "-q", "-b", "pr");
+    await writeFile(join(dir, "b.ts"), "1\n2\n3\n4\n");
+    git(dir, "add", ".");
+    git(dir, "commit", "-q", "-m", "pr");
+    git(dir, "checkout", "-q", "main");
+    git(dir, "update-ref", "refs/remotes/origin/pr", "pr");
+    git(dir, "branch", "-q", "-D", "pr");
+    // Vorbedingung: git log --all sähe beide Commits
+    expect(String(git(dir, "log", "--all", "--format=%H")).trim().split("\n")).toHaveLength(2);
+    expect(await count()).toEqual({ commits: 1, loc: 1 });
+  });
+
+  it("ein Stash zählt nicht", async () => {
+    await basis();
+    await writeFile(join(dir, "a.ts"), "1\n2\n3\n");
+    git(dir, "add", ".");
+    git(dir, "stash", "-q");
+    expect(String(git(dir, "stash", "list")).trim()).not.toBe("");
+    expect(await count()).toEqual({ commits: 1, loc: 1 });
+  });
+
+  it("ein heute rebaseter Commit von gestern zählt nicht, der heutige auf main schon", async () => {
+    const mitternacht = startOfLocalDay(new Date()).getTime();
+    const gestern = new Date(mitternacht - 3_600_000);
+    const heute = new Date(mitternacht + 60_000);
+    git(dir, "init", "-q", "-b", "main");
+    await writeFile(join(dir, "a.ts"), "1\n");
+    git(dir, "add", ".");
+    commitAt(gestern, gestern, "basis");
+    git(dir, "checkout", "-q", "-b", "alt");
+    await writeFile(join(dir, "b.ts"), "1\n2\n3\n4\n5\n");
+    git(dir, "add", ".");
+    commitAt(gestern, gestern, "von gestern");
+    git(dir, "checkout", "-q", "main");
+    await writeFile(join(dir, "c.ts"), "1\n2\n");
+    git(dir, "add", ".");
+    commitAt(heute, heute, "von heute");
+    execFileSync("git", ["-c", "user.email=t@t", "-c", "user.name=t", "rebase", "-q", "main", "alt"], {
+      cwd: dir, stdio: "pipe", env: { ...env, GIT_COMMITTER_DATE: heute.toISOString() },
+    });
+    git(dir, "checkout", "-q", "main");
+    // Vorbedingung: der rebasete Commit trägt Autor gestern, Committer heute
+    const [at, ct] = String(git(dir, "log", "-1", "--format=%at %ct", "alt")).trim().split(" ").map(Number);
+    expect(at * 1000).toBeLessThan(mitternacht);
+    expect(ct * 1000).toBeGreaterThanOrEqual(mitternacht);
+    expect(await count()).toEqual({ commits: 1, loc: 2 });
   });
 });
 
@@ -115,7 +182,7 @@ describe("Worktree zählt mit seinem Hauptrepo einmal (echtes git)", () => {
     expect([a.isMain, b.isMain]).toEqual([true, false]);
     // beide sehen dieselben Commits (der Grund für die Gruppierung)
     const since = startOfLocalDay(new Date());
-    expect(parseDayLog(await runGitDayLog(wt, since, env))).toEqual(parseDayLog(await runGitDayLog(main, since, env)));
+    expect(parseDayLog(await runGitDayLog(wt, since, env), since)).toEqual(parseDayLog(await runGitDayLog(main, since, env), since));
     const repos = (await listGitRepos(dir)).map((r) => ({ ...r, commonDir: "", isMain: false }));
     expect(repos).toHaveLength(2);
     repos[0].commonDir = a.commonDir; repos[0].isMain = repos.find((r) => r.name === "haupt") === repos[0];

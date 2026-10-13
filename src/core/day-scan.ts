@@ -8,7 +8,7 @@ export interface DayScanDeps {
   list: () => Promise<Array<{ name: string; dir: string }>>;
   /** Gemeinsames Git-Verzeichnis (absolut) und ob `.git` ein Ordner ist (Hauptrepo); lehnt ab bei Fehler. */
   identity: (dir: string) => Promise<{ commonDir: string; isMain: boolean }>;
-  /** Ausgabe von `git log --all --no-merges --since=… --numstat`; lehnt ab bei Fehler oder Zeitlimit. */
+  /** Ausgabe von `git log --branches --no-merges --since=… --numstat`; lehnt ab bei Fehler oder Zeitlimit. */
   dayLog: (dir: string, since: Date) => Promise<string>;
   now: () => Date;
   log: (message: string) => void;
@@ -75,7 +75,7 @@ export class DayScan {
       const result: RepoDay[] = repos.map((r) => ({ name: r.name, loc: 0, commits: 0 }));
       await this.pool(repos.length, async (i) => {
         try {
-          Object.assign(result[i], parseDayLog(await this.deps.dayLog(repos[i].dir, since)));
+          Object.assign(result[i], parseDayLog(await this.deps.dayLog(repos[i].dir, since), since));
         } catch (fehler) {
           this.deps.log(`Cockpit: git log in ${repos[i].name} gescheitert: ${errText(fehler)}`);
         }

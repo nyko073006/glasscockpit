@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import esbuild from "esbuild";
 import { describe, expect, it } from "vitest";
+import { EXTERNAL } from "../scripts/lib/externals.ts";
 
 const ROOT = resolve(__dirname, "..");
 const SKRIPT = resolve(ROOT, "scripts", "third-party.mjs");
@@ -24,8 +25,7 @@ async function gebuendelt(): Promise<string[]> {
     format: "cjs",
     platform: "node",
     loader: { ".jpg": "dataurl" },
-    external: ["obsidian", "electron", "@codemirror/*", "@lezer/*", "bufferutil", "utf-8-validate", "node:*",
-      "fs", "path", "os", "child_process", "net", "http", "https", "crypto", "events", "stream", "url", "zlib", "tls", "util", "buffer"],
+    external: EXTERNAL,
   });
   const css = await esbuild.build({ ...gemeinsam, entryPoints: ["src/styles.css"] });
   const namen = new Set<string>();
@@ -50,7 +50,7 @@ describe("THIRD-PARTY-NOTICES", () => {
       expect(start, `${name} fehlt`).toBeGreaterThanOrEqual(0);
       const abschnitt = text.slice(start).split(/\n## /)[0];
       expect(abschnitt, `${name}: Lizenztyp`).toMatch(/Lizenz: MIT/);
-      expect(abschnitt, `${name}: Copyright-Zeile`).toMatch(/^Copyright \(c\) .+/m);
+      expect(abschnitt, `${name}: Copyright-Zeile`).toMatch(/^Copyright \([cC]\) .+/m);
       expect(abschnitt, `${name}: Lizenztext`).toContain("Permission is hereby granted");
     }
   });

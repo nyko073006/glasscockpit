@@ -43,16 +43,18 @@ export function runGitStatus(dir: string, env: Record<string, string>, timeoutMs
 }
 
 /**
- * Commits seit `since` (alle Branches, ohne Merges) mit numstat, Kopfzeile je Commit `@@COMMIT@@<Hash>`; Auswertung in
- * core/day-stats. Kein Netz, Zeitlimit und `--no-optional-locks` wie bei runGitStatus. `-c core.quotepath=false` lässt Umlaute
- * in Pfaden lesbar. Lehnt bei Fehler oder Zeitlimit ab; DayScan zählt das Repo dann als 0.
+ * Commits seit `since` (lokale Branches, ohne Merges) mit numstat, Kopfzeile je Commit `@@COMMIT@@<Hash> <Autor-Zeit>`;
+ * Auswertung in core/day-stats. `--branches` statt `--all` (Abend 31): Remote-Branches (Squash-Merge mit stehengebliebenem
+ * PR-Branch zählte doppelt), Stash, Tags und Notes zählen nicht. `--since` filtert nach Committer-Datum und ist nur Vorfilter,
+ * der Autor-Filter steht in parseDayLog. Kein Netz, Zeitlimit und `--no-optional-locks` wie bei runGitStatus.
+ * `-c core.quotepath=false` lässt Umlaute in Pfaden lesbar. Lehnt bei Fehler oder Zeitlimit ab; DayScan zählt das Repo dann als 0.
  */
 export function runGitDayLog(dir: string, since: Date, env: Record<string, string>, timeoutMs: number = GIT_STATUS_TIMEOUT_MS): Promise<string> {
   return new Promise((resolve, reject) => {
     try {
       execFile(
         "git",
-        ["--no-optional-locks", "-c", "core.quotepath=false", "log", "--all", "--no-merges", `--since=${since.toISOString().replace(/\.\d+Z$/, "Z")}`, "--numstat", `--format=${DAY_LOG_SEP}%H`],
+        ["--no-optional-locks", "-c", "core.quotepath=false", "log", "--branches", "--no-merges", `--since=${since.toISOString().replace(/\.\d+Z$/, "Z")}`, "--numstat", `--format=${DAY_LOG_SEP}%H %at`],
         { cwd: dir, timeout: timeoutMs, env: { ...env, GIT_TERMINAL_PROMPT: "0" }, maxBuffer: 64 * 1024 * 1024 },
         (err, stdout) => (err ? reject(asError(err)) : resolve(String(stdout))),
       );

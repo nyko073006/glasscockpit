@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { EXTERNAL } from "../scripts/lib/externals.ts";
 import { listFilesRecursive, relativeToRoot, ROOT } from "./helpers/files";
 
 // Wächter der IDE-Brücke (Abend 16): Netz nur an einer Stelle, nur lokal, kein Token im Log, Shell ohne Variablen.
@@ -141,8 +142,8 @@ describe("Paket und Bündel", () => {
     expect(pkg.devDependencies["@types/ws"]).toMatch(/^\d+\.\d+\.\d+$/);
   });
   it("esbuild lässt bufferutil und utf-8-validate draußen", () => {
-    const cfg = read("esbuild.config.mjs");
-    expect(cfg).toMatch(/"bufferutil"/);
-    expect(cfg).toMatch(/"utf-8-validate"/);
+    // Die Liste steht seit Abend 32 in scripts/lib/externals.ts; dass esbuild.config.mjs sie nimmt, prüft test/build-externals.test.ts.
+    expect(EXTERNAL).toContain("bufferutil");
+    expect(EXTERNAL).toContain("utf-8-validate");
   });
 });

@@ -216,7 +216,7 @@ export default class GlasscockpitPlugin extends Plugin {
               return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
             },
             openInVault: async (rel, t) => (await openVaultFile(this.app, rel, t.line === null ? null : { line: t.line, col: t.col })) !== null,
-            openInModal: (t) => new FileViewerModal(this.app, t, { maxMb: store.settings().fileViewerMaxMb, home: homedir(), onClosed: refocus }).open(),
+            openInModal: (t) => new FileViewerModal(this.app, t, { maxMb: store.settings().fileViewerMaxMb, autocomplete: store.settings().fileViewerAutocomplete, home: homedir(), onClosed: refocus }).open(),
           }),
           alertGate: (sessionId) => {
             const now = Date.now();

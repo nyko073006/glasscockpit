@@ -1,25 +1,29 @@
 import { describe, expect, it } from "vitest";
 import { DAY_LOG_SEP, countsAsCode, dayTotals, groupByCommonDir, formatCount, parseDayLog, startOfLocalDay, topRepos } from "../src/core/day-stats";
 
-const commit = (hash: string, ...files: string[]) => `${DAY_LOG_SEP}${hash}\n\n${files.join("\n")}\n`;
+/** Mitternacht des Testtags; Kopfzeile je Commit trägt die Autor-Zeit in Sekunden (`%at`). */
+const SINCE = new Date(2026, 9, 12);
+const HEUTE = SINCE.getTime() / 1000 + 60;
+const commitAt = (hash: string, at: number, ...files: string[]) => `${DAY_LOG_SEP}${hash} ${at}\n\n${files.join("\n")}\n`;
+const commit = (hash: string, ...files: string[]) => commitAt(hash, HEUTE, ...files);
 
 describe("parseDayLog", () => {
   it("leere Ausgabe: nichts", () => {
-    expect(parseDayLog("")).toEqual({ commits: 0, loc: 0 });
-    expect(parseDayLog("\n")).toEqual({ commits: 0, loc: 0 });
+    expect(parseDayLog("", SINCE)).toEqual({ commits: 0, loc: 0 });
+    expect(parseDayLog("\n", SINCE)).toEqual({ commits: 0, loc: 0 });
   });
 
   it("hinzugefügt minus gelöscht, über Commits und Dateien", () => {
     const out = commit("a1", "10\t2\tsrc/a.ts", "5\t0\tsrc/b.ts") + commit("b2", "1\t4\tsrc/c.swift");
-    expect(parseDayLog(out)).toEqual({ commits: 2, loc: 10 });
+    expect(parseDayLog(out, SINCE)).toEqual({ commits: 2, loc: 10 });
   });
 
   it("negative Summe bleibt negativ", () => {
-    expect(parseDayLog(commit("a1", "2\t30\tsrc/a.ts"))).toEqual({ commits: 1, loc: -28 });
+    expect(parseDayLog(commit("a1", "2\t30\tsrc/a.ts"), SINCE)).toEqual({ commits: 1, loc: -28 });
   });
 
   it("Binärzeile (-) zählt nicht, der Commit schon", () => {
-    expect(parseDayLog(commit("a1", "-\t-\tlogo.png", "3\t1\tsrc/a.ts"))).toEqual({ commits: 1, loc: 2 });
+    expect(parseDayLog(commit("a1", "-\t-\tlogo.png", "3\t1\tsrc/a.ts"), SINCE)).toEqual({ commits: 1, loc: 2 });
   });
 
   it("Lockdateien, .md und .txt zählen nicht, auch nicht in Unterordnern", () => {
@@ -28,27 +32,42 @@ describe("parseDayLog", () => {
       "900\t100\tpackage-lock.json", "50\t0\tapp/yarn.lock", "50\t0\tpnpm-lock.yaml", "70\t0\tX.xcodeproj/Package.resolved",
       "30\t0\tREADME.md", "30\t0\tdocs/a.txt", "4\t1\tsrc/a.ts",
     );
-    expect(parseDayLog(out)).toEqual({ commits: 1, loc: 3 });
+    expect(parseDayLog(out, SINCE)).toEqual({ commits: 1, loc: 3 });
   });
 
   it("derselbe Hash zweimal zählt einmal (Zeilen und Commit)", () => {
     const out = commit("a1", "10\t0\tsrc/a.ts") + commit("a1", "10\t0\tsrc/a.ts") + commit("b2", "1\t0\tsrc/b.ts");
-    expect(parseDayLog(out)).toEqual({ commits: 2, loc: 11 });
+    expect(parseDayLog(out, SINCE)).toEqual({ commits: 2, loc: 11 });
   });
 
   it("Commit ohne Dateien (leer) zählt als Commit", () => {
-    expect(parseDayLog(`${DAY_LOG_SEP}a1\n`)).toEqual({ commits: 1, loc: 0 });
+    expect(parseDayLog(`${DAY_LOG_SEP}a1 ${HEUTE}\n`, SINCE)).toEqual({ commits: 1, loc: 0 });
   });
 
   it("Umbenennung mit Klammer im Ordnerteil: {a => b}/c.md zählt nicht, {a => b}/c.ts schon", () => {
-    expect(parseDayLog(commit("a1", "7\t0\t{old => new}/c.md"))).toEqual({ commits: 1, loc: 0 });
-    expect(parseDayLog(commit("a1", "7\t0\t{old => new}/c.ts"))).toEqual({ commits: 1, loc: 7 });
-    expect(parseDayLog(commit("a1", "7\t0\tsrc/{a.ts => a.md}"))).toEqual({ commits: 1, loc: 0 });
+    expect(parseDayLog(commit("a1", "7\t0\t{old => new}/c.md"), SINCE)).toEqual({ commits: 1, loc: 0 });
+    expect(parseDayLog(commit("a1", "7\t0\t{old => new}/c.ts"), SINCE)).toEqual({ commits: 1, loc: 7 });
+    expect(parseDayLog(commit("a1", "7\t0\tsrc/{a.ts => a.md}"), SINCE)).toEqual({ commits: 1, loc: 0 });
   });
 
   it("Umbenennung: der neue Name entscheidet", () => {
     const out = commit("a1", "2\t1\tsrc/{old.md => new.ts}", "9\t9\tnotes.ts => notes.md");
-    expect(parseDayLog(out)).toEqual({ commits: 1, loc: 1 });
+    expect(parseDayLog(out, SINCE)).toEqual({ commits: 1, loc: 1 });
+  });
+
+  it("Autor-Zeit vor Mitternacht: der Commit zählt nicht, auch nicht seine Zeilen (Abend 31)", () => {
+    const out = commitAt("alt", HEUTE - 61, "50\t0\tsrc/a.ts") + commit("neu", "3\t1\tsrc/b.ts");
+    expect(parseDayLog(out, SINCE)).toEqual({ commits: 1, loc: 2 });
+  });
+
+  it("Autor-Zeit genau Mitternacht zählt, eine Sekunde davor nicht", () => {
+    expect(parseDayLog(commitAt("a1", HEUTE - 60, "4\t0\tsrc/a.ts"), SINCE)).toEqual({ commits: 1, loc: 4 });
+    expect(parseDayLog(commitAt("a1", HEUTE - 61, "4\t0\tsrc/a.ts"), SINCE)).toEqual({ commits: 0, loc: 0 });
+  });
+
+  it("Kopfzeile ohne lesbare Autor-Zeit zählt nicht", () => {
+    const out = `${DAY_LOG_SEP}a1\n\n4\t0\tsrc/a.ts\n` + `${DAY_LOG_SEP}b2 gestern\n\n4\t0\tsrc/b.ts\n` + commit("c3", "1\t0\tsrc/c.ts");
+    expect(parseDayLog(out, SINCE)).toEqual({ commits: 1, loc: 1 });
   });
 });
 

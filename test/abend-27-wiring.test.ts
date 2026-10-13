@@ -21,7 +21,7 @@ describe("Abend 27: Datei-Viewer verkabelt", () => {
     const main = read("src/main.ts");
     expect(main).toMatch(/openPath: \(target, refocus\) => void openTerminalPath\(target, \{/);
     expect(main).toMatch(/openInVault: async \(rel, t\) => \(await openVaultFile\(this\.app, rel,/);
-    expect(main).toMatch(/new FileViewerModal\(this\.app, t, \{ maxMb: store\.settings\(\)\.fileViewerMaxMb, home: homedir\(\), onClosed: refocus \}\)/);
+    expect(main).toMatch(/new FileViewerModal\(this\.app, t, \{ maxMb: store\.settings\(\)\.fileViewerMaxMb, autocomplete: store\.settings\(\)\.fileViewerAutocomplete, home: homedir\(\), onClosed: refocus \}\)/);
   });
   it("IDE-Brücke und Terminal-Links teilen dieselbe Öffnen-Funktion", () => {
     expect(read("src/host/ide-editor.ts")).toMatch(/await openVaultFile\(this\.app, path\)/);
@@ -31,7 +31,7 @@ describe("Abend 27: Datei-Viewer verkabelt", () => {
     const modal = read("src/host/file-viewer-modal.ts");
     expect(modal).toMatch(/this\.scope\.register\(\["Mod"\], "s",/);
     expect(modal).toMatch(/saveFile\(this\.target\.path, view\.state\.sliceDoc\(\), this\.mtimeMs, force\)/);
-    expect(modal).toMatch(/close\(\): void \{\s*if \(this\.asking\) return;\s*if \(!this\.dirty \|\| this\.discard\)/);
+    expect(modal).toMatch(/close\(\): void \{\s*if \(this\.asking\) return;\s*if \(this\.esc\?\.consume\(\)\) return;\s*if \(!this\.dirty \|\| this\.discard\)/);
     expect(modal).toMatch(/this\.options\.onClosed\(\)/);
     expect(modal).toMatch(/EditorState\.lineSeparator\.of\(lineSeparatorOf\(/);
   });

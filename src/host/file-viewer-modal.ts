@@ -3,14 +3,17 @@ import { EditorView, type KeyBinding, drawSelection, highlightActiveLine, highli
 import { type App, Modal, Notice } from "obsidian";
 import { CSS_PREFIX } from "../core/constants";
 import { lineSeparatorOf } from "../core/file-links";
+import { EscGuard, codeExtensions, loadCodeModules } from "./code-editor";
 import type { LinkTarget } from "./file-links";
 import { type LoadResult, loadFile, saveFile } from "./file-viewer-fs";
 
 // Datei-Viewer (Abend 27): Fenster über Obsidian mit Rohtext-Editor (CodeMirror 6 aus Obsidian). Cmd+S speichert atomar,
-// Esc oder X schließt. Geschrieben wird nur genau der geöffnete Pfad.
+// Esc oder X schließt. Geschrieben wird nur genau der geöffnete Pfad. Seit Abend 32 mit Syntaxfarben und Vorschlägen (code-editor.ts).
 
 export interface FileViewerOptions {
   maxMb: number;
+  /** Vorschläge beim Tippen (Einstellung fileViewerAutocomplete), gelesen beim Öffnen. */
+  autocomplete: boolean;
   home: string;
   /** Nach dem Schließen: Fokus zurück ins Terminal. */
   onClosed: () => void;
@@ -81,6 +84,8 @@ export class FileViewerModal extends Modal {
   private readonly target: LinkTarget;
   private readonly options: FileViewerOptions;
   private view: EditorView | null = null;
+  /** Esc bei offener Vorschlagsliste schließt erst die Liste (Abend 32). */
+  private esc: EscGuard | null = null;
   private mtimeMs = 0;
   private dirty = false;
   private saving = false;
@@ -109,6 +114,7 @@ export class FileViewerModal extends Modal {
 
   close(): void {
     if (this.asking) return;
+    if (this.esc?.consume()) return;
     if (!this.dirty || this.discard) {
       super.close();
       return;
@@ -121,6 +127,8 @@ export class FileViewerModal extends Modal {
   }
 
   onClose(): void {
+    this.esc?.detach();
+    this.esc = null;
     this.view?.destroy();
     this.view = null;
     this.contentEl.empty();
@@ -137,6 +145,7 @@ export class FileViewerModal extends Modal {
     }
     this.mtimeMs = result.mtimeMs;
     const host = this.contentEl.createDiv({ cls: `${CSS_PREFIX}file-viewer-editor` });
+    const mods = loadCodeModules();
     this.view = new EditorView({
       parent: host,
       state: EditorState.create({
@@ -149,6 +158,7 @@ export class FileViewerModal extends Modal {
           drawSelection(),
           EDITOR_THEME,
           ...commandExtensions(),
+          ...codeExtensions(this.target.path, { autocomplete: this.options.autocomplete }, mods),
           EditorView.updateListener.of((update) => {
             if (update.docChanged && !this.dirty) {
               this.dirty = true;
@@ -158,6 +168,7 @@ export class FileViewerModal extends Modal {
         ],
       }),
     });
+    this.esc = new EscGuard(this.modalEl, this.view, mods);
     this.jump();
   }
 

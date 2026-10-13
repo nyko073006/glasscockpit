@@ -29,19 +29,23 @@ export function countsAsCode(path: string): boolean {
 }
 
 /**
- * Ausgabe von `git log --numstat --format=@@COMMIT@@%H`: Commits (je Hash einmal) und LOC (hinzugefügt minus gelöscht über
- * Code-Dateien, Binärzeilen `-` zählen nicht). Ein doppelter Hash wird samt seiner Zeilen übersprungen.
+ * Ausgabe von `git log --numstat --format=@@COMMIT@@%H %at`: Commits (je Hash einmal) und LOC (hinzugefügt minus gelöscht über
+ * Code-Dateien, Binärzeilen `-` zählen nicht). Ein doppelter Hash wird samt seiner Zeilen übersprungen, ebenso ein Commit,
+ * dessen Autor-Zeit vor `since` liegt oder fehlt (Abend 31): Rebase, Amend und Cherry-Pick setzen nur das Committer-Datum
+ * neu, nach dem `--since` filtert.
  */
-export function parseDayLog(output: string): DayCounts {
+export function parseDayLog(output: string, since: Date): DayCounts {
+  const sinceSec = since.getTime() / 1000;
   const seen = new Set<string>();
   let loc = 0;
   let skipping = false;
   for (const raw of output.split("\n")) {
     const line = raw.replace(/\r$/, "");
     if (line.startsWith(DAY_LOG_SEP)) {
-      const hash = line.slice(DAY_LOG_SEP.length).trim();
-      skipping = seen.has(hash);
-      seen.add(hash);
+      const [hash, at] = line.slice(DAY_LOG_SEP.length).trim().split(" ");
+      const today = /^\d+$/.test(at ?? "") && Number(at) >= sinceSec;
+      skipping = !today || seen.has(hash);
+      if (!skipping) seen.add(hash);
       continue;
     }
     if (skipping || line === "") continue;
@@ -56,7 +60,7 @@ export function parseDayLog(output: string): DayCounts {
 export interface RepoIdentity { name: string; dir: string; commonDir: string; isMain: boolean }
 
 /**
- * Worktrees teilen sich das Git-Verzeichnis mit ihrem Hauptrepo und sehen dieselben Commits (`--all`). Je gemeinsamem
+ * Worktrees teilen sich das Git-Verzeichnis mit ihrem Hauptrepo und sehen dieselben Commits (`--branches`). Je gemeinsamem
  * Verzeichnis bleibt eine Zeile: das Hauptrepo (`.git` ist ein Ordner), fehlt es, die erste in der Liste. Reihenfolge
  * nach dem ersten Auftreten der Gruppe.
  */

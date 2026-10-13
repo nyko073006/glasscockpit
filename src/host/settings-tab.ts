@@ -95,6 +95,10 @@ export class CockpitSettingTab extends PluginSettingTab {
       "fileViewerMaxMb", "Datei-Viewer: Höchstgröße (MB)",
       "Größere Dateien zeigt das Fenster nicht, nur einen Hinweis (1 bis 50).", s.fileViewerMaxMb,
     );
+    this.toggleField(
+      "fileViewerAutocomplete", "Datei-Viewer: Vorschläge beim Tippen", s.fileViewerAutocomplete,
+      "An: Das Fenster schlägt beim Tippen Wörter aus der Datei und Schlüsselwörter der Sprache vor (Enter übernimmt, Esc schließt die Liste). Aus: Liste nur mit Ctrl+Leertaste. Wirkt beim nächsten Öffnen eines Fensters.",
+    );
 
     new Setting(containerEl).setName("Benachrichtigung").setHeading();
     this.toggleField("notifyOnDone", "Wenn eine Sitzung fertig ist", s.notifyOnDone);

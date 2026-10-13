@@ -3,7 +3,8 @@ import { DayScan, type DayScanDeps } from "../src/core/day-scan";
 import { DAY_LOG_SEP } from "../src/core/day-stats";
 
 const NOW = new Date(2026, 9, 6, 15, 0, 0);
-const out = (hash: string, add: number) => `${DAY_LOG_SEP}${hash}\n\n${add}\t0\tsrc/a.ts\n`;
+/** Kopfzeile wie bei `git log --format=@@COMMIT@@%H %at`: Autor-Zeit in Sekunden, Vorgabe NOW. */
+const out = (hash: string, add: number, at: Date = NOW) => `${DAY_LOG_SEP}${hash} ${Math.floor(at.getTime() / 1000)}\n\n${add}\t0\tsrc/a.ts\n`;
 const rig = (over: Partial<DayScanDeps> = {}) => {
   const logs: string[] = [];
   const sinces: Date[] = [];
@@ -53,6 +54,13 @@ describe("DayScan", () => {
     await scan.run();
     expect(sinces).toHaveLength(2);
     expect(sinces[0].getTime()).toBe(new Date(2026, 9, 6, 0, 0, 0, 0).getTime());
+  });
+
+  it("zählt nach Autor-Zeit ab derselben Mitternacht: ein Commit von gestern fällt weg (Abend 31)", async () => {
+    const gestern = new Date(2026, 9, 5, 23, 59, 59);
+    const { scan } = rig({ dayLog: async (dir) => (dir === "/r/a" ? out("alt", 50, gestern) + out("h1", 5) : "") });
+    await scan.run();
+    expect(scan.snapshot()?.repos[0]).toEqual({ name: "a", loc: 5, commits: 1 });
   });
 
   it("ein Repo scheitert: zählt 0, wird geloggt, die anderen bleiben", async () => {

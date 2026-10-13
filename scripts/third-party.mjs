@@ -1,6 +1,6 @@
 // Erzeugt THIRD-PARTY-NOTICES.md aus den LICENSE-Dateien in node_modules.
 // Aufnahme: alles, was in main.js, styles.css oder native/ landet (Prüfung gegen das esbuild-Bundle: test/third-party.test.ts).
-//   - @xterm/xterm (inklusive xterm.css), @xterm/addon-fit, ws: von esbuild eingebettet
+//   - @xterm/xterm (inklusive xterm.css), @xterm/addon-fit, ws, @codemirror/legacy-modes (Sprachmodi des Datei-Viewers): von esbuild eingebettet
 //   - node-pty: nicht eingebettet, der Deploy legt es nach native/
 // yaml und alle anderen devDependencies landen nirgends im Plugin und stehen deshalb nicht drin.
 // Aufruf: node scripts/third-party.mjs (schreibt die Datei) oder --stdout (nur ausgeben).
@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-export const PAKETE = ["@xterm/addon-fit", "@xterm/xterm", "node-pty", "ws"];
+export const PAKETE = ["@codemirror/legacy-modes", "@xterm/addon-fit", "@xterm/xterm", "node-pty", "ws"];
 
 const KOPF = `# Third-Party Notices
 
