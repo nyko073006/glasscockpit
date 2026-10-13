@@ -25,7 +25,7 @@ export interface FileViewerOptions {
  */
 function commandExtensions(): Extension[] {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    // eslint-disable-next-line @typescript-eslint/no-require-imports -- Obsidian liefert @codemirror/commands erst zur Laufzeit, in node_modules fehlt es
     const cmd = require("@codemirror/commands") as {
       history: () => Extension; defaultKeymap: readonly KeyBinding[]; historyKeymap: readonly KeyBinding[]; indentWithTab: KeyBinding;
     };

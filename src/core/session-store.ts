@@ -101,7 +101,7 @@ export class SessionStore {
   }
 
   updateSetting<K extends keyof CockpitSettings>(key: K, value: CockpitSettings[K]): { ok: true } | { ok: false; reason: string } {
-    return this.updateSettings({ [key]: value } as Partial<CockpitSettings>);
+    return this.updateSettings({ [key]: value });
   }
 
   /**

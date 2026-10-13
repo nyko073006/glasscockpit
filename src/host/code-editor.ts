@@ -35,11 +35,11 @@ function need<T>(name: string, get: () => unknown): T {
 
 /** Die drei Pakete aus Obsidian; wörtliche require-Aufrufe, damit esbuild sie als extern stehen lässt (Wächter im Build-Test). */
 export const defaultLoad: CodeLoad = () => ({
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Obsidian liefert das Paket erst zur Laufzeit, esbuild lässt nur ein wörtliches require extern
   language: need<typeof LanguageModule>("@codemirror/language", () => require("@codemirror/language")),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Obsidian liefert das Paket erst zur Laufzeit, esbuild lässt nur ein wörtliches require extern
   autocomplete: need<typeof AutocompleteModule>("@codemirror/autocomplete", () => require("@codemirror/autocomplete")),
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- Obsidian liefert das Paket erst zur Laufzeit, esbuild lässt nur ein wörtliches require extern
   highlight: need<typeof HighlightModule>("@lezer/highlight", () => require("@lezer/highlight")),
 });
 
