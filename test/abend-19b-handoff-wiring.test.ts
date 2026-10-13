@@ -93,9 +93,9 @@ describe("Abend 19b Handoff-Knopf: Verdrahtung (Host nur per Textprüfung, echte
   });
 
   it("Einstellung: ein Textfeld im Abschnitt „Terminal“ der Seite", () => {
-    const marker = 'setName("Terminal").setHeading()';
+    const marker = 'this.group("Terminal", [';
     const start = tab.indexOf(marker);
-    const ende = tab.indexOf(".setHeading()", start + marker.length);
+    const ende = tab.indexOf('this.group("', start + marker.length);
     expect(start).toBeGreaterThan(-1);
     expect(tab.slice(start, ende)).toMatch(/this\.textField\(\s*"handoffPrefix"/);
   });

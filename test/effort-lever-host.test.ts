@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { EffortStep } from "../src/core/effort";
 import { type EffortLever, mountEffortLever } from "../src/host/effort-lever";
+import { installObsidianDom } from "./helpers/obsidian-dom";
 
 // Effort-Schieber (Abend 19e, Teil A), DOM: Ziehen mit Pointer-Events, Einrasten beim Loslassen, ein Aufruf je Zug.
 // happy-dom misst keine Boxen: Der Schlitz bekommt oben 100 und eine Höhe von 200 (Stufenabstand 40).
@@ -30,6 +31,7 @@ const key = (k: string, init: KeyboardEventInit = {}) => {
   return ev;
 };
 
+beforeAll(() => installObsidianDom(window));
 beforeEach(() => {
   document.body.replaceChildren();
   host = document.createElement("div");

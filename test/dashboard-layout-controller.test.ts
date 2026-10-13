@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CockpitInputs } from "../src/core/cockpit-panels";
 import { Observable } from "../src/core/observable";
 import type { PullSnapshot } from "../src/core/pull-state";
@@ -7,6 +7,7 @@ import type { CockpitCrop, DashboardLayout } from "../src/core/settings";
 import type { CockpitFeed, CockpitFeedActions } from "../src/core/cockpit-feed";
 import { DEFAULT_SETTINGS } from "../src/core/settings";
 import { DashboardLayoutController } from "../src/host/dashboard-layout-controller";
+import { installObsidianDom } from "./helpers/obsidian-dom";
 
 // Umschalt- und Lebenszyklus-Logik der DashboardView (Abend 15), ohne Obsidian: Liste <-> Cockpit, Karten zwischen
 // Liste, Regal und Zoom, Reload beim Wechsel, Abos der Instrumente, Aufräumen beim Schließen.
@@ -69,6 +70,7 @@ const switchTo = (l: DashboardLayout) => {
   for (const cb of [...settingsSubs]) cb();
 };
 
+beforeAll(() => installObsidianDom(window));
 beforeEach(() => {
   document.body.replaceChildren();
   root = document.createElement("div");

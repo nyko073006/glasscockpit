@@ -14,7 +14,7 @@ export function readLoginShell(shell: string, timeoutMs: number): Promise<LoginS
     const finish = (result: LoginShellResult) => {
       if (done) return;
       done = true;
-      clearTimeout(timer);
+      window.clearTimeout(timer);
       resolve(result);
     };
 
@@ -25,7 +25,7 @@ export function readLoginShell(shell: string, timeoutMs: number): Promise<LoginS
       resolve({ ok: false, reason: fehler instanceof Error ? fehler.message : String(fehler) });
       return;
     }
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       child.kill("SIGKILL");
       finish({ ok: false, reason: `Timeout nach ${timeoutMs / 1000} s` });
     }, timeoutMs);

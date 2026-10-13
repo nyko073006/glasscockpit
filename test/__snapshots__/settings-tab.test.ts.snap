@@ -1,0 +1,1140 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente bleiben 1`] = `
+[
+  {
+    "heading": "Sitzungen",
+  },
+  {
+    "name": "Projektordner",
+  },
+  {
+    "desc": "Unterordner erscheinen in „Neue Sitzung“. ~ steht für dein Home. Leer = aus.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Höchstzahl laufender Sitzungen",
+  },
+  {
+    "desc": "Ab dieser Zahl startet keine weitere Sitzung.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "10",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Tabs nach dem Abschalten wieder öffnen",
+  },
+  {
+    "desc": "An: Wer Glasscockpit unter Community-Plugins aus- und wieder einschaltet, bekommt die vorher offenen Sitzungen als Tabs zurück, mit ihrer Unterhaltung, und die Cockpit-Ansicht an ihrem Platz (Hauptbereich oder Seitenleiste). Aus: Sie bleiben zu, wie bei Obsidian üblich.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "heading": "Binärdateien",
+  },
+  {
+    "name": "Terminal-Binärdateien (node-pty)",
+  },
+  {
+    "desc": "Der Vault liegt nicht im Dateisystem, die Binärdateien lassen sich nicht ablegen. Der Knopf lädt einmalig die Dateien für diesen Mac von github.com/nyko073006/glasscockpit (Release 9.9.9) und prüft sie gegen feste SHA256-Summen im Plugin. Nichts anderes wird geladen.",
+  },
+  {
+    "control": "button",
+  },
+  {
+    "button": "Binärdateien laden",
+  },
+  {
+    "buttonDisabled": true,
+  },
+  {
+    "heading": "Terminal",
+  },
+  {
+    "name": "Unterhaltung fortsetzen",
+  },
+  {
+    "desc": "An: Nach dem Neuladen und bei „Neu starten“ setzt Claude die Unterhaltung fort. Aus: Es beginnt eine neue Unterhaltung, die alte bleibt auf der Platte erhalten.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Eingabezeile fest (Vollbild)",
+  },
+  {
+    "desc": "An: Claude läuft im Vollbild-Modus, die Eingabezeile bleibt unten stehen und das Mausrad scrollt den Verlauf in Claude. Ziehen markiert in Claude und kopiert beim Loslassen, Shift+Ziehen markiert im Terminal (dann Cmd+C). Suchen im Verlauf mit Ctrl+O und /. Der Scrollback des Terminals bleibt leer. Aus: klassisch, der Verlauf liegt im Scrollback. Wirkt für neu gestartete Sitzungen.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": false,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Rechteabfragen überspringen",
+  },
+  {
+    "desc": "Achtung: An, und Claude führt Befehle ohne Rückfrage aus (Start mit --dangerously-skip-permissions). Aus: Claude fragt vor Änderungen und Befehlen nach. Gilt für neue Sitzungen; laufende Sitzungen bleiben unverändert.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": false,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "IDE-Brücke für Claude-Sitzungen",
+  },
+  {
+    "desc": "An: Claude-Sitzungen sehen die Auswahl und die offene Notiz in Obsidian und können Notizen öffnen. Aus: kein Server, kein Lockfile, keine Diffs. Wirkt für neu gestartete Sitzungen.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Diffs in Obsidian zeigen",
+  },
+  {
+    "desc": "An: Änderungen von Claude öffnen als farbiger Diff in einem Tab mit Annehmen und Ablehnen; Claude wartet dort auf deine Entscheidung. Braucht die IDE-Brücke: Ist sie aus, ist dieser Schalter aus und gesperrt. Gilt sofort für neue Diffs; Claude erfährt davon erst in einer neu gestarteten Sitzung. Beim Ausschalten werden offene Diffs abgelehnt. Wirkt nur ohne Bypass: Cockpit-Sitzungen starten mit Rechtefreigabe, dann fragt Claude nie und zeigt auch keinen Diff. Für Diffs in der Sitzung mit Shift+Tab den normalen Modus wählen. Aus: Die Abfrage bleibt im Terminal.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": false,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Effort für nächste Sitzung",
+  },
+  {
+    "desc": "aus: kein Flag, es gilt settings.json. Jede andere Stufe gibt die nächste vom Cockpit gestartete Claude-Sitzung als --effort <stufe> mit. Laufende Sitzungen bleiben unverändert. Auch in der Effort-Liste im Cockpit (der Bildschirm links) und per Command „Effort für nächste Sitzung“ einstellbar.",
+  },
+  {
+    "control": "dropdown",
+  },
+  {
+    "option": [
+      "aus",
+      "aus",
+    ],
+  },
+  {
+    "option": [
+      "low",
+      "low",
+    ],
+  },
+  {
+    "option": [
+      "medium",
+      "medium",
+    ],
+  },
+  {
+    "option": [
+      "high",
+      "high",
+    ],
+  },
+  {
+    "option": [
+      "xhigh",
+      "xhigh",
+    ],
+  },
+  {
+    "option": [
+      "max",
+      "max",
+    ],
+  },
+  {
+    "value": "aus",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Schriftgröße",
+  },
+  {
+    "desc": "Schriftgröße im Terminal in Pixeln (8 bis 32). Wirkt sofort auf offene Terminals.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "13",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Scrollback (Zeilen)",
+  },
+  {
+    "desc": "Wie viele Zeilen das Terminal nach oben aufbewahrt (500 bis 100000). Wirkt sofort auf offene Terminals.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "5000",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Mindestkontrast im Terminal",
+  },
+  {
+    "desc": "Hebt Text, der zu blass auf dem Hintergrund steht, auf dieses Kontrastverhältnis an (1 bis 21, 1 = aus). Nötig im hellen Theme, weil Claude Code manche Texte fest weiß schickt. Wirkt sofort auf offene Terminals.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "inputStep": "0.5",
+  },
+  {
+    "value": "4.5",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Präfix des Handoff-Blocks",
+  },
+  {
+    "desc": "Ein Codeblock, dessen erste nichtleere Zeile so beginnt, steht oben im Terminal als fester Knopf „Handoff kopieren“, auch nach /clear, bis ein neuerer Block kommt. Groß- und Kleinschreibung zählt. Leer: kein Knopf (sofort). Ein neues Präfix gilt ab der nächsten Änderung des Transkripts.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "Handoff:",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Pfade per Cmd+Klick öffnen",
+  },
+  {
+    "desc": "An: Dateipfade im Terminal (absolut, mit ~ oder relativ zum Startordner der Sitzung, auch mit :zeile) öffnen per Cmd+Klick. Dateien im Vault als Tab, alle anderen in einem Fenster zum Lesen und Ändern (Cmd+S speichert, Esc schließt). Ein einfacher Klick markiert weiter Text. Wirkt sofort.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Relative Pfade auch in Claudes Ordnern suchen",
+  },
+  {
+    "desc": "Liegt ein relativer Pfad nicht im Startordner, sucht das Cockpit ihn in den Ordnern, in denen Claude in dieser Sitzung gearbeitet hat (cd, gelesene und bearbeitete Dateien). Haben mehrere die Datei, gilt der, in dem Claude zuletzt gearbeitet hat.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Höchstgröße (MB)",
+  },
+  {
+    "desc": "Größere Dateien zeigt das Fenster nicht, nur einen Hinweis (1 bis 50).",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "2",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Vorschläge beim Tippen",
+  },
+  {
+    "desc": "An: Das Fenster schlägt beim Tippen Wörter aus der Datei und Schlüsselwörter der Sprache vor (Enter übernimmt, Esc schließt die Liste). Aus: Liste nur mit Ctrl+Leertaste. Wirkt beim nächsten Öffnen eines Fensters.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "heading": "Benachrichtigung",
+  },
+  {
+    "name": "Wenn eine Sitzung fertig ist",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Wenn eine Sitzung eine Frage hat",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Zwischenstände bei laufenden Agents nicht melden",
+  },
+  {
+    "desc": "Solange Agents, Workflows oder Hintergrund-Befehle laufen, meldet ein Antwortende nichts. Fragen melden sich immer.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Höchstalter einer Hintergrundaufgabe (Minuten)",
+  },
+  {
+    "desc": "Ein Start ohne Fertig-Meldung zählt nach dieser Zeit nicht mehr als laufend (1 bis 1440).",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "60",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Laufende Hintergrundaufgaben im Tab zeigen (⏳)",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Markierung am Tab",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Ton",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "macOS-Banner",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Klangdatei",
+  },
+  {
+    "desc": "Pfad zur Klangdatei, abgespielt mit afplay.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "/System/Library/Sounds/Glass.aiff",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Mindestabstand zwischen zwei Alarmen (ms)",
+  },
+  {
+    "desc": "Höchstens ein Alarm je Sitzung in diesem Abstand.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "3000",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Banner ausblenden nach (Sekunden)",
+  },
+  {
+    "desc": "So lange bleibt das macOS-Banner stehen (1 bis 60), dann verschwindet es von selbst und steht auch nicht in der Mitteilungszentrale. Je Sitzung gibt es höchstens ein Banner: Ein neues ersetzt das alte.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "6",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "heading": "Telegram",
+  },
+  {
+    "name": "Telegram, wenn eine Sitzung fertig ist",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": false,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Telegram, wenn eine Sitzung eine Frage hat",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": false,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Telegram erst nach Leerlauf (Minuten)",
+  },
+  {
+    "desc": "Nachricht nur, wenn der Mac so lange ohne Eingabe war. 0 = immer. Unabhängig davon, ob das Cockpit sichtbar ist.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "2",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": ".env-Datei mit dem Bot-Token",
+  },
+  {
+    "desc": "Datei mit der Zeile TELEGRAM_BOT_TOKEN=…; das Token selbst wird nie im Cockpit gespeichert. ~ steht für dein Home.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "~/.claude/channels/telegram/.env",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Chat-ID",
+  },
+  {
+    "desc": "Leer = erste Chat-ID aus access.json neben der .env-Datei. Sonst nur Ziffern, bei Gruppen mit - vorn.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Testnachricht senden",
+  },
+  {
+    "desc": "Sendet sofort, ohne Leerlauf- und Abstandsprüfung.",
+  },
+  {
+    "control": "button",
+  },
+  {
+    "button": "Testnachricht senden",
+  },
+  {
+    "heading": "Dashboard",
+  },
+  {
+    "name": "Dashboard-Ansicht",
+  },
+  {
+    "desc": "Cockpit: Bild mit Instrumenten, ein Klick öffnet die volle Karte. Liste: die Karten untereinander. Wirkt sofort auf offene Dashboards.",
+  },
+  {
+    "control": "dropdown",
+  },
+  {
+    "option": [
+      "cockpit",
+      "Cockpit",
+    ],
+  },
+  {
+    "option": [
+      "list",
+      "Liste",
+    ],
+  },
+  {
+    "value": "cockpit",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Cockpit-Ausschnitt",
+  },
+  {
+    "desc": "zugeschnitten: Das Bild ohne den äußeren Rand, alles erscheint größer. voll: das ganze Bild. Wirkt sofort auf offene Dashboards.",
+  },
+  {
+    "control": "dropdown",
+  },
+  {
+    "option": [
+      "crop",
+      "zugeschnitten",
+    ],
+  },
+  {
+    "option": [
+      "full",
+      "voll",
+    ],
+  },
+  {
+    "value": "crop",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Briefing-Ordner",
+  },
+  {
+    "desc": "Ordner im Vault mit den Tagesdateien JJJJ-MM-TT.md, ohne führenden Schrägstrich. Leer = aus (nicht eingerichtet).",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Pull-Abstand (Minuten)",
+  },
+  {
+    "desc": "git pull im Briefing-Ordner, solange ein Dashboard offen ist. 0 = kein automatischer Pull.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "5",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Text für „Hiermit weiterarbeiten“",
+  },
+  {
+    "desc": "Wird an die aktive Claude-Sitzung gesendet. {ordner} wird durch den Briefing-Ordner ersetzt.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "Lies die neueste Datei in {ordner}/ (mein Briefing). Hilf mir, die Handlungsschritte abzuarbeiten: Antworten entwerfen, erst nach meinem OK senden. Womit fangen wir an?",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Aufgabenliste",
+  },
+  {
+    "desc": "Markdown-Datei im Vault mit den Aufgaben (- [ ] ...), endet auf .md. Wird nie automatisch angelegt.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "Cockpit Tasks.md",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Zahl der Skill-Knöpfe",
+  },
+  {
+    "desc": "So viele Skills zeigt die Karte „Skills“ als Knöpfe (1 bis 30), zuletzt benutzte zuerst.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "12",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Usage-Abstand (Sekunden)",
+  },
+  {
+    "desc": "So oft liest die Karte „Usage“ den Schnappschuss der Statuszeile und die heutigen Transkripte (10 bis 3600), auch bei geschlossenem Dashboard.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "60",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Tokens für die Statuszeile schreiben",
+  },
+  {
+    "desc": "Schreibt nach jedem Zählerlauf die heutigen Output-Tokens nach ~/.claude/cockpit/tokens-today.json. Aus: Das Cockpit zählt weiter, die Statuszeile zeigt dann nur noch die letzte Summe mit ihrem Alter.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Kontext: Warnschwelle (Tokens)",
+  },
+  {
+    "desc": "Ab hier wird das Kontext-Instrument gelb und die Statuszeile gelb (1000 bis 1000000). Muss unter der Handoff-Schwelle liegen; beide gehen über thresholds.json an die Statuszeile.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "150000",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Kontext: Handoff-Schwelle (Tokens)",
+  },
+  {
+    "desc": "Ab hier rot mit Handoff-Hinweis (1000 bis 1000000). Muss über der Warnschwelle liegen. Beide zusammen höher stellen: erst diese, dann die Warnschwelle.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "175000",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Handoff frühestens ab Kontext (%)",
+  },
+  {
+    "desc": "Erst ab diesem Kontextanteil gilt eine Session als übergabereif (0 bis 100). Geht über thresholds.json an den Stop-Hook aus „npm run deploy:hook“ (README, „Übergabe-Signal“).",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "10",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Handoff frühestens ab Nachrichten",
+  },
+  {
+    "desc": "Erst ab so vielen eigenen Nachrichten in der Session (1 bis 50), damit wirklich etwas passiert ist. Gilt zusammen mit dem Kontextanteil.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "2",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Output-Tokens je Tag: Median",
+  },
+  {
+    "desc": "Bis hierher ist das Tokens-Instrument grün (1000 bis 100000000). Muss unter dem p90 liegen. Vorgabe aus „Output-Kennzahlen“ (03.10.2026).",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "340000",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Output-Tokens je Tag: p90",
+  },
+  {
+    "desc": "Bis hierher gelb, darüber rot (1000 bis 100000000). Muss über dem Median liegen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "870000",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Überschrift des Tagesfokus",
+  },
+  {
+    "desc": "Die ersten zwei Punkte unter dieser Überschrift im heutigen Briefing zeigt die Kanzel. Eine Zeile.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "Heute dran",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Inbox-Ordner",
+  },
+  {
+    "desc": "Ordner im Vault, dessen Notizen die Vault-Lage zählt, ohne führenden Schrägstrich. Leer = aus.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Projekt-Ordner (Vault)",
+  },
+  {
+    "desc": "Ordner im Vault mit einem Unterordner je Projekt und dessen HUB-Datei. Leer = Handoffs aus.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Handoff-Unterordner",
+  },
+  {
+    "desc": "Name des Handoff-Ordners in jedem Projektordner, z. B. Handoffs. Leer = Handoffs aus.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Endung der HUB-Datei",
+  },
+  {
+    "desc": "Dateiende, an dem die HUB-Datei im Projektordner erkannt wird. Ihr Feld repo: ist der Startordner.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": " - PMO HUB.md",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Startnachricht für „Weiter“",
+  },
+  {
+    "desc": "{datei} wird durch den Handoff-Pfad ersetzt, {auftrag} durch naechster_auftrag.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "Handoff: {datei}
+Nächster Auftrag: {auftrag}",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Index-Datei",
+  },
+  {
+    "desc": "Datei im Vault mit generated_at im Frontmatter, endet auf .md. Leer = aus.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Index gelb ab (Tage)",
+  },
+  {
+    "desc": "Ab so vielen Tagen seit generated_at zeigt die Vault-Lage den Index gelb (1 bis 365).",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "7",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Ordner der Daily Notes",
+  },
+  {
+    "desc": "Ordner im Vault mit den Tagesnotizen JJJJ-MM-TT.md, ohne führenden Schrägstrich. Leer = aus.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Lint-Befehl",
+  },
+  {
+    "desc": "Wird mit der Taste „Lint starten“ an die aktive Sitzung geschickt, z. B. /lint. Leer = aus, die Taste verschwindet.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "heading": "Radare",
+  },
+  {
+    "desc": "Im Cockpit erscheinen höchstens zwei Radare. Eine fehlende Datei zeigt die Lampe grau, eine kaputte oder unlesbare rot.",
+  },
+  {
+    "name": "Radar 1",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "placeholder": "Name (leer = Radar 1)",
+  },
+  {
+    "value": "Alpha",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "placeholder": "Pfad zur state.json, ~ erlaubt",
+  },
+  {
+    "value": "~/a/state.json",
+  },
+  {
+    "control": "button",
+  },
+  {
+    "button": "Entfernen",
+  },
+  {
+    "name": "Radar 2",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "placeholder": "Name (leer = Radar 2)",
+  },
+  {
+    "value": "Beta",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "placeholder": "Pfad zur state.json, ~ erlaubt",
+  },
+  {
+    "value": "~/b/state.json",
+  },
+  {
+    "control": "button",
+  },
+  {
+    "button": "Entfernen",
+  },
+  {
+    "name": "Radar hinzufügen",
+  },
+  {
+    "desc": "Es sind 2 Radare eingetragen, mehr passen nicht ins Bild. Erst einen entfernen.",
+  },
+  {
+    "control": "button",
+  },
+  {
+    "button": "Radar hinzufügen",
+  },
+  {
+    "buttonDisabled": true,
+  },
+  {
+    "heading": "Research",
+  },
+  {
+    "name": "Suchen",
+  },
+  {
+    "desc": "Je Zeile eine GitHub-Suche: <anfrage> | stars|updated | 1–30 (Sortierung und Zahl der Treffer). Beispiel: claude-code stars:>8 | updated | 8",
+  },
+  {
+    "rowClass": "cockpit-research-setting",
+  },
+  {
+    "control": "textarea",
+  },
+  {
+    "inputRows": 5,
+  },
+  {
+    "inputClass": "cockpit-research-searches",
+  },
+  {
+    "value": "claude-code stars:>8 | updated | 8
+claude skill OR claude subagent stars:>5 | stars | 8
+claude-code OR claude-agent stars:>30 | stars | 8",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Gültigkeit (Minuten)",
+  },
+  {
+    "desc": "So lange gilt der Stand, bevor die Karte GitHub erneut fragt (10 bis 1440). „Neu laden“ fragt immer.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "120",
+  },
+  {
+    "control": "extra",
+  },
+]
+`;

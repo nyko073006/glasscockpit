@@ -79,7 +79,7 @@ describe("Zähler auf Plugin-Ebene (Abend 13)", () => {
     expect(c.indexOf("TOKENS_TODAY_FILE")).toBeGreaterThan(c.indexOf("USAGE_SNAPSHOT_FILE"));
   });
   it("Schalter im Abschnitt Dashboard der Einstellungen", () => {
-    const dashboard = tab.slice(tab.indexOf('setName("Dashboard")'));
+    const dashboard = tab.slice(tab.indexOf('this.group("Dashboard", ['));
     expect(dashboard).toMatch(/toggleField\("writeTokensFile", "Tokens für die Statuszeile schreiben"/);
   });
 });

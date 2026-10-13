@@ -1,12 +1,13 @@
 // @vitest-environment happy-dom
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { CockpitFeed, CockpitFeedActions } from "../src/core/cockpit-feed";
 import { FIELDS, IMAGE_H, IMAGE_W, type CardId, PANELS, VIEW_CROP, polygonCss } from "../src/core/cockpit-panels";
 import { DEFAULT_SETTINGS } from "../src/core/settings";
 import type { RadarInput } from "../src/core/session-radar";
 import { type CockpitLayout, createCockpitLayout } from "../src/host/cockpit-layout";
+import { installObsidianDom } from "./helpers/obsidian-dom";
 
 // Neue Flächen der Cockpit-Ansicht (Abend 18, Darstellung): Rendering, Klicks, Zoom-Inhalte.
 
@@ -63,6 +64,7 @@ const click = (e: Element) => e.dispatchEvent(new window.MouseEvent("click", { b
 const clipOf = (id: string) => q(`.cockpit-field-${id} .cockpit-field-clip`);
 const feed = (f: CockpitFeed = feedOf(), lintCommand = "/lint") => layout.updateFeed(f, { ...DEFAULT_SETTINGS, lintCommand }, NOW);
 
+beforeAll(() => installObsidianDom(window));
 beforeEach(() => {
   document.body.replaceChildren();
   host = document.createElement("div");
@@ -603,7 +605,7 @@ describe("CSS", () => {
     const rule = (sel: string) => new RegExp(`${sel.replace(/[.]/g, "\\.")}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? "";
     const num = (re: RegExp, text: string) => Number(re.exec(text)?.[1]);
     const box = (g.rect.w / 100) * g.content.w; // cqw: rect.w ist Prozent der Bühnenbreite
-    const gap = num(/column-gap:\s*([\d.]+)cqw/, rule(".cockpit-panel-warnings .cockpit-panel-content"));
+    const gap = num(/(?:^|[;\s])gap:\s*[\d.]+cqw\s+([\d.]+)cqw/, rule(".cockpit-panel-warnings .cockpit-panel-content")); // zweiter Wert von `gap: Zeile Spalte`
     const bang = num(/(?:^|[;\s])width:\s*([\d.]+)cqw/, rule(".cockpit-panel-warnings .cockpit-inst-big"));
     const size = num(/font-size:\s*([\d.]+)cqw/, rule(".cockpit-panel-warnings .cockpit-inst-line"));
     expect([gap > 0, bang > 0, size > 0]).toEqual([true, true, true]);

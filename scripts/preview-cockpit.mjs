@@ -35,6 +35,10 @@ import { DEFAULT_SETTINGS, type CockpitCrop } from "../src/core/settings";
 import { localDayKey } from "../src/core/vault-state";
 import { createCockpitLayout } from "../src/host/cockpit-layout";
 import background from "../assets/cockpit-bg.jpg";
+import { installObsidianDom } from "../test/helpers/obsidian-dom";
+
+// Chrome hat Obsidians Prototyp-Erweiterung (createEl, createDiv, createSpan, empty, doc, win, createFragment) nicht; cockpit-layout.ts und effort-lever.ts nutzen sie. Vor dem ersten Layout-Aufruf nachbilden.
+installObsidianDom(window);
 
 const h = (tag: string, cls: string, text?: string): HTMLElement => {
   const e = document.createElement(tag);

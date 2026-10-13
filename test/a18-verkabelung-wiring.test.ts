@@ -166,9 +166,9 @@ describe("Abend 18 Verkabelung: View und Layout-Controller", () => {
 describe("Abend 18 Verkabelung: Einstellungsseite", () => {
   const tab = src("src/host/settings-tab.ts");
   const section = (name: string): string => {
-    const marker = `setName("${name}").setHeading()`;
+    const marker = `this.group("${name}", [`;
     const start = tab.indexOf(marker);
-    const next = tab.indexOf(".setHeading()", start + marker.length);
+    const next = tab.indexOf("this.group(\"", start + marker.length);
     return tab.slice(start, next === -1 ? undefined : next);
   };
   it("Dashboard: alle neuen Werte, Radare und Fokus eingeschlossen", () => {

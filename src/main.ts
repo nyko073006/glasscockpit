@@ -17,7 +17,7 @@ import { ThresholdsSync } from "./core/thresholds-sync";
 import { SessionManager } from "./core/session-manager";
 import { SessionActivity, radarInputs, type RadarInput } from "./core/session-activity";
 import { StartSlots } from "./core/start-slots";
-import { type CockpitData, type DashboardArea, type DashboardMemo, type SessionKind, type SessionRecord, backupSuffix, claudeIdOf, limitReached, parseDataText, planAfterLoad, reopenNotice, uniqueName } from "./core/session-model";
+import { type CockpitData, type DashboardArea, type DashboardMemo, type SessionKind, type SessionRecord, backupSuffix, claudeIdOf, parseDataText, planAfterLoad, reopenNotice, uniqueName } from "./core/session-model";
 import { readSessionId } from "./core/session-state";
 import { SessionStore } from "./core/session-store";
 import { expandHome } from "./core/settings";
@@ -545,8 +545,8 @@ export default class GlasscockpitPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: "insert-command",
-      name: "Command einfügen",
+      id: "insert-slash",
+      name: "Slash-Befehl einfügen",
       callback: () => {
         void this.openLauncher("command");
       },

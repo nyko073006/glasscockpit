@@ -30,6 +30,8 @@ Glasscockpit ist ein Obsidian-Plugin. Es startet [Claude-Code](https://code.clau
 
 Das Plugin steht noch nicht im Community-Store. In `native/` liegt die Terminal-Bibliothek `node-pty` als kompilierte Binärdatei (Weg B bringt sie mit, Weg A lädt sie). Beim ersten Start entfernt das Plugin für diesen Ordner das macOS-Quarantäne-Flag (`xattr`).
 
+**Woher die Dateien stammen.** Ab Version 0.3.6 tragen die Dateien jedes Releases eine GitHub-Attestierung, einen Herkunftsnachweis, dass sie aus diesem Repo veröffentlicht wurden. Eine geladene Datei prüfst du mit `gh attestation verify <Datei> --repo nyko073006/glasscockpit`. Gebaut wird lokal, nicht in GitHub Actions: Die Attestierung belegt, woher die Dateien veröffentlicht wurden, nicht wie sie gebaut wurden.
+
 ## Erste Schritte
 
 In der Befehlspalette „Neue Claude-Sitzung“ oder „Dashboard öffnen“ ausführen. Die Einstellungen stehen unter Einstellungen, Glasscockpit.

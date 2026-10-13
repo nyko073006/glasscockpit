@@ -37,8 +37,8 @@ describe("Abend 27: Datei-Viewer verkabelt", () => {
   });
   it("Einstellungsseite: beide Felder im Abschnitt Terminal", () => {
     const tab = read("src/host/settings-tab.ts");
-    const terminal = tab.indexOf('setName("Terminal")');
-    const next = tab.indexOf('setName("Benachrichtigung")');
+    const terminal = tab.indexOf('this.group("Terminal", [');
+    const next = tab.indexOf('this.group("Benachrichtigung", [');
     for (const field of ['"fileLinks", "Pfade per Cmd+Klick öffnen"', '"fileViewerMaxMb", "Datei-Viewer: Höchstgröße (MB)"']) {
       const at = tab.indexOf(field);
       expect(at, field).toBeGreaterThan(terminal);
@@ -60,6 +60,6 @@ describe("Abend 27b: Claudes Ordner verkabelt", () => {
     const at = tab.indexOf(field);
     expect(at).toBeGreaterThan(tab.indexOf('"fileLinks", "Pfade per Cmd+Klick öffnen"'));
     expect(at).toBeLessThan(tab.indexOf('"fileViewerMaxMb", "Datei-Viewer: Höchstgröße (MB)"'));
-    expect(at).toBeLessThan(tab.indexOf('setName("Benachrichtigung")'));
+    expect(at).toBeLessThan(tab.indexOf('this.group("Benachrichtigung", ['));
   });
 });

@@ -108,8 +108,8 @@ export class SessionManager {
     this.factory = factory;
     this.ringMax = ringMax;
     this.timers = options.timers ?? {
-      set: (callback, ms) => setTimeout(callback, ms),
-      clear: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+      set: (callback, ms) => window.setTimeout(callback, ms),
+      clear: (handle) => window.clearTimeout(handle as number),
     };
     this.killGraceMs = options.killGraceMs ?? KILL_ESCALATION_MS;
     this.signalGroup = options.signalGroup;

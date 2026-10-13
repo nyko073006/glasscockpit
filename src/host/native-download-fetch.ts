@@ -4,10 +4,10 @@ import { defaultClearQuarantine, defaultExtract, type DownloadDeps } from "./nat
 
 /** Die einzige Stelle, die für den Binär-Download ins Netz geht: requestUrl mit Zeitlimit (nie fetch). */
 async function fetchBytes(url: string): Promise<{ status: number; bytes: Uint8Array }> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: number | undefined;
   try {
     const limit = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`Zeitüberschreitung nach ${NATIVE_DOWNLOAD_TIMEOUT_MS / 1000} s`)), NATIVE_DOWNLOAD_TIMEOUT_MS);
+      timer = window.setTimeout(() => reject(new Error(`Zeitüberschreitung nach ${NATIVE_DOWNLOAD_TIMEOUT_MS / 1000} s`)), NATIVE_DOWNLOAD_TIMEOUT_MS);
     });
     const res = await Promise.race([requestUrl({ url, method: "GET", throw: false }), limit]);
     return { status: res.status, bytes: new Uint8Array(res.arrayBuffer) };
@@ -15,7 +15,7 @@ async function fetchBytes(url: string): Promise<{ status: number; bytes: Uint8Ar
     const msg = fehler instanceof Error ? fehler.message : String(fehler);
     throw new Error(msg.startsWith("Zeitüberschreitung") ? msg : `Kein Netz: ${msg}`);
   } finally {
-    clearTimeout(timer);
+    window.clearTimeout(timer);
   }
 }
 

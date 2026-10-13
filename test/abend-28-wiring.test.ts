@@ -127,8 +127,8 @@ describe("Abend 28: Leser und Einstellungen verkabelt", () => {
       '"markTab", "Markierung am Tab"',
     ];
     const orte = felder.map((f) => tab.indexOf(f));
-    orte.forEach((ort, i) => expect(ort, felder[i]).toBeGreaterThan(tab.indexOf('setName("Benachrichtigung")')));
+    orte.forEach((ort, i) => expect(ort, felder[i]).toBeGreaterThan(tab.indexOf('this.group("Benachrichtigung", [')));
     for (let i = 1; i < orte.length; i++) expect(orte[i], felder[i]).toBeGreaterThan(orte[i - 1]);
-    expect(orte[orte.length - 1]).toBeLessThan(tab.indexOf('setName("Telegram")'));
+    expect(orte[orte.length - 1]).toBeLessThan(tab.indexOf('this.group("Telegram", ['));
   });
 });

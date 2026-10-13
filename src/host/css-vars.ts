@@ -1,4 +1,5 @@
 import { type ReadVar, rgbaToCss } from "../core/xterm-theme";
+import type { PopoutWindow } from "./popout-window";
 
 /** Berechneter Wert einer CSS-Variable am Element, im Fenster des Elements. Leer, wenn nicht gesetzt. */
 export function readCssVar(el: HTMLElement, name: string): string {
@@ -23,7 +24,7 @@ function canvasAccepts(ctx: CanvasRenderingContext2D, value: string): boolean {
  * Den Wert nimmt der Farb-Parser von xterm 6 nicht an, er fiele still auf seinen Standard zurück.
  */
 export function createCssColorReader(el: HTMLElement): ReadVar {
-  const canvas = el.ownerDocument.createElement("canvas");
+  const canvas = (el.ownerDocument.win as PopoutWindow).createFragment().createEl("canvas");
   canvas.width = 1;
   canvas.height = 1;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });

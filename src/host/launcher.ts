@@ -134,9 +134,9 @@ export class Launcher {
 
   /** ideEnv höchstens ideWaitMs lang abwarten; bei Zeitüberschreitung oder Fehler null (Sitzung startet ohne die Variablen). */
   private async ideEnvWithin(): Promise<Record<string, string> | null> {
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let timer: number | undefined;
     const timeout = new Promise<null>((resolve) => {
-      timer = setTimeout(() => resolve(null), this.ideWaitMs);
+      timer = window.setTimeout(() => resolve(null), this.ideWaitMs);
     });
     try {
       return await Promise.race([Promise.resolve().then(() => this.ideEnv()), timeout]);
@@ -144,7 +144,7 @@ export class Launcher {
       console.warn("Glasscockpit, IDE-Brücke: Variablen nicht gelesen", fehler);
       return null;
     } finally {
-      clearTimeout(timer);
+      window.clearTimeout(timer);
     }
   }
 

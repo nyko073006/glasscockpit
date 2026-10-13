@@ -7,6 +7,7 @@ import { keyToSequence } from "../core/keymap";
 import { acceptPaste, preparePaste } from "../core/paste";
 import { readClipboard, writeClipboard } from "./clipboard";
 import { electronModule } from "./electron";
+import type { PopoutWindow } from "./popout-window";
 
 export interface TerminalInputOptions {
   term: Terminal;
@@ -70,8 +71,8 @@ export class TerminalInput {
   }
 
   /** Fenster und Dokument immer frisch vom Container lesen, nie festhalten. */
-  private get win(): Window & typeof globalThis {
-    return this.opts.container.win as Window & typeof globalThis;
+  private get win(): PopoutWindow {
+    return this.opts.container.win as PopoutWindow;
   }
 
   private bindDocument(): void {

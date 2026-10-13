@@ -8,6 +8,7 @@ import {
 import type { EffortStep } from "../core/effort";
 import type { CockpitCrop } from "../core/settings";
 import { mountEffortLever } from "./effort-lever";
+import type { PopoutWindow } from "./popout-window";
 
 /**
  * Bühne der Cockpit-Ansicht (Abend 15): Hintergrundbild, Instrumente auf den Flächen und Zoom-Overlay.
@@ -65,8 +66,8 @@ const CARD_TITLES: Record<CardId, string> = {
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(doc: Document, tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
-  const e = doc.createElement(tag);
-  e.className = cls;
+  // Obsidians createEl hängt an den Knoten, an dem es aufgerufen wird; das Fragment hält das Element, bis der Aufrufer es einhängt.
+  const e = (doc.win as PopoutWindow).createFragment().createEl(tag, { cls });
   if (text !== undefined) e.textContent = text;
   return e;
 }

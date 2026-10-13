@@ -173,7 +173,7 @@ export class EscGuard {
   private readonly onKey = (e: KeyboardEvent): void => {
     if (e.key !== "Escape") return;
     this.hadList = this.listOpen();
-    setTimeout(() => {
+    window.setTimeout(() => {
       this.hadList = false;
     }, 0);
   };

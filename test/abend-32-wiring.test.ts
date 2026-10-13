@@ -21,7 +21,7 @@ describe("Abend 32: Code-Editor verkabelt", () => {
     const tab = read("src/host/settings-tab.ts");
     const at = tab.indexOf('"fileViewerAutocomplete", "Datei-Viewer: Vorschläge beim Tippen"');
     expect(at).toBeGreaterThan(tab.indexOf('"fileViewerMaxMb", "Datei-Viewer: Höchstgröße (MB)"'));
-    expect(at).toBeLessThan(tab.indexOf('setName("Benachrichtigung")'));
+    expect(at).toBeLessThan(tab.indexOf('this.group("Benachrichtigung", ['));
   });
 
   it("main: Fenster bekommt die Einstellung beim Öffnen", () => {

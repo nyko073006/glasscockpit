@@ -66,10 +66,10 @@ describe("ideDiff aus: keine Diff-Tools", () => {
   it("die Vorgabe ist aus, der Schalter steht im Abschnitt Terminal", () => {
     expect(read("src/core/constants.ts")).toMatch(/DEFAULT_IDE_DIFF = false;/);
     const tab = read("src/host/settings-tab.ts");
-    const terminal = tab.indexOf('setName("Terminal")');
+    const terminal = tab.indexOf('this.group("Terminal", [');
     const field = tab.search(/this\.toggleField\(\s*"ideDiff", "Diffs in Obsidian zeigen"/);
     expect(field).toBeGreaterThan(terminal);
-    expect(field).toBeLessThan(tab.indexOf('setName("Benachrichtigung")'));
+    expect(field).toBeLessThan(tab.indexOf('this.group("Benachrichtigung", ['));
   });
   it("die Beschreibung sagt, dass der Diff nur ohne Bypass kommt (Abnahme 06.10.2026)", () => {
     const tab = read("src/host/settings-tab.ts");
@@ -80,9 +80,9 @@ describe("ideDiff aus: keine Diff-Tools", () => {
   it("ohne Brücke ist der Schalter gesperrt, und Umschalten der Brücke zeichnet die Seite neu (06.10.2026)", () => {
     const tab = read("src/host/settings-tab.ts");
     const field = tab.slice(tab.search(/this\.toggleField\(\s*"ideDiff"/), tab.indexOf('this.numberField("fontSize"'));
-    expect(field).toMatch(/\.setDisabled\(!s\.ideBridge\)/);
+    expect(field).toMatch(/\(\) => !this\.store\.settings\(\)\.ideBridge/);
     const bridge = tab.slice(tab.search(/this\.toggleField\(\s*"ideBridge"/), tab.search(/this\.toggleField\(\s*"ideDiff"/));
-    expect(bridge).toMatch(/this\.display\(\)/);
+    expect(bridge).toMatch(/this\.update\(\)/);
   });
 });
 

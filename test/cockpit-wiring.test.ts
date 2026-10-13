@@ -129,7 +129,7 @@ describe("Cockpit-Ansicht: eine Quelle, kein zweiter Lader", () => {
 describe("Cockpit-Ansicht: ohne Tastenfeld, Command bleiben in der Befehlspalette", () => {
   const main = read("src/main.ts");
   it("die Befehle der früheren Tasten bleiben als Commands des Plugins registriert", () => {
-    for (const id of ["new-session", "launch-skill", "insert-command"]) expect([id, main.includes(`id: "${id}"`)]).toEqual([id, true]);
+    for (const id of ["new-session", "launch-skill", "insert-slash"]) expect([id, main.includes(`id: "${id}"`)]).toEqual([id, true]);
   });
   it("kein Weg mehr von der Bühne zu Commands: weder runCommand noch onKey noch reloadResearch im Dashboard", () => {
     for (const f of ["src/host/dashboard-view.ts", "src/host/dashboard-layout-controller.ts", "src/host/cockpit-layout.ts"]) {
@@ -174,8 +174,8 @@ describe("Cockpit-Ansicht: Schalter und Optik", () => {
   });
   it("die Einstellung „Dashboard-Ansicht“ steht im Abschnitt „Dashboard“ der Seite", () => {
     const tab = read("src/host/settings-tab.ts");
-    const dashboard = tab.indexOf('setName("Dashboard")');
-    const research = tab.indexOf('setName("Research")');
+    const dashboard = tab.indexOf('this.group("Dashboard", [');
+    const research = tab.indexOf('this.group("Research", [');
     const field = tab.search(/this\.choiceField\(\s*"dashboardLayout"/);
     expect(field).toBeGreaterThan(dashboard);
     expect(field).toBeLessThan(research);

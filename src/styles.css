@@ -391,6 +391,15 @@
   margin-top: 8px;
 }
 
+/* Fehlerliste der Suchen: Kind der Zeile (Obsidian wirft Nachbarn der Zeile nach dem Zeichnen raus), unter dem Feld in voller Breite. */
+.cockpit-research-setting > .cockpit-setting-error {
+  flex: 1 1 100%;
+}
+
+.cockpit-research-setting > .cockpit-setting-error:empty {
+  display: none;
+}
+
 .cockpit-research-searches {
   flex: 1 1 auto;
   width: 100%;
@@ -547,8 +556,7 @@
   grid-template-columns: auto auto minmax(0, 1fr);
   grid-template-rows: auto auto;
   align-content: center;
-  column-gap: 0.7cqw;
-  row-gap: 0.25cqw;
+  gap: 0.25cqw 0.7cqw;
 }
 
 .cockpit-panel-week .cockpit-inst-title {
@@ -579,8 +587,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-content: start;
-  column-gap: 0.2cqw;
-  row-gap: 0.25cqw;
+  gap: 0.25cqw 0.2cqw;
 }
 
 .cockpit-panel-warnings .cockpit-inst-title {
@@ -691,7 +698,24 @@
 }
 
 .cockpit-zoom-close {
-  all: unset;
+  appearance: none;
+  display: inline;
+  margin: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  outline: none;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  width: auto;
+  height: auto;
+  justify-content: normal;
+  align-items: normal;
+  white-space: normal;
+  user-select: inherit;
+  transition: initial;
   box-sizing: border-box;
   padding: 2px 9px;
   border-radius: 4px;
@@ -895,7 +919,21 @@
 }
 
 .cockpit-stage .cockpit-radar-row {
-  all: unset;
+  appearance: none;
+  margin: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  outline: none;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  width: auto;
+  height: auto;
+  justify-content: normal;
+  white-space: normal;
+  user-select: inherit;
+  transition: initial;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -1253,7 +1291,7 @@
 }
 
 .cockpit-stage .cockpit-field-newSession .cockpit-newsession-plus {
-  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-family: "SF Mono", Menlo, var(--font-monospace), monospace;
   /* Höhe des Textrechtecks (Höhe von newSession, rund 3,45 cqw); größer schnitte overflow das Zeichen ab (18f). */
   font-size: 3.4cqw;
   font-weight: 700;
@@ -1323,7 +1361,23 @@
 
 /* Zoom-Inhalte der neuen Flächen. */
 .cockpit-zoom .cockpit-zoom-session {
-  all: unset;
+  appearance: none;
+  margin: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  outline: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  width: auto;
+  height: auto;
+  justify-content: normal;
+  white-space: normal;
+  user-select: inherit;
+  transition: initial;
   box-sizing: border-box;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1381,7 +1435,22 @@
 .cockpit-zoom .cockpit-zoom-empty { color: var(--text-muted); }
 
 .cockpit-zoom .cockpit-lint-button {
-  all: unset;
+  appearance: none;
+  display: inline;
+  margin: 0;
+  box-shadow: none;
+  outline: none;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  width: auto;
+  height: auto;
+  justify-content: normal;
+  align-items: normal;
+  white-space: normal;
+  user-select: inherit;
+  transition: initial;
   box-sizing: border-box;
   align-self: flex-start;
   padding: 4px 12px;
@@ -1398,7 +1467,25 @@
 }
 
 .cockpit-zoom .cockpit-link {
-  all: unset;
+  appearance: none;
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  outline: none;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  width: auto;
+  height: auto;
+  justify-content: normal;
+  align-items: normal;
+  user-select: inherit;
+  transition: initial;
   box-sizing: border-box;
   align-self: flex-start;
   max-width: 100%;

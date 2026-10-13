@@ -1,4 +1,4 @@
-// Release-Dateien bauen: erst Build, dann check:public, dann packen nach dist/ (Komplett-ZIP, zwei Native-ZIPs, Einzeldateien).
+// Release-Dateien bauen: erst Build, dann Portal-Lint, dann check:public, dann packen nach dist/ (Komplett-ZIP, zwei Native-ZIPs, Einzeldateien).
 // Keine Veröffentlichung: Tag und GitHub-Release macht ein Mensch nach der Abnahme.
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";
@@ -7,7 +7,7 @@ import { packRelease } from "./lib/release.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-for (const skript of ["build", "check:public"]) {
+for (const skript of ["build", "lint:portal", "check:public"]) {
   const r = spawnSync("npm", ["run", skript], { cwd: ROOT, stdio: "inherit" });
   if (r.status !== 0) {
     console.error(`Release abgebrochen: npm run ${skript} endete mit Exit-Code ${r.status}`);

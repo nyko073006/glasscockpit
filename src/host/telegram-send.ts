@@ -21,15 +21,15 @@ export async function sendTelegram(text: string, s: CockpitSettings, home: strin
   if (!cred.ok) return cred;
   try {
     // requestUrl kennt kein Zeitlimit: ein hängender Versand darf nichts blockieren.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const limit = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("Zeitüberschreitung")), TELEGRAM_TIMEOUT_MS); });
+    let timer: number | undefined;
+    const limit = new Promise<never>((_, reject) => { timer = window.setTimeout(() => reject(new Error("Zeitüberschreitung")), TELEGRAM_TIMEOUT_MS); });
     const res = await Promise.race([requestUrl({
       url: `https://api.telegram.org/bot${cred.token}/sendMessage`,
       method: "POST",
       contentType: "application/json",
       body: JSON.stringify({ chat_id: cred.chatId, text }),
       throw: false,
-    }), limit]).finally(() => clearTimeout(timer));
+    }), limit]).finally(() => window.clearTimeout(timer));
     return describeResponse(res.status, res.text);
   } catch (fehler) {
     const msg = fehler instanceof Error ? fehler.message : String(fehler);

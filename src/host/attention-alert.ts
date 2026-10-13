@@ -56,7 +56,7 @@ const banners = new BannerManager(
     if (!currentWin) throw new Error("kein Fenster");
     return webHandle(currentWin, title, body);
   },
-  { set: (fn, ms) => setTimeout(fn, ms), clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) },
+  { set: (fn, ms) => window.setTimeout(fn, ms), clear: (h) => window.clearTimeout(h as number) },
 );
 
 /**

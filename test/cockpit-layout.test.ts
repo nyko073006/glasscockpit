@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { type CardId, FIELDS, PANELS, type PanelValues, VIEW_CROP, polygonCss, stagePlacement, viewAspect, viewRect } from "../src/core/cockpit-panels";
 import { type CockpitLayout, createCockpitLayout } from "../src/host/cockpit-layout";
+import { installObsidianDom } from "./helpers/obsidian-dom";
 
 // Die Bühne der Cockpit-Ansicht (Abend 15): nur DOM-APIs, das Dokument kommt als Parameter.
 
@@ -57,6 +58,7 @@ const all = (sel: string, root: ParentNode = host): HTMLElement[] => [...root.qu
 const click = (el: Element) => el.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
 const esc = (target: EventTarget = q(".cockpit-zoom-panel")) => target.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
 
+beforeAll(() => installObsidianDom(window));
 beforeEach(() => {
   document.body.replaceChildren();
   host = document.createElement("div");

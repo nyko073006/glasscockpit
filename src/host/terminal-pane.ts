@@ -13,6 +13,7 @@ import { type TerminalOptions, changedXtermOptions, xtermOptions } from "../core
 import { type Dimensions, usableDimensions } from "../core/terminal-size";
 import { type ReadVar, buildTheme } from "../core/xterm-theme";
 import { createCssColorReader } from "./css-vars";
+import type { PopoutWindow } from "./popout-window";
 import { TerminalInput, type TerminalInputOptions } from "./terminal-input";
 
 export type ResizeCallback = (cols: number, rows: number) => void;
@@ -77,7 +78,7 @@ export class TerminalPane {
     // Diagnose „leere Pane“: Zeichnet xterm überhaupt?
     this.term.onRender(() => this.renders++);
 
-    const win = container.win as Window & typeof globalThis;
+    const win = container.win as PopoutWindow;
     this.observer = new win.ResizeObserver(() => {
       this.updateInset();
       this.fit();

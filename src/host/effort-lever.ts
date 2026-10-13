@@ -1,6 +1,7 @@
 import { EFFORT_STEPS } from "../core/constants";
 import type { EffortStep } from "../core/effort";
 import { leverKeyStep, leverMarks, leverValueText, pointerPosition, positionStep, stepPosition } from "../core/effort-lever";
+import type { PopoutWindow } from "./popout-window";
 
 /**
  * Effort-Schieber auf dem Bildschirm (Abend 19e, Teil A; Grundlage der Hebel aus 18b): senkrechter Schlitz mit flachem Griff und
@@ -30,8 +31,7 @@ export interface EffortLever {
 export function mountEffortLever(opts: EffortLeverOptions): EffortLever {
   const { doc } = opts;
   const make = (tag: string, cls: string, text?: string): HTMLElement => {
-    const e = doc.createElement(tag);
-    e.className = cls;
+    const e = (doc.win as PopoutWindow).createFragment().createEl(tag as keyof HTMLElementTagNameMap, { cls });
     if (text !== undefined) e.textContent = text;
     return e;
   };

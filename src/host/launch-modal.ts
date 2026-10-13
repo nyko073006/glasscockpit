@@ -4,7 +4,7 @@ import type { LaunchEntry, LaunchKind, LaunchSource } from "../core/discovery";
 const PLACEHOLDER: Record<LaunchKind, string> = {
   skill: "Skill starten …",
   agent: "Agent starten …",
-  command: "Command einfügen …",
+  command: "Slash-Befehl einfügen …",
 };
 
 const SOURCE_LABEL: Record<LaunchSource, string> = {

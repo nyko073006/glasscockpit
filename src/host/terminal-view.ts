@@ -17,6 +17,7 @@ import type { ViewTracker } from "../core/view-tracker";
 import { playSound, showBanner } from "./attention-alert";
 import { CodeBlockBar, copyCodeBlock } from "./code-block-bar";
 import type { SpawnPlan } from "./launcher";
+import type { PopoutWindow } from "./popout-window";
 import type { NodePtyFactory } from "./pty-factory";
 import { RenameModal } from "./rename-modal";
 import type { TerminalOptions } from "../core/terminal-options";
@@ -313,7 +314,7 @@ export class TerminalView extends ItemView {
   /** Timer im aktuellen Fenster des Containers (nach Migration neu gesetzt). */
   private startPoll(): void {
     this.stopPoll();
-    const win = this.contentEl.win as Window & typeof globalThis;
+    const win = this.contentEl.win as PopoutWindow;
     this.pollWin = win;
     this.pollTimer = win.setInterval(() => void this.pollTranscript(), TRANSCRIPT_POLL_MS);
     void this.pollTranscript();

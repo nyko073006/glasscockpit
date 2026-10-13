@@ -7,11 +7,11 @@ import { describeFailure, type FetchOutcome, parseSearchResponse, type ResearchS
  * requestUrl. Fehler kommen als Ergebnis zurück, nie als Wurf: der Aufrufer ersetzt damit nur den Abschnitt der Suche.
  */
 export async function fetchSearch(s: ResearchSearch): Promise<FetchOutcome> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timer: number | undefined;
   try {
     // requestUrl kennt kein Zeitlimit: ein hängender Abruf darf den Lauf nicht sperren.
     const limit = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error("Zeitüberschreitung")), RESEARCH_TIMEOUT_MS);
+      timer = window.setTimeout(() => reject(new Error("Zeitüberschreitung")), RESEARCH_TIMEOUT_MS);
     });
     const res = await Promise.race([requestUrl({
       url: searchUrl(s),
@@ -28,6 +28,6 @@ export async function fetchSearch(s: ResearchSearch): Promise<FetchOutcome> {
     const msg = fehler instanceof Error ? fehler.message : String(fehler);
     return { ok: false, error: msg === "Zeitüberschreitung" ? `Zeitüberschreitung nach ${RESEARCH_TIMEOUT_MS / 1000} s` : `Kein Netz: ${msg}` };
   } finally {
-    clearTimeout(timer);
+    window.clearTimeout(timer);
   }
 }

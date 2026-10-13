@@ -1,6 +1,6 @@
 {
   "name": "glasscockpit",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "private": true,
   "type": "module",
   "description": "Run Claude Code sessions as terminal views with a cockpit dashboard.",
@@ -16,6 +16,7 @@
     "deploy:hook": "node scripts/deploy-hook.mjs",
     "preview:cockpit": "node scripts/preview-cockpit.mjs",
     "check:public": "node scripts/check-public.mjs",
+    "lint:portal": "node scripts/portal-lint.mjs",
     "release": "node scripts/release.mjs",
     "export-public": "node scripts/export-public.mjs",
     "third-party": "node scripts/third-party.mjs",
@@ -38,6 +39,8 @@
   },
   "dependencies": {
     "@codemirror/legacy-modes": "6.5.4",
+    "@codemirror/state": "6.5.0",
+    "@codemirror/view": "6.38.6",
     "node-pty": "1.1.0",
     "ws": "8.22.0"
   }

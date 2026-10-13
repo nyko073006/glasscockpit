@@ -32,6 +32,8 @@ The plugin's settings and labels are in German. There is no English interface ye
 
 The plugin is not in the community store yet. `native/` holds the terminal library `node-pty` as a compiled binary (Option B ships it, Option A downloads it). On first start the plugin removes the macOS quarantine flag from that folder (`xattr`).
 
+**Where the files come from.** From version 0.3.6 on, the files of each GitHub release carry a GitHub attestation, a provenance record that they were published from this repository. You can check a downloaded file with `gh attestation verify <file> --repo nyko073006/glasscockpit`. The release is built locally, not in GitHub Actions: the attestation says where the files were published from, not how they were built.
+
 ## First steps
 
 Open the command palette and run "Neue Claude-Sitzung" (new Claude session) or "Dashboard öffnen" (open dashboard). Settings are under Settings, Glasscockpit.
