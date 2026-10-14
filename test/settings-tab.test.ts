@@ -474,3 +474,49 @@ describe("Einstellungsseite (Abend 34)", () => {
     h.pluginDirOf.mockReturnValue(null);
   });
 });
+
+describe("Ausschluss-Schalter (Abend 33)", () => {
+  const SPERRE = "Ausgeschlossene Dateien für Claude sperren";
+  const SANDBOX = "Auch Shell-Befehle sperren (Sandbox)";
+
+  it("beide Schalter im Abschnitt Terminal direkt nach „Rechteabfragen überspringen“ und vor der IDE-Brücke", () => {
+    const terminal: string[] = [];
+    let inTerminal = false;
+    for (const e of record(makeTab()) as Record<string, unknown>[]) {
+      if ("heading" in e) { inTerminal = e.heading === "Terminal"; continue; }
+      if (inTerminal && "name" in e) terminal.push(e.name as string);
+    }
+    const i = terminal.indexOf("Rechteabfragen überspringen");
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(terminal.slice(i, i + 4)).toEqual(["Rechteabfragen überspringen", SPERRE, SANDBOX, "IDE-Brücke für Claude-Sitzungen"]);
+  });
+
+  it("Sandbox gesperrt, wenn die Sperre aus ist, frei, wenn sie an ist", () => {
+    expect(rowsOf(record(makeTab({ claudeExclusion: false })))[SANDBOX]).toContainEqual({ disabled: true });
+    const an = rowsOf(record(makeTab({ claudeExclusion: true })))[SANDBOX];
+    expect(an).toBeDefined();
+    expect(an).not.toContainEqual({ disabled: true });
+  });
+
+  it("Umschalten der Sperre speichert und zeichnet über update() neu, Umschalten der Sandbox zeichnet nicht neu", () => {
+    const tab = makeTab();
+    clickToggle(tab, SPERRE, false);
+    expect(store.updateSetting).toHaveBeenCalledWith("claudeExclusion", false);
+    expect(tab.update).toHaveBeenCalledTimes(1);
+    tab.update.mockClear();
+    clickToggle(tab, SANDBOX, true);
+    expect(store.updateSetting).toHaveBeenCalledWith("claudeExclusionSandbox", true);
+    expect(tab.update).not.toHaveBeenCalled();
+  });
+
+  it("Sandbox bleibt nach dem Neuzeichnen im selben Setting nicht gesperrt, wenn die Sperre wieder an ist", () => {
+    const tab = makeTab({ claudeExclusion: false });
+    const def = findDef(tab.getSettingDefinitions() as Item[], SANDBOX);
+    const row = new Setting({} as HTMLElement) as unknown as FakeRow;
+    def.render!(row, {});
+    expect(row.disabledNow).toBe(true);
+    current.claudeExclusion = true;
+    def.render!(row, {});
+    expect(row.disabledNow).toBe(false);
+  });
+});

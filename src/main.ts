@@ -8,6 +8,7 @@ import { planCockpitSplit, planNewSessionPlacement } from "./core/cockpit-split"
 import type { CockpitFeedActions } from "./core/cockpit-feed";
 import { HANDOFF_RELOAD_DEBOUNCE_MS, HANDOFF_START_TIMEOUT_MS, PULL_TICK_MS, SESSION_FILES_DIR, THRESHOLDS_FILE, TOKENS_TODAY_FILE, TRANSCRIPTS_DIR, USAGE_TICK_MS, VIEW_TYPE_DASHBOARD, VIEW_TYPE_TERMINAL } from "./core/constants";
 import { discover, type LaunchEntry, type LaunchKind } from "./core/discovery";
+import { isExcluded, type ExclusionPlan, type IgnoreFilter } from "./core/exclusion";
 import { formatDiagnosis, formatLaunchInfo } from "./core/diagnose";
 import { toggledSound, toggledTelegram, tokensToday } from "./core/feed-compose";
 import { DayScan } from "./core/day-scan";
@@ -32,6 +33,7 @@ import { DashboardView } from "./host/dashboard-view";
 import { EffortModal } from "./host/effort-modal";
 import { readOwnSessionFiles, readRadarFile } from "./host/feed-fs";
 import { CockpitFeedSource } from "./host/feed-source";
+import { readExclusion } from "./host/exclusion-vault";
 import { readOpenHandoffs } from "./host/handoff-vault";
 import { createDebounce } from "./core/debounce";
 import { readFocus, readVaultState } from "./host/feed-vault";
@@ -63,6 +65,8 @@ export default class GlasscockpitPlugin extends Plugin {
   private tracker: ViewTracker | null = null;
   private launcher: Launcher | null = null;
   private ide: IdeBridge | null = null;
+  /** Abend 33: zuletzt berechnete Ausschluss-Filter (für die IDE-Brücke); bei jedem Claude-Start erneuert. */
+  private exclusionFilters: IgnoreFilter[] = [];
   private usageTimer: number | null = null;
   private store: SessionStore | null = null;
   private readonly lastAlertAt = new Map<string, number>();
@@ -168,6 +172,8 @@ export default class GlasscockpitPlugin extends Plugin {
         const adapter = this.app.vault.adapter;
         return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
       },
+      // Abend 33: ausgeschlossene Notizen sieht Claude über die Brücke nicht; Einstellung und Filter werden bei jeder Meldung frisch gelesen.
+      excluded: (p) => store.settings().claudeExclusion && isExcluded(this.exclusionFilters, p),
       ptyPid: (id) => manager.pidOf(id),
       home: homedir(),
       // Diff-Ansicht (Abend 17): Verbindung zu Sitzung über die pid; ein wartender Diff markiert die Sitzung als „Frage“.
@@ -178,6 +184,9 @@ export default class GlasscockpitPlugin extends Plugin {
     ide.install();
     void ide.sync();
     this.register(store.onSettingsChange(() => void ide.sync()));
+    // Abend 33: Filter für die IDE-Brücke schon vor dem ersten Claude-Start und nach jedem Umschalten der Sperre.
+    void this.exclusionFor(store.settings());
+    this.register(store.onSettingsChange(() => void this.exclusionFor(store.settings())));
 
     const telegram = new TelegramNotifier({ settings: () => store.settings(), record: (id) => store.get(id), home: homedir() });
 
@@ -943,7 +952,7 @@ export default class GlasscockpitPlugin extends Plugin {
     }
     let plan: SpawnPlan;
     try {
-      plan = await launcher.plan(record, { ...start, resumeConversations: store.settings().resumeConversations, fullscreen: store.settings().fixedPrompt, effort: store.settings().nextEffort, skipPermissions: store.settings().skipPermissions });
+      plan = await launcher.plan(record, { ...start, resumeConversations: store.settings().resumeConversations, fullscreen: store.settings().fixedPrompt, effort: store.settings().nextEffort, skipPermissions: store.settings().skipPermissions, exclusion: await this.exclusionFor(store.settings()) });
     } catch (fehler) {
       reservation.release();
       throw fehler;
@@ -1098,6 +1107,18 @@ export default class GlasscockpitPlugin extends Plugin {
   private vaultPath(): string {
     const adapter = this.app.vault.adapter;
     return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : homedir();
+  }
+
+  /** Abend 33: Ausschluss für einen Sitzungsstart; merkt die Filter für die IDE-Brücke. Fehler halten keinen Start auf. */
+  private async exclusionFor(s: { claudeExclusion: boolean; claudeExclusionSandbox: boolean }): Promise<ExclusionPlan> {
+    let plan: ExclusionPlan;
+    try {
+      plan = await readExclusion(this.app.vault, this.vaultPath(), s);
+    } catch (fehler) {
+      plan = { settings: {}, notice: `Ausschluss NICHT aktiv: ${fehler instanceof Error ? fehler.message : String(fehler)}.`, filters: [] };
+    }
+    this.exclusionFilters = plan.filters;
+    return plan;
   }
 
   private async copySessionId(id: string): Promise<void> {

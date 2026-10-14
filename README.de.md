@@ -132,6 +132,16 @@ Der Schalter „Rechteabfragen überspringen“ ist in der Vorgabe aus.
 
 Der Schalter wirkt nur auf Sitzungen, die danach starten. Laufende Sitzungen behalten ihren Modus.
 
+## Ausgeschlossene Dateien für Claude gesperrt
+
+Was in Obsidian unter Einstellungen → Dateien und Links → Ausgeschlossene Dateien steht, ist für jede Claude-Sitzung gesperrt, die Glasscockpit startet, egal in welchem Ordner sie läuft. Claude kann diese Dateien weder lesen noch bearbeiten, auch nicht per `cat`. Das Plugin gibt die Regeln jeder Sitzung per `--settings` mit; deine eigenen Claude-Einstellungsdateien bleiben unverändert. Eine graue Zeile beim Start der Sitzung nennt, wie viele Einträge gesperrt sind.
+
+- „Ausgeschlossene Dateien für Claude sperren“ (Vorgabe an) schaltet das ab.
+- Ohne Sandbox lesen Shell-Befehle, die einen ganzen Ordner durchsuchen (`grep -r`, Skripte), ausgeschlossene Dateien trotzdem. „Auch Shell-Befehle sperren (Sandbox)“ (Vorgabe aus) lässt Sitzungen in Claudes Sandbox laufen, die auch das sperrt, außer Befehlen aus `sandbox.excludedCommands` in deinen eigenen Claude-Einstellungen: Sie laufen weiter außerhalb der Sandbox. In der Sandbox schreibt Claude nur im Arbeitsordner und im Temp-Ordner, Netzzugriffe brauchen eine Freigabe.
+- Shell-Tabs und Claude-Sitzungen außerhalb von Glasscockpit sind nicht erfasst. Änderungen an der Liste gelten für danach gestartete Sitzungen.
+- Ein Eintrag, der mehr als 500 einzelne Regeln bräuchte, wird nicht gesperrt; die graue Zeile nennt ihn.
+- Bei eingeschalteter IDE-Brücke bekommt Claude Pfad und Auswahl einer ausgeschlossenen Notiz nicht.
+
 ## Offenlegung
 
 Das folgt den Offenlegungsregeln der Obsidian-Entwicklerrichtlinien.

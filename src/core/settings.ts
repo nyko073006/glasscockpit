@@ -4,6 +4,7 @@ import {
   DEFAULT_SKILL_BUTTONS, DEFAULT_TASKS_FILE, DEFAULT_RESUME_CONVERSATIONS, DEFAULT_REOPEN_AFTER_DISABLE, DEFAULT_FONT_SIZE, DEFAULT_SCROLLBACK, DEFAULT_MIN_CONTRAST,
   DEFAULT_TELEGRAM_CHAT_ID, DEFAULT_TELEGRAM_ENV_FILE, DEFAULT_TELEGRAM_IDLE_MIN, DEFAULT_TELEGRAM_ON_DONE, DEFAULT_TELEGRAM_ON_QUESTION,
   DEFAULT_USAGE_POLL_SEC, DEFAULT_WRITE_TOKENS_FILE, DEFAULT_RESEARCH_SEARCHES, DEFAULT_RESEARCH_MAX_AGE_MIN, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF, DEFAULT_FILE_LINKS, DEFAULT_FILE_LINKS_CLAUDE_DIRS, DEFAULT_FILE_VIEWER_MAX_MB, DEFAULT_FILE_VIEWER_AUTOCOMPLETE, DEFAULT_FIXED_PROMPT, DEFAULT_SKIP_PERMISSIONS,
+  DEFAULT_CLAUDE_EXCLUSION, DEFAULT_CLAUDE_EXCLUSION_SANDBOX,
   DASHBOARD_LAYOUTS, DEFAULT_DASHBOARD_LAYOUT, COCKPIT_CROPS, DEFAULT_COCKPIT_CROP,
   DEFAULT_CONTEXT_WARN, DEFAULT_CONTEXT_HANDOFF, DEFAULT_CLEARABLE_MIN_CONTEXT_PCT, DEFAULT_CLEARABLE_MIN_PROMPTS, DEFAULT_TOKENS_DAY_MEDIAN, DEFAULT_TOKENS_DAY_P90, DEFAULT_FOCUS_HEADING, DEFAULT_INBOX_DIR,
   DEFAULT_HUBS_DIR, DEFAULT_HANDOFFS_DIR, DEFAULT_HUB_SUFFIX, DEFAULT_HANDOFF_PROMPT,
@@ -22,7 +23,7 @@ export interface CockpitSettings {
   markTab: boolean; alertSound: boolean; alertBanner: boolean; soundFile: string; alertGapMs: number; bannerSeconds: number;
   briefingsDir: string; pullIntervalMin: number; continuePrompt: string;
   tasksFile: string; skillButtons: number; usagePollSec: number; writeTokensFile: boolean;
-  resumeConversations: boolean; fixedPrompt: boolean; skipPermissions: boolean; fontSize: number; scrollback: number; minimumContrast: number;
+  resumeConversations: boolean; fixedPrompt: boolean; skipPermissions: boolean; claudeExclusion: boolean; claudeExclusionSandbox: boolean; fontSize: number; scrollback: number; minimumContrast: number;
   ideBridge: boolean; ideDiff: boolean; handoffPrefix: string;
   fileLinks: boolean; fileLinksClaudeDirs: boolean; fileViewerMaxMb: number; fileViewerAutocomplete: boolean;
   telegramOnDone: boolean; telegramOnQuestion: boolean; telegramEnvFile: string; telegramChatId: string; telegramIdleMin: number;
@@ -61,6 +62,8 @@ export const DEFAULT_SETTINGS: CockpitSettings = {
   resumeConversations: DEFAULT_RESUME_CONVERSATIONS,
   fixedPrompt: DEFAULT_FIXED_PROMPT,
   skipPermissions: DEFAULT_SKIP_PERMISSIONS,
+  claudeExclusion: DEFAULT_CLAUDE_EXCLUSION,
+  claudeExclusionSandbox: DEFAULT_CLAUDE_EXCLUSION_SANDBOX,
   fontSize: DEFAULT_FONT_SIZE,
   scrollback: DEFAULT_SCROLLBACK,
   minimumContrast: DEFAULT_MIN_CONTRAST,
@@ -203,6 +206,8 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   resumeConversations: flag,
   fixedPrompt: flag,
   skipPermissions: flag,
+  claudeExclusion: flag,
+  claudeExclusionSandbox: flag,
   reopenAfterDisable: flag,
   fontSize: intIn(...RANGES.fontSize),
   scrollback: intIn(...RANGES.scrollback),
@@ -274,6 +279,7 @@ export function validateSetting<K extends keyof CockpitSettings>(key: K, value: 
  */
 export function applyDependencies(s: CockpitSettings): CockpitSettings {
   let r = s.ideDiff && !s.ideBridge ? { ...s, ideDiff: false } : s;
+  if (r.claudeExclusionSandbox && !r.claudeExclusion) r = { ...r, claudeExclusionSandbox: false };
   if (r.contextWarn >= r.contextHandoff) r = { ...r, contextWarn: DEFAULT_CONTEXT_WARN, contextHandoff: DEFAULT_CONTEXT_HANDOFF };
   if (r.tokensDayMedian >= r.tokensDayP90) r = { ...r, tokensDayMedian: DEFAULT_TOKENS_DAY_MEDIAN, tokensDayP90: DEFAULT_TOKENS_DAY_P90 };
   return r;
@@ -282,6 +288,7 @@ export function applyDependencies(s: CockpitSettings): CockpitSettings {
 /** Grund, warum dieser Wert bei den übrigen Einstellungen nicht geht, sonst null. */
 export function dependencyReason<K extends keyof CockpitSettings>(current: CockpitSettings, key: K, value: CockpitSettings[K]): string | null {
   if (key === "ideDiff" && value === true && !current.ideBridge) return "braucht die IDE-Brücke";
+  if (key === "claudeExclusionSandbox" && value === true && !current.claudeExclusion) return "braucht die Sperre ausgeschlossener Dateien";
   if (typeof value !== "number") return null;
   if (key === "contextWarn" && value >= current.contextHandoff) return "muss unter der Handoff-Schwelle liegen";
   if (key === "contextHandoff" && value <= current.contextWarn) return "muss über der Warn-Schwelle liegen";

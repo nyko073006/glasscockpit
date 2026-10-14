@@ -45,10 +45,11 @@ export function repeatsQuestion(prev: ActivitySignal | undefined, signal: Attent
   return signal === "question" && prev === "question";
 }
 
-/** JSON für `claude --settings`: Stop → done; AskUserQuestion und Rechte-/Eingabefrage → question; UserPromptSubmit und beantwortete AskUserQuestion → busy; SessionStart (clear, resume) → Sitzungswechsel. */
-export function hookSettings(): string {
+/** JSON für `claude --settings`: Stop → done; AskUserQuestion und Rechte-/Eingabefrage → question; UserPromptSubmit und beantwortete AskUserQuestion → busy; SessionStart (clear, resume) → Sitzungswechsel. extra (Abend 33): weitere Schlüssel wie permissions und sandbox; hooks gewinnt immer. */
+export function hookSettings(extra: Readonly<Record<string, unknown>> = {}): string {
   const hooks = (signal: ActivitySignal) => [{ type: "command", command: hookCommand(signal) }];
   return JSON.stringify({
+    ...extra,
     hooks: {
       Stop: [{ hooks: hooks("done") }],
       PreToolUse: [{ matcher: "AskUserQuestion", hooks: hooks("question") }],

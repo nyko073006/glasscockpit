@@ -217,3 +217,17 @@ describe("doneIsQuiet (Abend 28): wann ein Antwortende nichts meldet", () => {
     expect(doneIsQuiet("done", true, Number.NaN)).toBe(false);
   });
 });
+
+describe("hookSettings mit Zusatz (Abend 33)", () => {
+  it("Zusatzschlüssel stehen neben den Hooks", () => {
+    const s = JSON.parse(hookSettings({ permissions: { deny: ["Read(//v/x/**)"] } }));
+    expect(s.permissions).toEqual({ deny: ["Read(//v/x/**)"] });
+    expect(s.hooks.Stop[0].hooks[0].type).toBe("command");
+  });
+  it("ein Zusatz namens hooks verdrängt die echten Hooks nicht", () => {
+    expect(JSON.parse(hookSettings({ hooks: {} })).hooks).toEqual(JSON.parse(hookSettings()).hooks);
+  });
+  it("ohne Zusatz genau wie vorher", () => {
+    expect(Object.keys(JSON.parse(hookSettings()))).toEqual(["hooks"]);
+  });
+});

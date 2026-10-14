@@ -60,6 +60,18 @@ export class CockpitSettingTab extends PluginSettingTab {
           "Achtung: An, und Claude führt Befehle ohne Rückfrage aus (Start mit --dangerously-skip-permissions). Aus: Claude fragt vor Änderungen und Befehlen nach. Gilt für neue Sitzungen; laufende Sitzungen bleiben unverändert.",
         ),
         this.toggleField(
+          "claudeExclusion", "Ausgeschlossene Dateien für Claude sperren",
+          "An: Was in Obsidian unter „Dateien und Links → Ausgeschlossene Dateien“ steht, kann Claude in Sitzungen aus Glasscockpit weder lesen noch bearbeiten, auch nicht per cat, egal in welchem Ordner die Sitzung läuft. Ohne Sandbox lesen Shell-Befehle wie grep -r über einen ganzen Ordner trotzdem mit. Nicht gesperrt sind Shell-Tabs und Claude außerhalb von Glasscockpit. Gilt ab dem nächsten Sitzungsstart; beim Start zeigt eine graue Zeile, was gesperrt ist.",
+          // Neu zeichnen: Der Schalter „Auch Shell-Befehle sperren (Sandbox)“ hängt an diesem.
+          () => { this.update(); },
+        ),
+        this.toggleField(
+          "claudeExclusionSandbox", "Auch Shell-Befehle sperren (Sandbox)",
+          "An: Claude-Sitzungen laufen in Claudes Sandbox, dann scheitern auch grep -r und Skripte an ausgeschlossenen Dateien. Achtung: In der Sandbox schreibt Claude nur im Arbeitsordner und im Temp-Ordner, Netzzugriffe brauchen eine Freigabe, gh oder git push können haken. Wirkt nur, wenn Einträge gesperrt werden. Braucht die Sperre darüber: Ist sie aus, ist dieser Schalter aus. Gilt ab dem nächsten Sitzungsstart.",
+          undefined,
+          () => !this.store.settings().claudeExclusion,
+        ),
+        this.toggleField(
           "ideBridge", "IDE-Brücke für Claude-Sitzungen",
           "An: Claude-Sitzungen sehen die Auswahl und die offene Notiz in Obsidian und können Notizen öffnen. Aus: kein Server, kein Lockfile, keine Diffs. Wirkt für neu gestartete Sitzungen.",
           // Neu zeichnen: Der Schalter „Diffs in Obsidian zeigen“ hängt an diesem.

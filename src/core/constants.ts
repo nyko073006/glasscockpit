@@ -182,6 +182,10 @@ export const DEFAULT_FIXED_PROMPT = false;
 // Rechteabfragen überspringen (Abend 20, vorher fest an): an startet Claude mit --dangerously-skip-permissions und führt Befehle
 // ohne Rückfrage aus. Vorgabe aus; wirkt für neu gestartete Sitzungen.
 export const DEFAULT_SKIP_PERMISSIONS = false;
+/** Abend 33: Obsidians ausgeschlossene Dateien für Claude-Sitzungen sperren (13.10.2026: an, abschaltbar). */
+export const DEFAULT_CLAUDE_EXCLUSION = true;
+/** Abend 33: zusätzlich Claudes Sandbox, damit auch grep -r und Skripte scheitern; aus, weil sie Schreiben und Netz einschränkt. */
+export const DEFAULT_CLAUDE_EXCLUSION_SANDBOX = false;
 // Obsidian-Ansicht der Diffs (Abend 17).
 export const VIEW_TYPE_DIFF = `${PLUGIN_ID}-diff`;
 // Feste Technik-Invariante, keine Einstellung: Auswahländerungen kommen in dichter Folge (jede Cursorbewegung), Claude

@@ -26,6 +26,8 @@ export interface IdeBridgeDeps {
   /** Einstellungen, bei jeder Nutzung frisch gelesen. */
   settings: () => CockpitSettings;
   vaultBase: () => string | null;
+  /** Abend 33: Pfad (vault-relativ) ausgeschlossen? Bei jeder Meldung frisch gefragt; fehlt die Angabe, ist nichts ausgeschlossen. */
+  excluded?: (vaultPath: string) => boolean;
   /** pid der PTY dieser Sitzung (undefiniert, wenn es keine gibt). */
   ptyPid: (sessionId: string) => number | undefined;
   home: string;
@@ -89,7 +91,7 @@ export class IdeBridge {
           warn: (message) => console.warn(message),
         }),
     });
-    this.editor = new IdeEditor(app, deps.vaultBase, (params) => void this.server?.broadcast("selection_changed", params));
+    this.editor = new IdeEditor(app, deps.vaultBase, (params) => void this.server?.broadcast("selection_changed", params), (p) => deps.excluded?.(p) ?? false);
     this.debounced = createDebounce(() => this.editor.check(), IDE_SELECTION_DEBOUNCE_MS, {
       set: (callback, ms) => window.setTimeout(callback, ms),
       clear: (handle) => window.clearTimeout(handle as number),

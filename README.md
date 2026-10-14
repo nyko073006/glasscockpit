@@ -134,6 +134,16 @@ The switch "Rechteabfragen überspringen" is off by default.
 
 The switch applies to sessions started after you change it. Running sessions keep their mode.
 
+## Excluded files stay closed to Claude
+
+Files and folders listed in Obsidian under Settings → Files and links → Excluded files are blocked for every Claude session that Glasscockpit starts, whatever folder the session runs in. Claude can neither read nor edit them, including with `cat`. The plugin hands the rules to each session with `--settings`; your own Claude settings files stay untouched. A grey line at the start of a session says how many entries are blocked.
+
+- "Ausgeschlossene Dateien für Claude sperren" (on by default) turns this off.
+- Without the sandbox, shell commands that search a whole folder (`grep -r`, scripts) still read excluded files. "Auch Shell-Befehle sperren (Sandbox)" (off by default) runs sessions in Claude's sandbox, which blocks those too, except commands listed in `sandbox.excludedCommands` in your own Claude settings, which keep running outside the sandbox. In the sandbox Claude writes only inside the working folder and the temp folder, and network access needs approval.
+- Shell tabs and Claude sessions started outside Glasscockpit are not covered. Changes to the list apply to sessions started afterwards.
+- An entry that would need more than 500 single rules is not blocked; the grey line names it.
+- With the IDE bridge on, Claude does not get the path or the selection of an excluded note.
+
 ## Disclosures
 
 This follows the disclosure rules of the Obsidian developer policies.

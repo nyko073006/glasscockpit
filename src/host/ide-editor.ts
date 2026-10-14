@@ -6,53 +6,60 @@ import { type IdeHandlers, type SelectionParams, type ToolResult, fileUrl, jsonR
 // Gemeint ist nur der Markdown-Editor im Quell- oder Live-Vorschau-Modus (`getMode() === "source"`); die Leseansicht hat keine Auswahl.
 
 type Mention = { filePath: string; lineStart: number; lineEnd: number };
+/** Eine Auswahl samt vault-relativem Pfad ihrer Notiz (für die Ausschluss-Prüfung beim Herausgeben). */
+type Remembered = { params: SelectionParams; vaultPath: string };
 
 export class IdeEditor {
-  private latest: SelectionParams | null = null;
+  private latest: Remembered | null = null;
   private lastKey = "";
 
   private readonly app: App;
   private readonly vaultBase: () => string | null;
   private readonly emit: (params: SelectionParams) => void;
+  /** Abend 33: vault-relativer Pfad ausgeschlossen (Obsidians „Ausgeschlossene Dateien“, Einstellung claudeExclusion)? Dann sieht Claude die Notiz nicht. */
+  private readonly excluded: (vaultPath: string) => boolean;
 
   /** emit meldet eine geänderte Auswahl (selection_changed). */
-  constructor(app: App, vaultBase: () => string | null, emit: (params: SelectionParams) => void) {
+  constructor(app: App, vaultBase: () => string | null, emit: (params: SelectionParams) => void, excluded: (vaultPath: string) => boolean = () => false) {
     this.app = app;
     this.vaultBase = vaultBase;
     this.emit = emit;
+    this.excluded = excluded;
   }
 
-  /** Auswahl der aktiven Markdown-Ansicht; null, wenn gerade keine aktiv ist (etwa das Terminal im Vordergrund). */
+  /** Auswahl der aktiven Markdown-Ansicht; null, wenn gerade keine aktiv ist (etwa das Terminal im Vordergrund) oder ihre Notiz ausgeschlossen ist. */
   current(): SelectionParams | null {
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-    return view ? this.selectionOf(view) : null;
+    return this.activeSelection()?.params ?? null;
   }
 
+  /** Die gemerkte Auswahl; null, wenn ihre Notiz jetzt ausgeschlossen ist (geprüft beim Herausgeben, der Schalter kann dazwischen umspringen). */
   latestSelection(): SelectionParams | null {
-    return this.latest;
+    const latest = this.latest;
+    return latest && !this.excluded(latest.vaultPath) ? latest.params : null;
   }
 
   /** Auswahl prüfen und melden, wenn sie sich seit der letzten Meldung geändert hat. */
   check(): void {
-    const selection = this.current();
-    if (!selection) return;
+    const active = this.activeSelection();
+    if (!active) return;
+    const selection = active.params;
     const key = JSON.stringify([selection.filePath, selection.selection, selection.text]);
     if (key === this.lastKey) return;
     this.lastKey = key;
-    this.latest = selection;
+    this.latest = active;
     this.emit(selection);
   }
 
   /** Ziel für „Auswahl erwähnen“: die aktive Auswahl, sonst die letzte bekannte. */
   mention(): Mention | null {
-    const selection = this.current() ?? this.latest;
+    const selection = this.current() ?? this.latestSelection();
     return selection ? { filePath: selection.filePath, ...mentionLines(selection.selection) } : null;
   }
 
   handlers(): IdeHandlers {
     return {
       getCurrentSelection: () => selectionResult(this.current(), "No active editor found"),
-      getLatestSelection: () => selectionResult(this.latest, "No selection available"),
+      getLatestSelection: () => selectionResult(this.latestSelection(), "No selection available"),
       getOpenEditors: () => this.openEditors(),
       getWorkspaceFolders: () => this.workspaceFolders(),
       openFile: (file) => this.openFile(file.path),
@@ -70,19 +77,25 @@ export class IdeEditor {
     };
   }
 
-  private selectionOf(view: MarkdownView): SelectionParams | null {
+  private activeSelection(): Remembered | null {
+    const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+    return view ? this.selectionOf(view) : null;
+  }
+
+  private selectionOf(view: MarkdownView): Remembered | null {
     const file = view.file;
     const base = this.vaultBase();
-    if (!file || !base || view.getMode() !== "source") return null;
+    if (!file || !base || view.getMode() !== "source" || this.excluded(file.path)) return null;
     const editor = view.editor;
     const from = editor.getCursor("from");
     const to = editor.getCursor("to");
-    return selectionParams({
+    const params = selectionParams({
       filePath: `${base.replace(/\/+$/, "")}/${file.path}`,
       text: editor.getSelection(),
       start: { line: from.line, character: from.ch },
       end: { line: to.line, character: to.ch },
     });
+    return { params, vaultPath: file.path };
   }
 
   /** Alle geladenen Markdown-Ansichten (Hintergrund-Tabs sind noch DeferredView und fehlen hier). */
@@ -101,7 +114,7 @@ export class IdeEditor {
     const base = this.vaultBase()?.replace(/\/+$/, "") ?? "";
     const active = this.app.workspace.getActiveViewOfType(MarkdownView);
     const tabs = this.markdownViews()
-      .filter((view) => view.file)
+      .filter((view) => view.file && !this.excluded(view.file.path))
       .map((view) => ({
         uri: fileUrl(`${base}/${view.file?.path ?? ""}`),
         isActive: view === active,

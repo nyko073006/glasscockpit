@@ -34,6 +34,8 @@ export interface StartContext {
   skipPermissions: boolean;
   /** Startnachricht nur für diesen Start (Abend 19h). */
   prompt?: string;
+  /** Abend 33: Ausschluss für diese Sitzung (Regeln für --settings, graue Zeile); zum Startzeitpunkt berechnet, Shell-Tabs ignorieren ihn. */
+  exclusion?: { settings: Record<string, unknown>; notice: string | null };
 }
 
 /** Variablen der IDE-Brücke für Claude-Sitzungen; null, wenn sie aus ist oder nicht läuft. */
@@ -117,7 +119,7 @@ export class Launcher {
           resume: decision.resume,
           name: record.name,
           agentName: record.kind === "agent" ? record.agentName : undefined,
-          settings: hookSettings(),
+          settings: hookSettings(start.exclusion?.settings),
           effort: start.effort,
           skipPermissions: start.skipPermissions,
           prompt: start.prompt,
@@ -126,7 +128,7 @@ export class Launcher {
         env: buildEnv(process.env, env.dirs, env.lang, ide ?? undefined, start.fullscreen),
       },
       meta: { kind: "claude", title: tabTitle(record.name, decision.claudeId) },
-      notice: decision.notice,
+      notice: [decision.notice, start.exclusion?.notice].filter((n): n is string => !!n).join("\n") || null,
       adoptClaudeId: decision.adoptId,
       release: () => undefined,
     };
