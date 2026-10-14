@@ -6,6 +6,8 @@
 
 Glasscockpit ist ein Obsidian-Plugin. Es startet [Claude-Code](https://code.claude.com)-Sitzungen als Terminal-Tabs im Vault. Ein Dashboard zeigt Limits, Kontextgröße, Aufgaben, Vault-Lage und GitHub-Suchergebnisse, wahlweise als Karten oder als Cockpit-Bild. Das Foto oben zeigt Beispieldaten.
 
+Vorbild war das Plugin Agentic OS von skaile.de; Glasscockpit ist ein eigenständiger Nachbau mit eigenem Code.
+
 ## Voraussetzungen
 
 - macOS auf Apple Silicon. Intel-Macs sind ungetestet.
@@ -15,9 +17,9 @@ Glasscockpit ist ein Obsidian-Plugin. Es startet [Claude-Code](https://code.clau
 
 ## Installation
 
-**Weg A: ohne ZIP (BRAT, oder der Community-Store, sobald das Plugin dort steht).**
+**Weg A: ohne ZIP (Community-Plugins oder BRAT).**
 
-1. Plugin mit BRAT installieren (Repository `nyko073006/glasscockpit`) oder aus der Community-Plugin-Liste. Beide holen nur `main.js`, `manifest.json` und `styles.css`.
+1. Plugin aus der Community-Plugin-Liste in Obsidian installieren oder mit BRAT (Repository `nyko073006/glasscockpit`). Beide holen nur `main.js`, `manifest.json` und `styles.css`.
 2. Glasscockpit unter Einstellungen, Community-Plugins aktivieren.
 3. Einstellungen, Glasscockpit, Abschnitt „Binärdateien“, „Binärdateien laden“ drücken. Das Plugin lädt die Terminal-Bibliothek `node-pty` für deinen Mac einmalig herunter und prüft sie (siehe „Netzwerk“ unten). Danach eine Sitzung starten.
 
@@ -28,7 +30,7 @@ Glasscockpit ist ein Obsidian-Plugin. Es startet [Claude-Code](https://code.clau
 3. Den Ordner nach `<dein Vault>/.obsidian/plugins/` legen.
 4. In Obsidian unter Einstellungen, Community-Plugins, Glasscockpit aktivieren.
 
-Das Plugin steht noch nicht im Community-Store. In `native/` liegt die Terminal-Bibliothek `node-pty` als kompilierte Binärdatei (Weg B bringt sie mit, Weg A lädt sie). Beim ersten Start entfernt das Plugin für diesen Ordner das macOS-Quarantäne-Flag (`xattr`).
+In `native/` liegt die Terminal-Bibliothek `node-pty` als kompilierte Binärdatei (Weg B bringt sie mit, Weg A lädt sie). Beim ersten Start entfernt das Plugin für diesen Ordner das macOS-Quarantäne-Flag (`xattr`).
 
 **Woher die Dateien stammen.** Ab Version 0.3.6 tragen die Dateien jedes Releases eine GitHub-Attestierung, einen Herkunftsnachweis, dass sie aus diesem Repo veröffentlicht wurden. Eine geladene Datei prüfst du mit `gh attestation verify <Datei> --repo nyko073006/glasscockpit`. Gebaut wird lokal, nicht in GitHub Actions: Die Attestierung belegt, woher die Dateien veröffentlicht wurden, nicht wie sie gebaut wurden.
 
