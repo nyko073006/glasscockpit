@@ -107,6 +107,10 @@ export class CockpitSettingTab extends PluginSettingTab {
           "fileLinksClaudeDirs", "Relative Pfade auch in Claudes Ordnern suchen",
           "Liegt ein relativer Pfad nicht im Startordner, sucht das Cockpit ihn in den Ordnern, in denen Claude in dieser Sitzung gearbeitet hat (cd, gelesene und bearbeitete Dateien). Haben mehrere die Datei, gilt der, in dem Claude zuletzt gearbeitet hat.",
         ),
+        this.toggleField(
+          "clearLink", "/clear per Klick einfügen",
+          "Ein Klick auf /clear im Terminal einer Claude-Sitzung schreibt es in die Eingabezeile. Enter drückst du selbst.",
+        ),
         this.numberField(
           "fileViewerMaxMb", "Datei-Viewer: Höchstgröße (MB)",
           "Größere Dateien zeigt das Fenster nicht, nur einen Hinweis (1 bis 50).",

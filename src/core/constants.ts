@@ -167,6 +167,9 @@ export const DEFAULT_FILE_VIEWER_MAX_MB = 2;
 // Relative Pfade über Claudes Ordner (Abend 27b): an heißt, ein relativer Pfad, der im Startordner keine Datei ist, wird auch in den
 // Ordnern aus Claudes Werkzeugaufrufen dieser Sitzung gesucht (bei mehreren Treffern der Ordner, in dem Claude zuletzt gearbeitet hat).
 export const DEFAULT_FILE_LINKS_CLAUDE_DIRS = true;
+// Klick auf /clear (Abend 35): an heißt, ein freistehendes „/clear“ im Terminal einer Claude- oder Agent-Sitzung ist ein Link; ein
+// Klick schreibt „/clear “ (ohne Enter) in die Eingabezeile. Shell-Sitzungen haben nie einen.
+export const DEFAULT_CLEAR_LINK = true;
 // Datei-Viewer als Code-Editor (Abend 32): Die Vorschlagsliste öffnet beim Tippen von selbst; aus heißt nur per Ctrl+Leertaste.
 export const DEFAULT_FILE_VIEWER_AUTOCOMPLETE = true;
 // So viele Pfade aus Werkzeugaufrufen merkt sich ein Transkript-Leser (die ältesten fallen zuerst raus) und so viele Basisordner

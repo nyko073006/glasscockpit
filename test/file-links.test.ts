@@ -141,9 +141,17 @@ describe("Prüfungen", () => {
     expect(saveDecision(1000, 2000)).toBe("ask");
     expect(saveDecision(1000, null)).toBe("ask");
   });
-  it("öffnen nur mit Cmd", () => {
-    expect(opensOnClick({ metaKey: true })).toBe(true);
-    expect(opensOnClick({ metaKey: false })).toBe(false);
+  it("öffnen nur mit Cmd und linker Taste ohne Ctrl und Alt", () => {
+    const e = (extra: Partial<{ button: number; metaKey: boolean; ctrlKey: boolean; altKey: boolean }> = {}) =>
+      ({ button: 0, metaKey: true, ctrlKey: false, altKey: false, ...extra });
+    expect(opensOnClick(e())).toBe(true);
+    expect(opensOnClick(e({ metaKey: false }))).toBe(false);
+    // xterm ruft activate bei jedem mouseup auf demselben Link (Linkifier._handleMouseUp), welche Taste auch gedrückt war.
+    expect(opensOnClick(e({ button: 1 }))).toBe(false);
+    expect(opensOnClick(e({ button: 2 }))).toBe(false);
+    // Ctrl+Klick ist auf dem Mac das Kontextmenü; mit Alt schickt xterm (altClickMovesCursor) Cursor-Sequenzen in die PTY.
+    expect(opensOnClick(e({ ctrlKey: true }))).toBe(false);
+    expect(opensOnClick(e({ altKey: true }))).toBe(false);
   });
   it("Zeilenende der Datei bleibt erhalten", () => {
     expect(lineSeparatorOf("a\r\nb")).toBe("\r\n");

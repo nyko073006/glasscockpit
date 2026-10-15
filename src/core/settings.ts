@@ -3,7 +3,7 @@ import {
   DEFAULT_NOTIFY_ON_DONE, DEFAULT_NOTIFY_ON_QUESTION, DEFAULT_PROJECTS_ROOT, DEFAULT_SOUND_FILE, DEFAULT_QUIET_WHILE_AGENTS, DEFAULT_QUIET_MAX_AGE_MIN, DEFAULT_SHOW_OPEN_TASKS,
   DEFAULT_SKILL_BUTTONS, DEFAULT_TASKS_FILE, DEFAULT_RESUME_CONVERSATIONS, DEFAULT_REOPEN_AFTER_DISABLE, DEFAULT_FONT_SIZE, DEFAULT_SCROLLBACK, DEFAULT_MIN_CONTRAST,
   DEFAULT_TELEGRAM_CHAT_ID, DEFAULT_TELEGRAM_ENV_FILE, DEFAULT_TELEGRAM_IDLE_MIN, DEFAULT_TELEGRAM_ON_DONE, DEFAULT_TELEGRAM_ON_QUESTION,
-  DEFAULT_USAGE_POLL_SEC, DEFAULT_WRITE_TOKENS_FILE, DEFAULT_RESEARCH_SEARCHES, DEFAULT_RESEARCH_MAX_AGE_MIN, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF, DEFAULT_FILE_LINKS, DEFAULT_FILE_LINKS_CLAUDE_DIRS, DEFAULT_FILE_VIEWER_MAX_MB, DEFAULT_FILE_VIEWER_AUTOCOMPLETE, DEFAULT_FIXED_PROMPT, DEFAULT_SKIP_PERMISSIONS,
+  DEFAULT_USAGE_POLL_SEC, DEFAULT_WRITE_TOKENS_FILE, DEFAULT_RESEARCH_SEARCHES, DEFAULT_RESEARCH_MAX_AGE_MIN, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF, DEFAULT_FILE_LINKS, DEFAULT_FILE_LINKS_CLAUDE_DIRS, DEFAULT_CLEAR_LINK, DEFAULT_FILE_VIEWER_MAX_MB, DEFAULT_FILE_VIEWER_AUTOCOMPLETE, DEFAULT_FIXED_PROMPT, DEFAULT_SKIP_PERMISSIONS,
   DEFAULT_CLAUDE_EXCLUSION, DEFAULT_CLAUDE_EXCLUSION_SANDBOX,
   DASHBOARD_LAYOUTS, DEFAULT_DASHBOARD_LAYOUT, COCKPIT_CROPS, DEFAULT_COCKPIT_CROP,
   DEFAULT_CONTEXT_WARN, DEFAULT_CONTEXT_HANDOFF, DEFAULT_CLEARABLE_MIN_CONTEXT_PCT, DEFAULT_CLEARABLE_MIN_PROMPTS, DEFAULT_TOKENS_DAY_MEDIAN, DEFAULT_TOKENS_DAY_P90, DEFAULT_FOCUS_HEADING, DEFAULT_INBOX_DIR,
@@ -25,7 +25,7 @@ export interface CockpitSettings {
   tasksFile: string; skillButtons: number; usagePollSec: number; writeTokensFile: boolean;
   resumeConversations: boolean; fixedPrompt: boolean; skipPermissions: boolean; claudeExclusion: boolean; claudeExclusionSandbox: boolean; fontSize: number; scrollback: number; minimumContrast: number;
   ideBridge: boolean; ideDiff: boolean; handoffPrefix: string;
-  fileLinks: boolean; fileLinksClaudeDirs: boolean; fileViewerMaxMb: number; fileViewerAutocomplete: boolean;
+  fileLinks: boolean; fileLinksClaudeDirs: boolean; clearLink: boolean; fileViewerMaxMb: number; fileViewerAutocomplete: boolean;
   telegramOnDone: boolean; telegramOnQuestion: boolean; telegramEnvFile: string; telegramChatId: string; telegramIdleMin: number;
   researchSearches: string; researchMaxAgeMin: number;
   dashboardLayout: DashboardLayout;
@@ -71,6 +71,7 @@ export const DEFAULT_SETTINGS: CockpitSettings = {
   ideDiff: DEFAULT_IDE_DIFF,
   fileLinks: DEFAULT_FILE_LINKS,
   fileLinksClaudeDirs: DEFAULT_FILE_LINKS_CLAUDE_DIRS,
+  clearLink: DEFAULT_CLEAR_LINK,
   fileViewerMaxMb: DEFAULT_FILE_VIEWER_MAX_MB,
   fileViewerAutocomplete: DEFAULT_FILE_VIEWER_AUTOCOMPLETE,
   handoffPrefix: DEFAULT_HANDOFF_PREFIX,
@@ -216,6 +217,7 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   ideDiff: flag,
   fileLinks: flag,
   fileLinksClaudeDirs: flag,
+  clearLink: flag,
   fileViewerMaxMb: intIn(...RANGES.fileViewerMaxMb),
   fileViewerAutocomplete: flag,
   // Leer erlaubt (Knopf aus); sonst jeder Text. Das Präfix wird nur am Anfang der ersten nichtleeren Zeile eines Blocks verglichen.

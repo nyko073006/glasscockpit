@@ -31,7 +31,11 @@ function setup(lines: CellRow[], files: string[], opts: { enabled?: boolean; cwd
   };
   return { provider, links, open, isFile, bases };
 }
-const click = (meta: boolean) => ({ metaKey: meta, preventDefault: vi.fn() }) as unknown as MouseEvent;
+/** Mausereignis wie beim mouseup: linke Taste (button 0) ohne Ctrl und Alt, wenn nichts anderes verlangt ist. */
+const click = (meta: boolean, extra: { button?: number; ctrlKey?: boolean; altKey?: boolean } = {}) =>
+  ({ button: 0, ctrlKey: false, altKey: false, metaKey: meta, ...extra, preventDefault: vi.fn() }) as unknown as MouseEvent & {
+    preventDefault: ReturnType<typeof vi.fn>;
+  };
 
 describe("FileLinkProvider", () => {
   it("existierende Datei wird Link mit Bereich in Zellen", () => {
@@ -50,6 +54,22 @@ describe("FileLinkProvider", () => {
     expect(open).not.toHaveBeenCalled();
     link?.activate(click(true), link.text);
     expect(open).toHaveBeenCalledWith({ path: "/Users/n/a.md", line: 3, col: 2 });
+  });
+  // xterm ruft activate bei jedem mouseup auf demselben Link (Linkifier._handleMouseUp), welche Taste auch gedrückt war.
+  it.each([
+    ["Cmd+Mittelklick", { button: 1 }],
+    ["Cmd+Rechtsklick (Kontextmenü)", { button: 2 }],
+    ["Cmd+Ctrl+Linksklick (auf dem Mac das Kontextmenü)", { button: 0, ctrlKey: true }],
+    // Mit Alt schickt xterms SelectionService._handleMouseUp (altClickMovesCursor, Vorgabe an) nach dem mouseup Cursor-Sequenzen.
+    ["Cmd+Alt+Linksklick", { button: 0, altKey: true }],
+  ])("%s öffnet nicht und lässt das Ereignis unberührt", (_name, extra) => {
+    const { links, open } = setup([rowOf("~/a.md:3:2")], ["/Users/n/a.md"]);
+    const link = links(1)?.[0];
+    expect(link).toBeDefined();
+    const event = click(true, extra);
+    link?.activate(event, link.text);
+    expect(open).not.toHaveBeenCalled();
+    expect(event.preventDefault).not.toHaveBeenCalled();
   });
   it("umgebrochener Pfad ist auch aus der zweiten Zeile ganz klickbar", () => {
     const { links } = setup([rowOf("/abs/lan"), rowOf("g.md ok", true)], ["/abs/lang.md"]);

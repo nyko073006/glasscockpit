@@ -184,6 +184,11 @@ export class TerminalPane {
     return line ? bufferRowOf(line, this.term.cols) : null;
   }
 
+  /** Ist im Terminal gerade Text markiert? (Klick auf /clear, Abend 35: nach dem Ziehen im Wort fügt xterms Linkklick nichts ein.) */
+  hasSelection(): boolean {
+    return !this.disposed && this.term.hasSelection();
+  }
+
   /** Maße nach dem letzten tauglichen fit(), sonst null. */
   fittedSize(): Dimensions | null {
     if (this.disposed || this.lastReported === null) return null;

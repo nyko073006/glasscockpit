@@ -1,6 +1,7 @@
 import { ItemView, type Menu, Notice, type ViewStateResult, type WorkspaceLeaf } from "obsidian";
 import { ATTENTION_OSC, type AttentionSignal, bannerText, claudeIdChange, doneIsQuiet, markedTitle, parseSignal, react, repeatsQuestion } from "../core/attention";
 import type { ActivitySignal } from "../core/session-activity";
+import { CLEAR_INSERT } from "../core/clear-link";
 import { CSS_PREFIX, DIAG_SNAPSHOT_MS, TRANSCRIPT_POLL_MS, VIEW_TYPE_TERMINAL } from "../core/constants";
 import type { PaneProbe, ViewDiagnosis } from "../core/diagnose";
 import { classifyLoadError } from "../core/load-error";
@@ -22,6 +23,7 @@ import type { NodePtyFactory } from "./pty-factory";
 import { RenameModal } from "./rename-modal";
 import type { TerminalOptions } from "../core/terminal-options";
 import { TerminalPane } from "./terminal-pane";
+import { ClearLinkProvider } from "./clear-link";
 import { FileLinkProvider, type LinkTarget } from "./file-links";
 import { isFileSync } from "./file-viewer-fs";
 import { TranscriptReader, type TranscriptResult } from "./transcript-reader";
@@ -106,6 +108,7 @@ export class TerminalView extends ItemView {
   private unbindRecords: (() => void) | null = null;
   private unbindSettings: (() => void) | null = null;
   private unbindLinks: (() => void) | null = null;
+  private unbindClearLink: (() => void) | null = null;
   // Benachrichtigung (nur Claude-Sitzungen).
   private attention: AttentionSignal | null = null;
   // Erst nach dem Parsen des Replays scharf: Der Ring-Puffer enthält alte Signale.
@@ -241,6 +244,24 @@ export class TerminalView extends ItemView {
         open: (target) => this.deps.openPath(target, () => this.pane?.focus()),
       }),
     );
+    // Klick auf /clear (Abend 35), erst nach dem Provider der Pfade: bei Überlappung gewinnt der früher registrierte (xterm
+    // _removeIntersectingLinks). Einstellung und Sitzungsart bei jeder Abfrage frisch; nur Claude und Agent, nie Shell.
+    this.unbindClearLink = pane.registerLinkProvider(
+      new ClearLinkProvider({
+        row: (y) => pane.bufferRow(y),
+        enabled: () => {
+          const kind = this.sessionId ? this.deps.record(this.sessionId)?.kind : undefined;
+          return this.deps.settings().clearLink && kind !== undefined && kind !== "shell";
+        },
+        hasSelection: () => pane.hasSelection(),
+        // Wie Tippen in die PTY der angeklickten Sitzung (SessionHandle dieser View), nicht über das Ziel der jüngsten Sitzung
+        // (sendToActive): ein Klick in einem Split gehört dem Split, in dem geklickt wurde.
+        insert: () => {
+          this.handle?.write(CLEAR_INSERT);
+          this.pane?.focus();
+        },
+      }),
+    );
     // Schriftgröße und Scrollback wirken sofort auf offene Panes; ein leeres Handoff-Präfix blendet den festen Knopf sofort aus.
     // Höchstalter und Anzeige der Hintergrundaufgaben (Abend 28) wirken sofort auf den Tab-Titel.
     this.unbindSettings = this.deps.onSettingsChange(() => {
@@ -291,6 +312,8 @@ export class TerminalView extends ItemView {
     this.unbindSettings = null;
     this.unbindLinks?.();
     this.unbindLinks = null;
+    this.unbindClearLink?.();
+    this.unbindClearLink = null;
     this.pane?.dispose();
     this.pane = null;
     this.bar?.remove();

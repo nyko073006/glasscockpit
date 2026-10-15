@@ -333,6 +333,21 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "control": "extra",
   },
   {
+    "name": "/clear per Klick einfügen",
+  },
+  {
+    "desc": "Ein Klick auf /clear im Terminal einer Claude-Sitzung schreibt es in die Eingabezeile. Enter drückst du selbst.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
     "name": "Datei-Viewer: Höchstgröße (MB)",
   },
   {

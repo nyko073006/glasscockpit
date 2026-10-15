@@ -288,9 +288,25 @@ export function saveDecision(openedMtimeMs: number, currentMtimeMs: number | nul
   return currentMtimeMs === openedMtimeMs ? "write" : "ask";
 }
 
-/** Nur Cmd+Klick öffnet; ein einfacher Klick markiert weiter Text. Die Taste selbst prüfen (xterm hält Obsidian nicht für Mac). */
-export function opensOnClick(event: { metaKey: boolean }): boolean {
-  return event.metaKey;
+export interface ClickKeys {
+  button: number;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  altKey: boolean;
+}
+
+/**
+ * Linke Taste ohne Ctrl und Alt. xterm ruft activate eines Links bei jedem mouseup auf demselben Link
+ * (Linkifier._handleMouseUp), auch bei Mittel- und Rechtsklick; Ctrl+Klick ist auf dem Mac das Kontextmenü; mit Alt schickt
+ * xterms SelectionService._handleMouseUp (altClickMovesCursor, Vorgabe an) nach dem mouseup Cursor-Sequenzen in die PTY.
+ */
+export function plainLeftClick(event: ClickKeys): boolean {
+  return event.button === 0 && !event.ctrlKey && !event.altKey;
+}
+
+/** Nur Cmd+Linksklick öffnet; ein einfacher Klick markiert weiter Text. Die Taste selbst prüfen (xterm hält Obsidian nicht für Mac). */
+export function opensOnClick(event: ClickKeys): boolean {
+  return plainLeftClick(event) && event.metaKey;
 }
 
 /** Zeilenende der Datei, damit Speichern CRLF nicht still in LF verwandelt. */
