@@ -108,6 +108,10 @@ export class CockpitSettingTab extends PluginSettingTab {
           "Liegt ein relativer Pfad nicht im Startordner, sucht das Cockpit ihn in den Ordnern, in denen Claude in dieser Sitzung gearbeitet hat (cd, gelesene und bearbeitete Dateien). Haben mehrere die Datei, gilt der, in dem Claude zuletzt gearbeitet hat.",
         ),
         this.toggleField(
+          "fileLinksSpaces", "Pfade mit Leerzeichen erkennen",
+          "Ein Pfad mit Leerzeichen im Namen wird ganz zum Link, wenn es die Datei gibt: in Anführungszeichen immer, sonst über einzelne Leerzeichen verlängert (höchstens 16 Wörter; relative Pfade nur gegen den Startordner der Sitzung, nicht gegen Claudes Ordner). Aus: Ein Pfad endet am ersten Leerzeichen. Wirkt sofort.",
+        ),
+        this.toggleField(
           "clearLink", "/clear per Klick einfügen",
           "Ein Klick auf /clear im Terminal einer Claude-Sitzung schreibt es in die Eingabezeile. Enter drückst du selbst.",
         ),

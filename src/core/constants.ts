@@ -167,6 +167,9 @@ export const DEFAULT_FILE_VIEWER_MAX_MB = 2;
 // Relative Pfade über Claudes Ordner (Abend 27b): an heißt, ein relativer Pfad, der im Startordner keine Datei ist, wird auch in den
 // Ordnern aus Claudes Werkzeugaufrufen dieser Sitzung gesucht (bei mehreren Treffern der Ordner, in dem Claude zuletzt gearbeitet hat).
 export const DEFAULT_FILE_LINKS_CLAUDE_DIRS = true;
+// Pfade mit Leerzeichen (Abend 38): an heißt, ein Pfad mit Leerzeichen im Namen wird ganz zum Link, wenn es die Datei gibt (in Anführungszeichen
+// immer, sonst über einzelne Leerzeichen verlängert); aus heißt, Pfade enden am ersten Leerzeichen wie bisher.
+export const DEFAULT_FILE_LINKS_SPACES = true;
 // Klick auf /clear (Abend 35): an heißt, ein freistehendes „/clear“ im Terminal einer Claude- oder Agent-Sitzung ist ein Link; ein
 // Klick schreibt „/clear “ (ohne Enter) in die Eingabezeile. Shell-Sitzungen haben nie einen.
 export const DEFAULT_CLEAR_LINK = true;

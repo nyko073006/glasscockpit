@@ -49,7 +49,7 @@ vi.mock("../src/host/terminal-pane", () => ({
   },
 }));
 vi.mock("../src/host/file-links", () => ({ FileLinkProvider: class {} }));
-vi.mock("../src/host/file-viewer-fs", () => ({ isFileSync: () => false }));
+vi.mock("../src/host/file-viewer-fs", () => ({ isDirSync: () => false, isFileSync: () => false }));
 vi.mock("../src/host/rename-modal", () => ({ RenameModal: class {} }));
 
 const { TerminalView } = await import("../src/host/terminal-view");

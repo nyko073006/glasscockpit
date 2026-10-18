@@ -22,6 +22,24 @@ const LETTER = /\p{L}/u;
 /** Höchstzahl umgebrochener Teilzeilen, die zu einer logischen Zeile zusammengefügt werden. */
 const MAX_WRAPPED_ROWS = 50;
 
+/** Ein Token ohne :zeile[:spalte]: path, klickbarer text (mit Zeile, wenn eine da ist), Zeile und Spalte. */
+interface ParsedToken { path: string; text: string; line: number | null; col: number | null }
+
+/** Zerlegt ein Token (Satzzeichen hinten schon ab) in Pfad und :zeile[:spalte]; text ist immer ein Anfangsstück des Tokens. */
+function parseToken(token: string): ParsedToken {
+  const suffix = LINE_SUFFIX.exec(token);
+  if (!suffix) return { path: token, text: token, line: null, col: null };
+  const path = token.slice(0, suffix.index);
+  const l = Number(suffix[1]);
+  const c = suffix[2] === undefined ? 0 : Number(suffix[2]);
+  if (l <= 0) return { path, text: path, line: null, col: null };
+  const col = c > 0 ? c : null;
+  return { path, text: col === null ? `${path}:${l}` : token, line: l, col };
+}
+
+/** Ein Pfad enthält einen Buchstaben und einen Schrägstrich oder Punkt (also auch `package.json`). */
+const isPathLike = (path: string): boolean => LETTER.test(path) && /[/.]/.test(path);
+
 /**
  * Pfadkandidaten einer Zeile, in Reihenfolge. Ein Kandidat enthält einen Buchstaben und einen Schrägstrich oder Punkt
  * (also auch `package.json`), ist keine URL; ein `@` vorn (Erwähnung) und Satzzeichen hinten gehören nicht dazu.
@@ -38,22 +56,8 @@ export function pathCandidates(line: string): PathCandidate[] {
       start++;
     }
     token = token.replace(TRAILING, "");
-    let path = token;
-    let text = token;
-    let lineNo: number | null = null;
-    let col: number | null = null;
-    const suffix = LINE_SUFFIX.exec(token);
-    if (suffix) {
-      path = token.slice(0, suffix.index);
-      const l = Number(suffix[1]);
-      const c = suffix[2] === undefined ? 0 : Number(suffix[2]);
-      if (l > 0) {
-        lineNo = l;
-        col = c > 0 ? c : null;
-        text = col === null ? `${path}:${l}` : token;
-      } else text = path;
-    }
-    if (!LETTER.test(path) || !/[/.]/.test(path)) continue;
+    const { path, text, line: lineNo, col } = parseToken(token);
+    if (!isPathLike(path)) continue;
     result.push({ start, end: start + text.length, text, path, line: lineNo, col });
   }
   return result;
@@ -269,6 +273,202 @@ export function logicalLine(y: number, row: (y: number) => CellRow | null, hard 
       text += chars;
       for (let k = 0; k < chars.length; k++) positions.push({ x: i + 1, y: ry });
     });
+  }
+  return { text, positions };
+}
+
+// Pfade mit Leerzeichen (Abend 38): TOKEN trennt an Leerraum, ein Pfad wie `02 Projekte/x y.md` zerfiele in lauter Wörter, die es
+// nicht gibt. Drei Hilfen, alle rein; ob ein Pfad existiert, fragen sie über eingespeiste Prüfungen (der host liefert statSync).
+
+/** Wie viele Wörter ein Pfad ohne Anführungszeichen höchstens hat (Startwort eingerechnet). */
+export const MAX_PATH_WORDS = 16;
+/** Wie viele Datei- und Ordnerprüfungen die Verlängerung je Abfrage (provideLinks) höchstens macht; jede kostet ein statSync. */
+export const MAX_PATH_PROBES = 200;
+/** Wie viele Pufferzeilen über und unter der gefragten Zeile eine Wortnaht noch verbindet (wordLine). */
+export const WORD_SEAM_ROWS = 2;
+
+// Inhalt zwischen gleichen Anführungszeichen. Das einfache nur, wenn davor und dahinter kein Buchstabe und keine Ziffer steht:
+// sonst klammerte der Apostroph in `it's … 'x'` ein Stück Prosa ein und verschöbe alle folgenden Paare.
+const QUOTED = /"([^"\n]+)"|(?<![\p{L}\p{N}])'([^'\n]+)'(?![\p{L}\p{N}])|`([^`\n]+)`/gu;
+
+/**
+ * Zusätzliche Kandidaten aus Anführungszeichen: der ganze Inhalt zwischen `"…"`, `'…'` oder `` `…` `` ist ein Pfad, wenn er
+ * Leerraum enthält (ohne Leerraum liefert pathCandidates ihn schon), keine URL ist und wie jeder Kandidat einen Buchstaben und
+ * einen Schrägstrich oder Punkt hat. `:zeile[:spalte]` am Ende gilt; Satzzeichen im Inhalt werden nicht abgeschnitten, die
+ * Anführung sagt, wo der Pfad endet. Ein `@` vor dem öffnenden Zeichen stört nicht, es liegt außerhalb.
+ */
+export function quotedCandidates(line: string): PathCandidate[] {
+  const result: PathCandidate[] = [];
+  for (const match of line.matchAll(QUOTED)) {
+    const inner = match[1] ?? match[2] ?? match[3];
+    if (!/\s/.test(inner) || inner.includes("://")) continue;
+    const start = (match.index ?? 0) + 1;
+    const { path, text, line: lineNo, col } = parseToken(inner);
+    if (!isPathLike(path)) continue;
+    result.push({ start, end: start + text.length, text, path, line: lineNo, col });
+  }
+  return result;
+}
+
+/** pathCandidates und quotedCandidates zusammen, nach start aufsteigend, bei gleichem start der längere zuerst (sonst gewänne ein Wort im Inneren). */
+export function candidatesWithQuotes(line: string): PathCandidate[] {
+  return [...pathCandidates(line), ...quotedCandidates(line)].sort((a, b) => a.start - b.start || b.end - a.end);
+}
+
+/**
+ * Zählt die Datei- und Ordnerprüfungen einer Abfrage herunter und merkt sich ihre Antworten: Dieselbe Prüfung kostet nur einmal
+ * (die Ordnerprüfung vor `a b` und vor `a b c` ist dieselbe). Ist das Budget leer, gibt probe undefined zurück.
+ */
+export class ProbeBudget {
+  private left: number;
+  private readonly seen = new Map<string, boolean>();
+
+  constructor(max = MAX_PATH_PROBES) {
+    this.left = max;
+  }
+
+  /** Antwort von fn für key: aus dem Gedächtnis (kostenlos) oder frisch (kostet eine Prüfung); undefined, wenn nichts mehr übrig ist. */
+  probe(key: string, fn: () => boolean): boolean | undefined {
+    const known = this.seen.get(key);
+    if (known !== undefined) return known;
+    if (this.left <= 0) return undefined;
+    this.left--;
+    const result = fn();
+    this.seen.set(key, result);
+    return result;
+  }
+}
+
+export interface ExtendContext {
+  home: string;
+  /** Startordner der Sitzung; relative Pfade gelten nur gegen ihn (nie gegen Claudes Ordner), ohne ihn gibt es für sie nichts zu prüfen. */
+  cwd: string | null;
+  isFile: (abs: string) => boolean;
+  isDir: (abs: string) => boolean;
+  budget: ProbeBudget;
+  /** Liegt der Textbereich [start, end) schon in einem Link? Dann entfällt der Start vor jeder Prüfung. */
+  covered?: (start: number, end: number) => boolean;
+  /** Starts ab diesem Textindex entfallen: Sie können die gefragte Zeile nicht mehr berühren. */
+  until?: number;
+}
+
+/** Ein verlängerter Kandidat samt dem absoluten Pfad, dessen Existenz schon geprüft ist. */
+export interface ExtendedCandidate extends PathCandidate { abs: string }
+
+const DOTTED = /\.[\p{L}\p{N}]/u;
+const ALNUM = /[\p{L}\p{N}]/u;
+
+/**
+ * Pfade mit Leerzeichen ohne Anführungszeichen. Jedes Wort ist ein Start; von dort wird über genau ein Leerzeichen zwischen zwei
+ * Wörtern verlängert, höchstens MAX_PATH_WORDS Wörter, und der LÄNGSTE Pfad genommen, den es als Datei gibt (Text danach gehört
+ * nicht dazu). Je Schritt gelten Satzzeichen hinten und :zeile[:spalte] am Ende des verlängerten Textes. Enthält der Text einen
+ * Schrägstrich, muss sein Ordnerteil (bis zum letzten Schrägstrich) ein Ordner sein, sonst endet dieser Start: Jeder längere Text
+ * hat diesen Ordnerteil als Vorfahren. Eine Datei wird geprüft, wenn ein Schrägstrich im Text steht oder (ohne) das letzte Wort
+ * einen Punkt und danach Buchstabe oder Ziffer hat. Ob schon das Startwort allein eine Datei ist, prüft nicht diese Funktion: Der
+ * host prüft zuerst die einzelnen Wörter, und was dort Link wurde, meldet covered. Ist das Budget leer, endet alles; was bis dahin
+ * gefunden ist, bleibt.
+ */
+export function extendCandidates(line: string, ctx: ExtendContext): ExtendedCandidate[] {
+  const words = [...line.matchAll(TOKEN)].map((m) => ({ start: m.index ?? 0, end: (m.index ?? 0) + m[0].length }));
+  const result: ExtendedCandidate[] = [];
+  const taken = (s: number, e: number): boolean => result.some((r) => s < r.end && e > r.start) || (ctx.covered?.(s, e) ?? false);
+  const resolveCtx = { home: ctx.home, cwd: ctx.cwd };
+  const until = ctx.until ?? Infinity;
+  let stopped = false;
+  for (let i = 0; i < words.length - 1 && !stopped; i++) {
+    let s = words[i].start;
+    while (s < words[i].end && line[s] === "@") s++;
+    if (s >= until) break;
+    const first = line.slice(s, words[i].end);
+    if (!ALNUM.test(first) || first.includes("://") || taken(s, words[i].end)) continue;
+    let best: ExtendedCandidate | null = null;
+    for (let k = i + 1; k < words.length && k - i < MAX_PATH_WORDS; k++) {
+      if (line.slice(words[k - 1].end, words[k].start) !== " ") break;
+      const { path, text, line: lineNo, col } = parseToken(line.slice(s, words[k].end).replace(TRAILING, ""));
+      if (path.includes("/")) {
+        const cut = path.lastIndexOf("/");
+        const dir = cut === 0 ? "/" : path.slice(0, cut);
+        const absDir = dir === "~" ? ctx.home : resolveCandidatePath(dir, resolveCtx);
+        if (!absDir) break;
+        const isDir = ctx.budget.probe(`d:${absDir}`, () => ctx.isDir(absDir));
+        if (isDir === undefined) stopped = true;
+        if (!isDir) break;
+      } else if (!DOTTED.test(line.slice(words[k].start, words[k].end))) continue;
+      const abs = resolveCandidatePath(path, resolveCtx);
+      if (!abs) continue;
+      const isFile = ctx.budget.probe(`f:${abs}`, () => ctx.isFile(abs));
+      if (isFile === undefined) stopped = true;
+      if (isFile) best = { start: s, end: s + text.length, text, path, line: lineNo, col, abs };
+      if (stopped) break;
+    }
+    if (best) result.push(best);
+  }
+  return result;
+}
+
+/** Naht zwischen zwei Pufferzeilen für wordLine: soft (xterm hat umgebrochen), hard (obere Zeile voll), word (obere Zeile endet vor dem Rand, beide haben Text). */
+function wordSeam(upper: CellRow | null, lower: CellRow | null): "soft" | "hard" | "word" | null {
+  if (!upper || !lower) return null;
+  if (lower.isWrapped) return "soft";
+  const hasText = (r: CellRow): boolean => r.cells.some((c) => c.chars.trim() !== "");
+  if (!hasText(upper) || !hasText(lower)) return null;
+  return rowIsFull(upper) ? "hard" : "word";
+}
+
+/**
+ * Logische Zeile für Pfade mit Leerzeichen. Wie logicalLine mit hard (xterm-Umbruch ohne Zeichen, volle Zeile ohne Zeichen und
+ * ohne Einrückung der unteren), dazu die Wortnaht: Claude Code bricht Prosa selbst an Leerzeichen um (echter Zeilenumbruch plus
+ * Einrückung, xterm setzt kein isWrapped). Eine Wortnaht verbindet mit genau einem Leerzeichen, die obere Zeile ohne Leerzeichen
+ * am Ende, die untere ohne Einrückung, nur bis WORD_SEAM_ROWS Zeilen über und unter y; leere Zeilen verbinden nie. Das Leerzeichen
+ * bekommt die Zelle hinter dem letzten Zeichen der oberen Zeile (höchstens die letzte Spalte) und ist nie Anfang oder Ende eines
+ * Links. Xterm-Umbrüche und volle Zeilen verbinden unbegrenzt (bis MAX_WRAPPED_ROWS wie bei logicalLine), sonst gehörte ein weich
+ * umgebrochener Absatz nur halb dazu. Eine volle Zeile ist mehrdeutig: Hat Claude ein zu langes Wort selbst gebrochen, fehlt kein
+ * Zeichen; ist ein Wort zufällig genau bis zum Rand gegangen und das Leerzeichen dahinter dem Umbruch zum Opfer gefallen, fehlt
+ * eins. Mit fullAsSpace gilt Letzteres; der host fragt beide Fassungen.
+ */
+export function wordLine(y: number, row: (y: number) => CellRow | null, fullAsSpace = false): LogicalLine | null {
+  const cache = new Map<number, CellRow | null>();
+  const get = (r: number): CellRow | null => {
+    if (!cache.has(r)) cache.set(r, row(r));
+    return cache.get(r) ?? null;
+  };
+  if (!get(y)) return null;
+  const seamAbove = (r: number) => wordSeam(get(r - 1), get(r));
+  let top = y;
+  while (top > 1 && y - top < MAX_WRAPPED_ROWS) {
+    const kind = seamAbove(top);
+    if (kind === null || (kind === "word" && y - (top - 1) > WORD_SEAM_ROWS)) break;
+    top--;
+  }
+  let bottom = y;
+  while (bottom - top < MAX_WRAPPED_ROWS) {
+    const kind = seamAbove(bottom + 1);
+    if (kind === null || (kind === "word" && bottom + 1 - y > WORD_SEAM_ROWS)) break;
+    bottom++;
+  }
+  let text = "";
+  const positions: BufferPos[] = [];
+  for (let ry = top; ry <= bottom; ry++) {
+    const cells = get(ry)?.cells ?? [];
+    const above = ry > top ? seamAbove(ry) : null;
+    const below = ry < bottom ? seamAbove(ry + 1) : null;
+    const spaceBelow = below === "word" || (fullAsSpace && below === "hard");
+    let last = cells.length - 1;
+    if (spaceBelow) while (last >= 0 && (cells[last].width === 0 || cells[last].chars.trim() === "")) last--;
+    let skipIndent = above === "hard" || above === "word";
+    for (let i = 0; i <= last; i++) {
+      const cell = cells[i];
+      if (cell.width === 0) continue;
+      const chars = cell.chars === "" ? " " : cell.chars;
+      if (skipIndent && chars.trim() === "") continue;
+      skipIndent = false;
+      text += chars;
+      for (let k = 0; k < chars.length; k++) positions.push({ x: i + 1, y: ry });
+    }
+    if (spaceBelow) {
+      text += " ";
+      positions.push({ x: Math.min(last + (cells[last]?.width ?? 1) + 1, cells.length), y: ry });
+    }
   }
   return { text, positions };
 }

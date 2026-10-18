@@ -24,7 +24,7 @@ vi.mock("../src/host/attention-alert", () => ({ playSound: vi.fn(), showBanner: 
 vi.mock("../src/host/code-block-bar", () => ({ CodeBlockBar: class {}, copyCodeBlock: vi.fn() }));
 vi.mock("../src/host/terminal-pane", () => ({ TerminalPane: class {} }));
 vi.mock("../src/host/file-links", () => ({ FileLinkProvider: class {} }));
-vi.mock("../src/host/file-viewer-fs", () => ({ isFileSync: () => false }));
+vi.mock("../src/host/file-viewer-fs", () => ({ isDirSync: () => false, isFileSync: () => false }));
 vi.mock("../src/host/rename-modal", () => ({ RenameModal: class {} }));
 
 const { TerminalView } = await import("../src/host/terminal-view");

@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, s
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { isFileSync, loadFile, saveFile } from "../src/host/file-viewer-fs";
+import { isDirSync, isFileSync, loadFile, saveFile } from "../src/host/file-viewer-fs";
 
 let dir = "";
 beforeEach(() => {
@@ -28,6 +28,18 @@ describe("isFileSync: nur existierende Dateien sind Links", () => {
     expect(isFileSync(p)).toBe(true);
     expect(isFileSync(join(dir, "ordner"))).toBe(false);
     expect(isFileSync(join(dir, "gibt-es-nicht.md"))).toBe(false);
+  });
+});
+
+describe("isDirSync: nur existierende Ordner, für Pfade mit Leerzeichen (Abend 38)", () => {
+  it("Ordner (auch mit Leerzeichen) und Symlink auf einen Ordner ja, Datei nein, fehlend nein", () => {
+    const p = file("a.md", "x");
+    mkdirSync(join(dir, "mein ordner"));
+    symlinkSync(join(dir, "mein ordner"), join(dir, "verweis"));
+    expect(isDirSync(join(dir, "mein ordner"))).toBe(true);
+    expect(isDirSync(join(dir, "verweis"))).toBe(true);
+    expect(isDirSync(p)).toBe(false);
+    expect(isDirSync(join(dir, "gibt-es-nicht"))).toBe(false);
   });
 });
 

@@ -333,6 +333,21 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "control": "extra",
   },
   {
+    "name": "Pfade mit Leerzeichen erkennen",
+  },
+  {
+    "desc": "Ein Pfad mit Leerzeichen im Namen wird ganz zum Link, wenn es die Datei gibt: in Anführungszeichen immer, sonst über einzelne Leerzeichen verlängert (höchstens 16 Wörter; relative Pfade nur gegen den Startordner der Sitzung, nicht gegen Claudes Ordner). Aus: Ein Pfad endet am ersten Leerzeichen. Wirkt sofort.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
     "name": "/clear per Klick einfügen",
   },
   {

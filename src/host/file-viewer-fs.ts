@@ -22,6 +22,15 @@ export function isFileSync(path: string): boolean {
   }
 }
 
+/** Existiert der Pfad als Ordner (Symlinks folgend)? Nur für die Verlängerung von Pfaden mit Leerzeichen (Abend 38). */
+export function isDirSync(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 /** Datei fürs Fenster: zu groß, binär (NUL in den ersten 8 KB) und ungültiges UTF-8 ergeben einen Hinweis statt Inhalt. */
 export async function loadFile(path: string, maxMb: number): Promise<LoadResult> {
   try {

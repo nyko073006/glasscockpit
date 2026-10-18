@@ -25,7 +25,7 @@ import type { TerminalOptions } from "../core/terminal-options";
 import { TerminalPane } from "./terminal-pane";
 import { ClearLinkProvider } from "./clear-link";
 import { FileLinkProvider, type LinkTarget } from "./file-links";
-import { isFileSync } from "./file-viewer-fs";
+import { isDirSync, isFileSync } from "./file-viewer-fs";
 import { TranscriptReader, type TranscriptResult } from "./transcript-reader";
 
 /** Was die View vom Plugin bekommt. Die Sitzungen gehören dem Plugin, nicht der View. */
@@ -241,6 +241,9 @@ export class TerminalView extends ItemView {
         // Relative Pfade auch in Claudes Ordnern (Abend 27b): Schalter und Ordner des aktuellen Lesers (neue Claude-ID = neuer Leser).
         claudeDirs: () => this.deps.settings().fileLinksClaudeDirs,
         bases: () => this.reader?.linkBases() ?? [],
+        // Pfade mit Leerzeichen (Abend 38): Ordnerprüfung für die Verlängerung, Schalter bei jeder Abfrage frisch.
+        isDir: isDirSync,
+        spaces: () => this.deps.settings().fileLinksSpaces,
         open: (target) => this.deps.openPath(target, () => this.pane?.focus()),
       }),
     );

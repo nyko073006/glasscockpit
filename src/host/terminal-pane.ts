@@ -8,11 +8,13 @@ import {
 } from "../core/constants";
 import { type FoundLine, firstNonEmptyLine } from "../core/diagnose";
 import { bufferRowOf, type CellRow } from "../core/file-links";
+import { PressGuard } from "../core/link-guard";
 import { OBSIDIAN_STATUS_BAR, bottomOverlap } from "../core/status-bar";
 import { type TerminalOptions, changedXtermOptions, xtermOptions } from "../core/terminal-options";
 import { type Dimensions, usableDimensions } from "../core/terminal-size";
 import { type ReadVar, buildTheme } from "../core/xterm-theme";
 import { createCssColorReader } from "./css-vars";
+import { guardLinkProvider, trackPresses } from "./link-guard";
 import type { PopoutWindow } from "./popout-window";
 import { TerminalInput, type TerminalInputOptions } from "./terminal-input";
 
@@ -41,6 +43,9 @@ export class TerminalPane {
   /** Ziel für Paste, Tasten-Sequenzen und Drop; gesetzt, sobald eine Sitzung hängt. */
   private sink: InputCallback | null = null;
   private readonly input: TerminalInput;
+  /** Läuft gerade ein Druck, der im Terminal begann? Gate für activate jedes Links (Abend 37). */
+  private readonly presses = new PressGuard();
+  private readonly untrackPresses: () => void;
 
   constructor(
     container: HTMLElement,
@@ -68,6 +73,10 @@ export class TerminalPane {
     });
     this.term.loadAddon(this.fitAddon);
     this.term.open(this.host);
+    // Drücke zählen nur auf .xterm-screen: Dort setzt xterm _mouseDownLink. Der Host ist größer (FitAddon lässt unten und rechts
+    // einen Streifen frei), ein Druck in diesem Streifen schaltete den Wächter scharf, ohne _mouseDownLink zu erneuern. Das
+    // Element entsteht in term.open; fehlt es (xterm ändert die Klasse), gilt der Host.
+    this.untrackPresses = trackPresses(this.host.querySelector<HTMLElement>(".xterm-screen") ?? this.host, this.presses);
     this.input = new TerminalInput({
       term: this.term,
       container,
@@ -163,10 +172,12 @@ export class TerminalPane {
 
   /**
    * Link-Provider anmelden (Datei-Viewer, Abend 27). setModifier hört Cmd an der Pane (keydown/keyup in der Capture-Phase,
-   * vor xterm), damit ein Link unter der Maus beim Drücken unterstrichen wird. Gibt die Abmeldung zurück.
+   * vor xterm), damit ein Link unter der Maus beim Drücken unterstrichen wird. Jeder Provider läuft durch die Hülle
+   * `guardLinkProvider` (Abend 37): nur Links der abgefragten Zeile, `activate` nur bei einem Druck, der im Terminal begann;
+   * `setModifier` geht weiter an den Original-Provider. Gibt die Abmeldung zurück.
    */
   registerLinkProvider(provider: ILinkProvider & { setModifier?: (meta: boolean) => void }): () => void {
-    const sub = this.term.registerLinkProvider(provider);
+    const sub = this.term.registerLinkProvider(guardLinkProvider(provider, () => this.presses.active()));
     const onKey = (event: KeyboardEvent): void => provider.setModifier?.(event.metaKey);
     this.container.addEventListener("keydown", onKey, true);
     this.container.addEventListener("keyup", onKey, true);
@@ -232,6 +243,7 @@ export class TerminalPane {
     this.observer.disconnect();
     this.input.dispose();
     this.sink = null;
+    this.untrackPresses();
     this.term.dispose();
     this.host.remove();
   }
