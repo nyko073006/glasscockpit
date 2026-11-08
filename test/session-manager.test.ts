@@ -434,6 +434,137 @@ describe("SessionManager: Beenden mit Eskalation", () => {
   });
 });
 
+describe("SessionManager: Beenden unter Windows (Abend 41)", () => {
+  function win(options: { forceKillTree?: boolean } = { forceKillTree: true }) {
+    const timers = new FakeTimers();
+    const factory = fakeFactory();
+    const forced: number[] = [];
+    const groupCalls: Array<[number, string]> = [];
+    const manager = new SessionManager(factory.create, undefined, {
+      timers,
+      platform: "win32",
+      signalGroup: (pid, signal) => void groupCalls.push([pid, signal]),
+      ...(options.forceKillTree ? { forceKillTree: (pid: number) => void forced.push(pid) } : {}),
+    });
+    return { manager, created: factory.created, timers, forced, groupCalls };
+  }
+
+  it("kill ruft pty.kill genau einmal ohne Argument, lebt die PTY nach 2000 ms noch, folgt forceKillTree genau einmal", async () => {
+    const { manager, created, timers, forced, groupCalls } = win();
+    manager.spawn(spec("a"));
+    created[0].pid = 4711;
+    let settled = false;
+    void manager.kill("a").then(() => (settled = true));
+    expect(created[0].signals).toEqual([""]);
+    expect(forced).toEqual([]);
+    timers.advance(KILL_ESCALATION_MS - 1);
+    expect(forced).toEqual([]);
+    timers.advance(1);
+    expect(forced).toEqual([4711]);
+    expect(created[0].killed).toBe(1);
+    expect(created[0].signals).toEqual([""]);
+    expect(groupCalls).toEqual([]);
+    timers.advance(10 * KILL_ESCALATION_MS);
+    expect(forced).toEqual([4711]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(true);
+  });
+
+  it("endet die PTY vor Ablauf der Frist, gibt es kein forceKillTree", () => {
+    const { manager, created, timers, forced } = win();
+    manager.spawn(spec("a"));
+    created[0].pid = 4711;
+    void manager.kill("a");
+    created[0].exit(0);
+    timers.advance(10 * KILL_ESCALATION_MS);
+    expect(forced).toEqual([]);
+    expect(created[0].killed).toBe(1);
+  });
+
+  it("wirft pty.kill, wirft kill nicht; die Eskalation läuft trotzdem, das Versprechen löst auf", async () => {
+    const { manager, created, timers, forced } = win();
+    manager.spawn(spec("a"));
+    created[0].pid = 4711;
+    let kills = 0;
+    created[0].kill = () => { kills++; throw new Error("EPERM"); };
+    let settled = false;
+    expect(() => void manager.kill("a").then(() => (settled = true))).not.toThrow();
+    timers.advance(KILL_ESCALATION_MS);
+    expect(forced).toEqual([4711]);
+    expect(kills).toBe(1);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(true);
+  });
+
+  it("wirft forceKillTree, wirft nichts nach außen, das Versprechen löst auf, pty.kill läuft nicht ein zweites Mal", async () => {
+    const timers = new FakeTimers();
+    const factory = fakeFactory();
+    const manager = new SessionManager(factory.create, undefined, {
+      timers,
+      platform: "win32",
+      forceKillTree: () => { throw new Error("taskkill"); },
+    });
+    manager.spawn(spec("a"));
+    factory.created[0].pid = 4711;
+    let settled = false;
+    void manager.kill("a").then(() => (settled = true));
+    expect(() => timers.advance(KILL_ESCALATION_MS)).not.toThrow();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(true);
+    expect(factory.created[0].killed).toBe(1);
+  });
+
+  it("ohne pid: nach der Frist nichts weiter, das Versprechen löst auf", async () => {
+    const { manager, created, timers, forced } = win();
+    manager.spawn(spec("a"));
+    let settled = false;
+    void manager.kill("a").then(() => (settled = true));
+    timers.advance(KILL_ESCALATION_MS);
+    expect(forced).toEqual([]);
+    expect(created[0].killed).toBe(1);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(true);
+  });
+
+  it("ohne forceKillTree: nach der Frist nichts weiter, das Versprechen löst auf", async () => {
+    const { manager, created, timers } = win({});
+    manager.spawn(spec("a"));
+    created[0].pid = 4711;
+    let settled = false;
+    void manager.kill("a").then(() => (settled = true));
+    timers.advance(KILL_ESCALATION_MS);
+    expect(created[0].killed).toBe(1);
+    expect(created[0].signals).toEqual([""]);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(settled).toBe(true);
+  });
+
+  it("darwin bleibt: ausdrücklich platform darwin sendet SIGHUP an die PTY und SIGKILL an die Gruppe", () => {
+    const timers = new FakeTimers();
+    const factory = fakeFactory();
+    const calls: Array<[number, string]> = [];
+    const forced: number[] = [];
+    const manager = new SessionManager(factory.create, undefined, {
+      timers,
+      platform: "darwin",
+      signalGroup: (pid, signal) => void calls.push([pid, signal]),
+      forceKillTree: (pid) => void forced.push(pid),
+    });
+    manager.spawn(spec("a"));
+    factory.created[0].pid = 4711;
+    void manager.kill("a");
+    timers.advance(KILL_ESCALATION_MS);
+    expect(factory.created[0].signals).toEqual(["SIGHUP"]);
+    expect(calls).toEqual([[4711, "SIGKILL"]]);
+    expect(forced).toEqual([]);
+  });
+});
+
 describe("SessionManager.onChange (Abend 15, Sitzungsradar der Cockpit-Ansicht)", () => {
   it("meldet Start, Ende und Entfernen", () => {
     const { manager, created } = setup();

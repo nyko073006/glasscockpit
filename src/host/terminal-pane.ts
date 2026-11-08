@@ -1,19 +1,22 @@
+import { release } from "node:os";
 import { FitAddon } from "@xterm/addon-fit";
 import { type ILinkProvider, Terminal } from "@xterm/xterm";
 import {
   CSS_PREFIX,
-  TERMINAL_FONT_FAMILY,
   TERMINAL_LINE_HEIGHT,
   TERMINAL_MAC_OPTION_IS_META,
+  terminalFontFamily,
 } from "../core/constants";
 import { type FoundLine, firstNonEmptyLine } from "../core/diagnose";
-import { bufferRowOf, type CellRow } from "../core/file-links";
+import { bufferRowOf, type CellRow, linkModifierDown } from "../core/file-links";
 import { PressGuard } from "../core/link-guard";
+import type { Platform } from "../core/platform-path";
 import { OBSIDIAN_STATUS_BAR, bottomOverlap } from "../core/status-bar";
-import { type TerminalOptions, changedXtermOptions, xtermOptions } from "../core/terminal-options";
+import { type TerminalOptions, changedXtermOptions, windowsPtyOption, xtermOptions } from "../core/terminal-options";
 import { type Dimensions, usableDimensions } from "../core/terminal-size";
 import { type ReadVar, buildTheme } from "../core/xterm-theme";
 import { createCssColorReader } from "./css-vars";
+import { hostPlatform } from "./host-platform";
 import { guardLinkProvider, trackPresses } from "./link-guard";
 import type { PopoutWindow } from "./popout-window";
 import { TerminalInput, type TerminalInputOptions } from "./terminal-input";
@@ -46,6 +49,8 @@ export class TerminalPane {
   /** Läuft gerade ein Druck, der im Terminal begann? Gate für activate jedes Links (Abend 37). */
   private readonly presses = new PressGuard();
   private readonly untrackPresses: () => void;
+  /** Plattform dieses Rechners (hostPlatform()): bestimmt die Taste, die Datei-Links unterstreicht. */
+  private readonly platform: Platform;
 
   constructor(
     container: HTMLElement,
@@ -61,14 +66,18 @@ export class TerminalPane {
     this.host = container.createDiv({ cls: `${CSS_PREFIX}terminal-host` });
     this.readColor = createCssColorReader(container);
 
+    // Abend 41: Schrift und ConPTY-Angabe je Plattform. Plattform über hostPlatform(), os.release() nur hier im Host.
+    const platform = hostPlatform();
+    this.platform = platform;
     this.term = new Terminal({
       ...xtermOptions(options),
       cursorBlink: true,
       // Die PTY liefert später selbst CRLF.
       convertEol: false,
       lineHeight: TERMINAL_LINE_HEIGHT,
-      fontFamily: TERMINAL_FONT_FAMILY,
+      fontFamily: terminalFontFamily(platform),
       macOptionIsMeta: TERMINAL_MAC_OPTION_IS_META,
+      ...(platform === "win32" ? { windowsPty: windowsPtyOption(release()) } : {}),
       theme: buildTheme(this.readColor),
     });
     this.term.loadAddon(this.fitAddon);
@@ -81,6 +90,7 @@ export class TerminalPane {
       term: this.term,
       container,
       write: (data) => this.sink?.(data),
+      platform,
       vaultBase,
       ...drop,
     });
@@ -171,14 +181,14 @@ export class TerminalPane {
   }
 
   /**
-   * Link-Provider anmelden (Datei-Viewer, Abend 27). setModifier hört Cmd an der Pane (keydown/keyup in der Capture-Phase,
+   * Link-Provider anmelden (Datei-Viewer, Abend 27). setModifier hört Cmd (Windows: Ctrl) an der Pane (keydown/keyup in der Capture-Phase,
    * vor xterm), damit ein Link unter der Maus beim Drücken unterstrichen wird. Jeder Provider läuft durch die Hülle
    * `guardLinkProvider` (Abend 37): nur Links der abgefragten Zeile, `activate` nur bei einem Druck, der im Terminal begann;
    * `setModifier` geht weiter an den Original-Provider. Gibt die Abmeldung zurück.
    */
   registerLinkProvider(provider: ILinkProvider & { setModifier?: (meta: boolean) => void }): () => void {
     const sub = this.term.registerLinkProvider(guardLinkProvider(provider, () => this.presses.active()));
-    const onKey = (event: KeyboardEvent): void => provider.setModifier?.(event.metaKey);
+    const onKey = (event: KeyboardEvent): void => provider.setModifier?.(linkModifierDown(event, this.platform));
     this.container.addEventListener("keydown", onKey, true);
     this.container.addEventListener("keyup", onKey, true);
     return () => {

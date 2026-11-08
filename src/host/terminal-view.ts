@@ -9,7 +9,7 @@ import type { SessionHandle, SessionManager } from "../core/session-manager";
 import { type Change, type SessionRecord, claudeIdOf } from "../core/session-model";
 import { readSessionId } from "../core/session-state";
 import { headerTitle, tabTitle } from "../core/claude-launch";
-import type { CockpitSettings } from "../core/settings";
+import { effectiveSoundFile, type CockpitSettings } from "../core/settings";
 import { grayLine, redTerminalText, sessionEndedLine, startSize } from "../core/shell";
 import { buildTestOutput } from "../core/test-output";
 import type { CodeBlock } from "../core/transcript-code";
@@ -17,6 +17,7 @@ import type { HandoffKeeper } from "../core/transcript-poll";
 import type { ViewTracker } from "../core/view-tracker";
 import { playSound, showBanner } from "./attention-alert";
 import { CodeBlockBar, copyCodeBlock } from "./code-block-bar";
+import { hostPlatform } from "./host-platform";
 import type { SpawnPlan } from "./launcher";
 import type { PopoutWindow } from "./popout-window";
 import type { NodePtyFactory } from "./pty-factory";
@@ -229,13 +230,14 @@ export class TerminalView extends ItemView {
         notify: (text) => void new Notice(text),
       },
     );
-    // Pfade per Cmd+Klick (Abend 27): Einstellung und Startordner werden bei jeder Abfrage frisch gelesen.
+    // Pfade per Cmd+Klick, unter Windows Ctrl+Klick (Abend 27, 42): Einstellung und Startordner werden bei jeder Abfrage frisch gelesen.
     const pane = this.pane;
     this.unbindLinks = pane.registerLinkProvider(
       new FileLinkProvider({
         row: (y) => pane.bufferRow(y),
         cwd: () => (this.sessionId ? this.deps.record(this.sessionId)?.cwd ?? null : null),
         home: this.deps.home,
+        platform: hostPlatform(),
         enabled: () => this.deps.settings().fileLinks,
         isFile: isFileSync,
         // Relative Pfade auch in Claudes Ordnern (Abend 27b): Schalter und Ordner des aktuellen Lesers (neue Claude-ID = neuer Leser).
@@ -466,7 +468,7 @@ export class TerminalView extends ItemView {
         const { cols, rows } = startSize(this.pane.fittedSize());
         const spawned = manager.spawn({ id, ...plan.spawn, cols, rows, meta: plan.meta });
         if (!spawned.ok) {
-          this.showError(classifyLoadError(spawned.error).message);
+          this.showError(classifyLoadError(spawned.error, hostPlatform()).message);
           return;
         }
         // Graue Zeile vor der Claude-Ausgabe (die PTY liefert ihre Daten erst später).
@@ -523,7 +525,7 @@ export class TerminalView extends ItemView {
           return true;
         }),
       );
-      this.reader = new TranscriptReader(claudeId);
+      this.reader = new TranscriptReader(claudeId, undefined, undefined, hostPlatform());
       this.readerId = claudeId;
       // Ein gemerkter Handoff steht sofort da (etwa nach „Neu starten“), nicht erst mit dem ersten Poll.
       this.renderBar([]);
@@ -593,7 +595,7 @@ export class TerminalView extends ItemView {
     if (!this.reader) return;
     const next = this.claudeSessionId();
     if (!next || next === this.readerId) return;
-    this.reader = new TranscriptReader(next);
+    this.reader = new TranscriptReader(next, undefined, undefined, hostPlatform());
     this.readerId = next;
     this.resetOpenTasks();
     this.renderBar([]);
@@ -658,7 +660,7 @@ export class TerminalView extends ItemView {
     if (signal === "done" ? !s.notifyOnDone : !s.notifyOnQuestion) return;
     if (r.mark && s.markTab) this.setAttention(signal);
     if (r.alert && this.sessionId !== null && this.deps.alertGate(this.sessionId)) {
-      if (s.alertSound) playSound(s.soundFile);
+      if (s.alertSound) playSound(effectiveSoundFile(hostPlatform(), s.soundFile, process.env.SystemRoot ?? ""), hostPlatform());
       if (s.alertBanner) {
         const id = this.sessionId;
         const name = (id ? this.deps.record(id)?.name : null) ?? this.title ?? "Claude";
@@ -725,7 +727,7 @@ export class TerminalView extends ItemView {
     leaf.updateHeader?.();
     const id = this.sessionId;
     const record = id ? this.deps.record(id) : null;
-    const full = id && record ? headerTitle(record.name, claudeIdOf(record), record.cwd, this.deps.home) : this.getDisplayText();
+    const full = id && record ? headerTitle(record.name, claudeIdOf(record), record.cwd, this.deps.home, hostPlatform()) : this.getDisplayText();
     (this as { titleEl?: HTMLElement }).titleEl?.setText(full);
     leaf.tabHeaderEl?.setAttr("aria-label", full);
   }

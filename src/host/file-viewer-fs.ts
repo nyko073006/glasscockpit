@@ -1,13 +1,14 @@
 import { statSync } from "node:fs";
 import { chmod, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import { exceedsLimit, looksBinary, saveDecision } from "../core/file-links";
+import { exceedsLimit, imageMime, looksBinary, saveDecision } from "../core/file-links";
 
 // Datei-Viewer (Abend 27): Dateizugriff für das Fenster. Gelesen wird erst nach der Größenprüfung, gespeichert atomar.
 
 export type LoadResult =
   | { kind: "text"; text: string; mtimeMs: number }
-  | { kind: "tooLarge"; size: number }
+  | { kind: "image"; bytes: Uint8Array<ArrayBuffer>; mime: string; size: number }
+  | { kind: "tooLarge"; size: number; image: boolean }
   | { kind: "binary" }
   | { kind: "notUtf8" }
   | { kind: "error"; message: string };
@@ -31,12 +32,20 @@ export function isDirSync(path: string): boolean {
   }
 }
 
-/** Datei fürs Fenster: zu groß, binär (NUL in den ersten 8 KB) und ungültiges UTF-8 ergeben einen Hinweis statt Inhalt. */
-export async function loadFile(path: string, maxMb: number): Promise<LoadResult> {
+/**
+ * Datei fürs Fenster: zu groß, binär (NUL in den ersten 8 KB) und ungültiges UTF-8 ergeben einen Hinweis statt Inhalt.
+ * Mit `imageMaxMb` (null = Bilder aus) gilt für Bildendungen die Bildgrenze, das Ergebnis ist `image` ohne NUL- und UTF-8-Test.
+ */
+export async function loadFile(path: string, maxMb: number, imageMaxMb: number | null = null): Promise<LoadResult> {
   try {
     const st = await stat(path);
     if (!st.isFile()) return { kind: "error", message: "keine Datei" };
-    if (exceedsLimit(st.size, maxMb)) return { kind: "tooLarge", size: st.size };
+    const mime = imageMaxMb === null ? null : imageMime(path);
+    if (mime !== null && imageMaxMb !== null) {
+      if (exceedsLimit(st.size, imageMaxMb)) return { kind: "tooLarge", size: st.size, image: true };
+      return { kind: "image", bytes: await readFile(path), mime, size: st.size };
+    }
+    if (exceedsLimit(st.size, maxMb)) return { kind: "tooLarge", size: st.size, image: false };
     const bytes = await readFile(path);
     if (looksBinary(bytes)) return { kind: "binary" };
     let text: string;

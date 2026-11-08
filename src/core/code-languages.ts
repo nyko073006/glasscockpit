@@ -40,3 +40,12 @@ export const KEYWORDS: Record<LanguageId, readonly string[]> = {
   html: words("html div p ul ol li table tr td th tbody form input img br hr link meta style section article header footer nav aside pre h1 h2 h3 option"),
   shell: words("if then else elif fi for while until do done in function export set unset exit true false echo cd ls grep sed awk git npm node mkdir rm cp mv cat source"),
 };
+
+/** Markdown-Datei? Endung md oder markdown, gleiche Pfadteil-Regel wie languageForPath (Punktdateien ohne weitere Endung zählen nicht). */
+export function isMarkdownPath(path: string): boolean {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  if (dot <= 0) return false;
+  const ext = name.slice(dot + 1).toLowerCase();
+  return ext === "md" || ext === "markdown";
+}

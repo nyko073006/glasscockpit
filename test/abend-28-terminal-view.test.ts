@@ -1,11 +1,12 @@
 import { mkdir, mkdtemp, rm, appendFile, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_SETTINGS, type CockpitSettings } from "../src/core/settings";
 import type { SessionRecord } from "../src/core/session-model";
 import type { TerminalDeps } from "../src/host/terminal-view";
 import { TranscriptReader } from "../src/host/transcript-reader";
+import { ON_WINDOWS } from "./helpers/platform";
 
 // Obsidian und alles mit DOM oder xterm ersetzen; die Entscheidungen der View laufen echt, mit echtem Leser auf einer Temp-Datei.
 vi.mock("obsidian", () => ({
@@ -91,7 +92,8 @@ function aufbau(overrides: Partial<CockpitSettings> = {}, mitLeser = true, recor
   const settings: CockpitSettings = { ...DEFAULT_SETTINGS, ...overrides };
   const deps = {
     settings: () => settings,
-    home: "/home/beispiel",
+    // die View kürzt mit der Plattform dieses Rechners (hostPlatform): Pfade in dessen Form
+    home: ON_WINDOWS ? "C:\\Users\\beispiel" : "/home/beispiel",
     record: () => ({ id: COCKPIT_ID, name: "Sitzung", kind: "claude", cwd: "/tmp/beispiel", createdAt: "2026-10-12T10:00:00Z", claudeSessionId: ID, ...recordOverrides }),
     telegram: vi.fn(),
     activity: { record: vi.fn(), markSeen: vi.fn(), lastSignal: vi.fn(() => undefined) },
@@ -102,7 +104,7 @@ function aufbau(overrides: Partial<CockpitSettings> = {}, mitLeser = true, recor
   const view = new TerminalView(leaf as never, deps as unknown as TerminalDeps);
   const intern = view as unknown as Intern;
   intern.sessionId = COCKPIT_ID;
-  const reader = new TranscriptReader(ID, root);
+  const reader = new TranscriptReader(ID, root, homedir(), "darwin");
   if (mitLeser) {
     intern.reader = reader;
     intern.readerId = ID;
@@ -259,7 +261,7 @@ describe("Abend 28 (Verhalten der View): Antwortende bei laufenden Hintergrundau
     const { deps, intern, reader } = aufbau();
     const echt = reader.read.bind(reader);
     vi.spyOn(reader, "read").mockImplementation(async (...args) => {
-      intern.reader = new TranscriptReader(OTHER_ID, root);
+      intern.reader = new TranscriptReader(OTHER_ID, root, homedir(), "darwin");
       intern.readerId = OTHER_ID;
       return echt(...args);
     });
@@ -394,11 +396,11 @@ describe("Abend 29: Tab-Titel „ID · Name“ und Tooltip", () => {
   });
 
   it("Wächter: refreshTitle schreibt ID, Name und Ordner als aria-label an den Tab-Kopf, genau wie in der Kopfzeile", () => {
-    const { intern, leaf } = aufbau({}, false, { name: "claude 4", cwd: "/home/beispiel/projekt-a" });
+    const { intern, leaf } = aufbau({}, false, { name: "claude 4", cwd: ON_WINDOWS ? "C:\\Users\\beispiel\\projekt-a" : "/home/beispiel/projekt-a" });
     const titleEl = { setText: vi.fn() };
     (intern as unknown as { titleEl: typeof titleEl }).titleEl = titleEl;
     intern.refreshTitle();
-    const erwartet = `${ID8} · claude 4 · ~/projekt-a`;
+    const erwartet = `${ID8} · claude 4 · ${ON_WINDOWS ? "~\\projekt-a" : "~/projekt-a"}`;
     expect(leaf.updateHeader).toHaveBeenCalled();
     expect(leaf.tabHeaderEl.setAttr).toHaveBeenCalledWith("aria-label", erwartet);
     expect(titleEl.setText).toHaveBeenCalledWith(erwartet);

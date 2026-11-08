@@ -1,9 +1,10 @@
 import type { IBufferRange, ILink, ILinkDecorations, ILinkProvider } from "@xterm/xterm";
 import {
-  type BufferPos, candidatesWithQuotes, type CellRow, extendCandidates, isRelativePath, type LogicalLine, logicalLine, MAX_PATH_PROBES, opensOnClick,
-  pathCandidates, ProbeBudget, resolveCandidatePath, resolveViaBases, vaultRelative, wordLine,
+  type BufferPos, candidatesWithQuotes, type CellRow, extendCandidates, isRelativePath, linkModifierDown, type LogicalLine, logicalLine, MAX_PATH_PROBES,
+  opensOnClick, pathCandidates, ProbeBudget, resolveCandidatePath, resolveViaBases, vaultRelative, wordLine,
 } from "../core/file-links";
 import { touchesRow } from "../core/link-guard";
+import type { Platform } from "../core/platform-path";
 
 // Datei-Viewer (Abend 27): Pfade im Terminal als xterm-Links. xterm fragt provideLinks zeilenweise beim Hover ab,
 // deshalb prüft statSync nur die Kandidaten der Zeile unter der Maus.
@@ -17,6 +18,8 @@ export interface FileLinkDeps {
   /** Startordner der Sitzung für relative Pfade, null ohne Sitzung. */
   cwd: () => string | null;
   home: string;
+  /** Plattform (Abend 42): Pfadform und Taste. Windows: Laufwerk, Backslash, Ctrl+Klick; Mac: Cmd+Klick. */
+  platform: Platform;
   /** Einstellung fileLinks, bei jeder Abfrage frisch. */
   enabled: () => boolean;
   isFile: (path: string) => boolean;
@@ -46,9 +49,9 @@ const strictlyInside = (inner: IBufferRange, outer: IBufferRange): boolean => be
 
 export class FileLinkProvider implements ILinkProvider {
   private readonly deps: FileLinkDeps;
-  /** Link unter der Maus: Drücken oder Loslassen von Cmd schaltet seine Unterstreichung. */
+  /** Link unter der Maus: Drücken oder Loslassen von Cmd (Windows: Ctrl) schaltet seine Unterstreichung. */
   private hovered: ILink | null = null;
-  /** Zuletzt gesehener Zustand der Cmd-Taste (keydown/keyup an der Pane, metaKey beim Überfahren). */
+  /** Zuletzt gesehener Zustand der Link-Taste (keydown/keyup an der Pane, beim Überfahren aus dem Ereignis). */
   private meta = false;
 
   constructor(deps: FileLinkDeps) {
@@ -81,10 +84,11 @@ export class FileLinkProvider implements ILinkProvider {
 
   /** Datei zum Pfad: erst der Startordner, nur wenn dort keine Datei liegt und der Pfad relativ ist, Claudes Ordner (der neueste mit Treffer). */
   private locate(raw: string, getBases: () => string[]): string | null {
-    const path = resolveCandidatePath(raw, { home: this.deps.home, cwd: this.deps.cwd() });
+    const { platform } = this.deps;
+    const path = resolveCandidatePath(raw, { home: this.deps.home, cwd: this.deps.cwd(), platform });
     if (path && this.deps.isFile(path)) return path;
-    if (!isRelativePath(raw) || !this.deps.claudeDirs()) return null;
-    return resolveViaBases(raw, getBases(), this.deps.isFile);
+    if (!isRelativePath(raw, platform) || !this.deps.claudeDirs()) return null;
+    return resolveViaBases(raw, getBases(), this.deps.isFile, platform);
   }
 
   /**
@@ -94,7 +98,8 @@ export class FileLinkProvider implements ILinkProvider {
    * Leerzeichen. Ohne mode ist es genau das Verhalten von vor Abend 38.
    */
   private collect(line: LogicalLine, links: ILink[], getBases: () => string[], mode: SpaceMode | null): void {
-    const candidates = mode ? candidatesWithQuotes(line.text) : pathCandidates(line.text).slice(0, MAX_CANDIDATES);
+    const { platform } = this.deps;
+    const candidates = mode ? candidatesWithQuotes(line.text, platform) : pathCandidates(line.text, platform).slice(0, MAX_CANDIDATES);
     let probed = 0;
     for (const c of candidates) {
       const start = line.positions[c.start];
@@ -118,6 +123,7 @@ export class FileLinkProvider implements ILinkProvider {
     const found = extendCandidates(line.text, {
       home: this.deps.home,
       cwd: this.deps.cwd(),
+      platform: this.deps.platform,
       isFile: this.deps.isFile,
       isDir: this.deps.isDir,
       budget: mode.budget,
@@ -147,16 +153,16 @@ export class FileLinkProvider implements ILinkProvider {
     const link: ILink = {
       range,
       text,
-      // Unterstrichen nur mit gedrückter Cmd-Taste, wie in Editoren üblich; ohne Cmd bleibt es Text zum Markieren.
+      // Unterstrichen nur mit gedrückter Cmd-Taste (Windows: Ctrl), wie in Editoren üblich; ohne sie bleibt es Text zum Markieren.
       decorations: decorations(this.meta),
       activate: (event) => {
-        if (!opensOnClick(event)) return;
+        if (!opensOnClick(event, this.deps.platform)) return;
         event.preventDefault();
         this.deps.open(target);
       },
       hover: (event) => {
         this.hovered = link;
-        this.meta = event.metaKey;
+        this.meta = linkModifierDown(event, this.deps.platform);
         // xterm liest decorations vor hover und ersetzt das Objekt direkt danach durch eines mit Settern
         // (Linkifier._handleNewLink); erst dessen Eigenschaften setzen wirkt, also nach diesem Aufruf.
         queueMicrotask(() => this.decorate(link));
@@ -168,7 +174,7 @@ export class FileLinkProvider implements ILinkProvider {
     return link;
   }
 
-  /** Cmd gedrückt oder losgelassen (keydown/keyup an der Pane): Link unter der Maus neu dekorieren. */
+  /** Link-Taste gedrückt oder losgelassen (keydown/keyup an der Pane): Link unter der Maus neu dekorieren. */
   setModifier(meta: boolean): void {
     this.meta = meta;
     if (this.hovered) this.decorate(this.hovered);
@@ -184,7 +190,11 @@ export class FileLinkProvider implements ILinkProvider {
 }
 
 export interface OpenPathDeps {
+  /** Plattform für den Vergleich mit dem Vault-Pfad (hostPlatform()). */
+  platform: Platform;
   vaultBase: () => string | null;
+  /** Vault-Pfade aller Dateien (nur win32 gesetzt): die Schreibweise der Datei richtet sich danach. */
+  vaultPaths?: () => readonly string[];
   /** Als Obsidian-Tab öffnen; false, wenn der Vault die Datei nicht als Tab zeigen kann (unbekannter Typ, .obsidian/). */
   openInVault: (rel: string, target: LinkTarget) => Promise<boolean>;
   openInModal: (target: LinkTarget) => void;
@@ -192,7 +202,7 @@ export interface OpenPathDeps {
 
 /** Vault-Dateien als Tab, alles andere (und was der Vault nicht zeigen kann) im Fenster. */
 export async function openTerminalPath(target: LinkTarget, deps: OpenPathDeps): Promise<void> {
-  const rel = vaultRelative(target.path, deps.vaultBase());
+  const rel = vaultRelative(target.path, deps.vaultBase(), deps.platform, deps.vaultPaths?.());
   if (rel !== null && (await deps.openInVault(rel, target))) return;
   deps.openInModal(target);
 }

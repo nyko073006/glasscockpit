@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, wri
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { ON_WINDOWS } from "./helpers/platform";
 
 // Stop-Hook hooks/clearable-banner.py (Abend 26b): wird als Prozess mit fester Eingabe per stdin aufgerufen.
 // COCKPIT_DIR und HOME zeigen auf Temp-Ordner, damit weder Schwellen noch Log den echten Rechner berühren.
@@ -55,7 +56,8 @@ function lauf(opt: { nachrichten: number; prozent?: number | null; schwellen?: s
 }
 const banner = (stdout: string) => stdout.includes("Session clearable");
 
-describe("clearable-banner: Handoff-Freigabe", () => {
+// Windows: der Hook ist ein python3-Skript (Inventur H16)
+describe.skipIf(ON_WINDOWS)("clearable-banner: Handoff-Freigabe", () => {
   it("Vorgabe 2 Nachrichten: bei 1 kein Banner, bei 2 Banner", () => {
     expect(banner(lauf({ nachrichten: 1 }))).toBe(false);
     expect(banner(lauf({ nachrichten: 2 }))).toBe(true);
@@ -86,7 +88,8 @@ describe("clearable-banner: Handoff-Freigabe", () => {
   });
 });
 
-describe("npm run deploy:hook", () => {
+// Windows: prüft das Ausführrecht (POSIX-Modus) der Kopie (Inventur H16)
+describe.skipIf(ON_WINDOWS)("npm run deploy:hook", () => {
   it("kopiert den Hook bytegleich und ausführbar ans Ziel", () => {
     const ziel = join(temp(), "hooks", "clearable-banner.py");
     const r = spawnSync(process.execPath, [DEPLOY, ziel], { encoding: "utf8" });

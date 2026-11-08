@@ -12,10 +12,25 @@ The plugin's settings and labels are in German. There is no English interface ye
 
 ## Requirements
 
-- macOS on Apple Silicon. Intel Macs are untested.
+- macOS on Apple Silicon (Intel Macs are untested), or Windows (see "Windows" below).
 - Obsidian 1.13 or newer (desktop only).
 - The Claude Code CLI (`claude`), installed and logged in.
 - `jq`, for the status line (optional, see "First steps").
+
+## Windows
+
+Windows is supported alongside macOS, with these differences.
+
+- Windows 10 version 1903 (build 18309) or newer, or Windows 11; x64 and ARM64. On an older build the plugin reports the missing version.
+- Claude Code 2.1.139 or newer. The hooks for the alert signals use the field `args`, which older versions do not know.
+- The binaries: Option B ships them in `native/win32-<arch>/`. With Option A, "Binärdateien laden" downloads them (no `xattr` step on Windows).
+- No status line and no limits yet. The switch "Tokens für die Statuszeile schreiben" is locked and says why; the stored value stays, but nothing is written on Windows, not even a value copied over from a Mac.
+- No sandbox: Claude Code has none on Windows, so "Auch Shell-Befehle sperren (Sandbox)" is locked. Excluded files are blocked by rules only (setting "Ausgeschlossene Dateien für Claude sperren").
+- Ctrl instead of Cmd (for example "Pfade per Ctrl+Klick öffnen"); copy with Ctrl+C only works with a selection, otherwise ^C goes to Claude.
+- Smart App Control can block the terminal library, because `conpty.node` is unsigned. The plugin then reports a blocked library.
+- Shell tabs start `pwsh.exe` (PowerShell 7) if found, otherwise Windows PowerShell. The setting "Shell unter Windows" overrides this.
+- IDE bridge: if `claude` is the npm shim `claude.cmd`, the bridge cannot match the connection to a tab (no `@` mention from the editor, no question marker for diffs). With `claude.exe` it matches.
+- The alert sound plays inside Obsidian (WAV or MP3); an empty field or a Mac path (starting with `/` or `~/`) plays the Windows sound; the banner setting is called "Windows-Benachrichtigung".
 
 ## Installation
 
@@ -23,7 +38,7 @@ The plugin's settings and labels are in German. There is no English interface ye
 
 1. Install the plugin from the community plugins list in Obsidian or with BRAT (repository `nyko073006/glasscockpit`). Both fetch `main.js`, `manifest.json` and `styles.css` only.
 2. Enable Glasscockpit under Settings, Community plugins.
-3. Open Settings, Glasscockpit, section "Binärdateien", and press "Binärdateien laden". The plugin downloads the terminal library `node-pty` for your Mac once and checks it (see "Network" below). Then start a session.
+3. Open Settings, Glasscockpit, section "Binärdateien", and press "Binärdateien laden". The plugin downloads the terminal library `node-pty` for your computer once and checks it (see "Network" below). Then start a session.
 
 **Option B: the complete ZIP.**
 
@@ -32,7 +47,7 @@ The plugin's settings and labels are in German. There is no English interface ye
 3. Move the folder to `<your vault>/.obsidian/plugins/`.
 4. In Obsidian, open Settings, Community plugins, and enable Glasscockpit.
 
-`native/` holds the terminal library `node-pty` as a compiled binary (Option B ships it, Option A downloads it). On first start the plugin removes the macOS quarantine flag from that folder (`xattr`).
+`native/` holds the terminal library `node-pty` as a compiled binary (Option B ships it, Option A downloads it). On macOS, the plugin removes the quarantine flag from that folder on first start (`xattr`); on Windows there is no such step.
 
 **Where the files come from.** From version 0.3.6 on, the files of each GitHub release carry a GitHub attestation, a provenance record that they were published from this repository. You can check a downloaded file with `gh attestation verify <file> --repo nyko073006/glasscockpit`. The release is built locally, not in GitHub Actions: the attestation says where the files were published from, not how they were built.
 
@@ -114,7 +129,7 @@ Claude Code sends some text (for example the question of a choice prompt) as fix
 
 ## Open paths with Cmd+click
 
-File paths in the terminal open with Cmd+click: absolute, with `~` or relative to the session's start folder, each optionally with `:line` or `:line:column`. While Cmd is held, a path is underlined, but only if it exists as a file. Only Cmd with the left button opens it; Cmd with the middle or right button, or with Ctrl or Alt, does nothing. Files in the vault open as a tab, all others in a window with a small code editor: Cmd+S saves, Esc closes. TypeScript, JavaScript, JSON, Swift, CSS, Python, YAML, SQL, HTML and shell are shown in the theme's code colors; while you type, the window suggests words from the file and keywords of the language (Enter accepts, Esc first closes the list, Ctrl+Space opens it; turn it off with "Datei-Viewer: Vorschläge beim Tippen"). If the file changed since it was opened (for example by Claude), the window asks before overwriting. Files larger than "Datei-Viewer: Höchstgröße (MB)" (default 2) and binary files are not shown. Turn it off with "Pfade per Cmd+Klick öffnen". In shell sessions the start folder still applies after `cd`.
+File paths in the terminal open with Cmd+click: absolute, with `~` or relative to the session's start folder, each optionally with `:line` or `:line:column`. While Cmd is held, a path is underlined, but only if it exists as a file. Only Cmd with the left button opens it; Cmd with the middle or right button, or with Ctrl or Alt, does nothing. Files in the vault open as a tab, all others in a window with a small code editor: Cmd+S saves, Esc closes. TypeScript, JavaScript, JSON, Swift, CSS, Python, YAML, SQL, HTML and shell are shown in the theme's code colors; while you type, the window suggests words from the file and keywords of the language (Enter accepts, Esc first closes the list, Ctrl+Space opens it; turn it off with "Datei-Viewer: Vorschläge beim Tippen"). If the file changed since it was opened (for example by Claude), the window asks before overwriting. Text files larger than "Datei-Viewer: Höchstgröße (MB)" (default 2) are not shown. Images (png, jpg, jpeg, gif, webp, svg, bmp, ico) appear fitted into the window; zoom works as with text (Cmd+Plus, Cmd+Minus, Cmd+mouse wheel), 100 % shows real pixels with scrolling, Cmd+0 fits the image again, and the title shows size in pixels and file size (for SVG only the file size). Images have their own size limit ("Datei-Viewer: Höchstgröße Bilder (MB)", default 20) and a switch ("Datei-Viewer: Bilder anzeigen"). Other binary files are not shown, but a button opens them (and images) in the default program. Markdown files (.md) are colored by body text, code, commands, headings, links, markers and frontmatter; the text stays raw text, and the colors and the command list are configurable ("Datei-Viewer: Markdown färben", "Datei-Viewer: Farbe …", "Datei-Viewer: Befehle in Backticks"). Turn it off with "Pfade per Cmd+Klick öffnen". In shell sessions the start folder still applies after `cd`. The window starts at 90 % of the Obsidian window's width and height (settings "Datei-Viewer: Startbreite (%)" and "Datei-Viewer: Starthöhe (%)", 40 to 100) with the font size from "Datei-Viewer: Schriftgröße (px)" (default 14), and long lines wrap. Cmd+Plus, Cmd+Minus and Cmd+0 (or Cmd+mouse wheel) zoom the text, 50 to 200 %; the shortcuts are intercepted so that Obsidian's own zoom should stay untouched (to be confirmed in acceptance). Drag the title bar to move the window, drag an edge or corner to resize it, double-click the title bar to go back to the start size. Nothing is remembered: the next window opens at the start size and 100 % again.
 
 If a relative path is not in the start folder, the cockpit looks for it in the folders Claude has worked in during this session: `cd` targets and the folders of files it read or edited. So when Claude names `src/main.ts:10` from a repo in a vault session, it becomes a link. If several of these folders have the file, for example the repo and a worktree, it opens from the folder Claude worked in most recently; the window title shows the full path. Turn it off with "Relative Pfade auch in Claudes Ordnern suchen".
 
@@ -126,7 +141,7 @@ A standalone `/clear` in the terminal of a Claude session (for example in the cl
 
 ## Banner auto-dismiss
 
-The macOS banner (setting "macOS-Banner") closes itself after "Banner ausblenden nach (Sekunden)" (1 to 60, default 6) and does not stay in Notification Center. Each session has at most one banner: a new one replaces the old one. Open banners are closed when the plugin is disabled. A click brings the session to the front. If `@electron/remote` is unavailable in Obsidian, the plugin falls back to the window's web notification; then closing is not guaranteed.
+The banner (setting "macOS-Banner", on Windows "Windows-Benachrichtigung") closes itself after "Banner ausblenden nach (Sekunden)" (1 to 60, default 6); on macOS it does not stay in Notification Center. Each session has at most one banner: a new one replaces the old one. Open banners are closed when the plugin is disabled. A click brings the session to the front. If `@electron/remote` is unavailable in Obsidian, the plugin falls back to the window's web notification; then closing is not guaranteed.
 
 ## Quiet intermediate results
 
@@ -157,13 +172,14 @@ Files and folders listed in Obsidian under Settings → Files and links → Excl
 This follows the disclosure rules of the Obsidian developer policies.
 
 **Runs programs.**
-- `claude` in a terminal session, and your `$SHELL` for shell sessions. On load the plugin starts your login shell once (`$SHELL -i -l -c`) to read `PATH` and `LANG`.
+- `claude` in a terminal session, and your `$SHELL` for shell sessions. On macOS the plugin starts your login shell once on load (`$SHELL -i -l -c`) to read `PATH` and `LANG`.
 - `git pull --ff-only` in the briefing folder, only if you set one (every 5 minutes by default, while a dashboard is open).
 - `git status` in your project folders, for the repo panel. No fetch.
-- `afplay` for the alert sound, `xattr` for the quarantine flag, `ps` to find the parent process for the IDE bridge.
+- On macOS: `afplay` for the alert sound, `xattr` for the quarantine flag, `ps` to find the parent process for the IDE bridge, `ioreg` for the idle time (Telegram).
+- On Windows: `powershell.exe` for the hooks; `pwsh.exe` or Windows PowerShell for shell tabs and as your shell; `cmd.exe` to start `claude.cmd`; `taskkill` when a session is ended by force; `tar.exe` to unpack the binaries. No `afplay`, `xattr`, `ps` or `ioreg`. The system programs (`powershell.exe`, `cmd.exe`, `taskkill`, `tar.exe`) are started from the Windows `System32` folder, not found through `PATH`. `pwsh.exe` is the exception: it is looked up in the `PATH` folders, and Windows PowerShell from `System32` is the fallback.
 
 **Reads outside the vault.**
-- `~/.claude/projects/`: the Claude transcripts, to count tokens, find the last code block, show the active session, know the folders Claude worked in (for relative paths) and know which background tasks still run (quiet intermediate results).
+- `~/.claude/projects/`: the Claude transcripts, to count tokens, find the last code block, show the active session, know the folders Claude worked in (for relative paths) and know which background tasks still run (quiet intermediate results). In "Neue Sitzung" the modification times of the transcript files (not their contents) set the order of the project folders; the setting "Reihenfolge in „Neue Sitzung“" set to "Alphabetisch" turns this off.
 - `~/.claude/skills/`, `agents/`, `commands/`, `settings.json` and `plugins/installed_plugins.json`: to list skills, agents and commands in the launcher. The same folders under the vault and the project folder are read too.
 - `~/.claude/cockpit/`: `usage.json` and `sessions/*.json` (written by the status line script), plus the plugin's own files below.
 - Telegram only if enabled: the `.env` file named in settings (default `~/.claude/channels/telegram/.env`) for the bot token, and `access.json` next to it for the chat ID. The token is read for each message and never stored by the plugin.
@@ -171,18 +187,18 @@ This follows the disclosure rules of the Obsidian developer policies.
 - Paths shown in the terminal: on hover only a `stat` on the paths of that line, the content only after Cmd+click (switch "Pfade per Cmd+Klick öffnen").
 
 **Writes outside the vault.**
-- `~/.claude/cockpit/tokens-today.json` (today's output tokens for the status line; switch "Tokens für die Statuszeile schreiben", on by default), `thresholds.json` (context thresholds from your settings) and `research.json` (cache of GitHub results).
+- `~/.claude/cockpit/tokens-today.json` (today's output tokens for the status line, not written on Windows; switch "Tokens für die Statuszeile schreiben", on by default), `thresholds.json` (context thresholds from your settings) and `research.json` (cache of GitHub results).
 - The file you save with Cmd+S in the file viewer, and only that one (switch "Pfade per Cmd+Klick öffnen", on by default). It is written to a temporary file in the same folder, which is then renamed.
 - `~/.claude/ide/<port>.lock`: lock file of the IDE bridge (switch "IDE-Brücke", on by default). It lets Claude sessions started by the plugin see your selection and open notes. The server listens on `127.0.0.1` only. The lock file is removed on exit.
 - `npm run deploy:statusline` writes `~/.claude/statusline-command.sh`. You run that yourself.
 - `npm run deploy:hook` writes `~/.claude/hooks/clearable-banner.py`; you run that yourself too. The hook reads `~/.claude/cockpit/thresholds.json`, `sessions/*.json` and the session transcript, and appends a log to `~/.claude/hooks/clearable-banner.log`.
 
-**Writes inside the vault.** The plugin's `data.json` (settings, session list), the folder `native/darwin-<arch>/` inside the plugin folder when you press "Binärdateien laden" (plus a temporary folder `.native-download-*` there while it runs, removed afterwards), the task file when you press "Anlegen" or tick a task, and the result of `git pull` in the briefing folder.
+**Writes inside the vault.** The plugin's `data.json` (settings, session list), the folder `native/darwin-<arch>/` (on Windows `native/win32-<arch>/`) inside the plugin folder when you press "Binärdateien laden" (plus a temporary folder `.native-download-*` there while it runs, removed afterwards), the task file when you press "Anlegen" or tick a task, and the result of `git pull` in the briefing folder. On Windows also `.sessions/<id>.settings.json` in the plugin folder, one settings file per Claude session. The plugin removes these files when the session is stopped and when it loads and unloads. After a crash they stay until the next start.
 
 **Network.**
 - GitHub search (`api.github.com/search/repositories`) for the Research card, without a token. It sends your search lines from the settings and nothing else. Without a token GitHub allows 10 searches per minute.
 - Telegram (`api.telegram.org`), only if you enable "Telegram, wenn eine Sitzung fertig ist" or "…eine Frage hat" (both off by default). It sends a short status text.
-- Binary download, only when you press "Binärdateien laden" in the settings, never automatically: one ZIP (about 40 KB) with the compiled `node-pty` for your Mac from `github.com/nyko073006/glasscockpit/releases/download/<plugin version>/glasscockpit-native-darwin-<arch>.zip`. The plugin sends no data beyond the request itself. The address is fixed in the code. Before anything is installed, every file of the download is compared against a SHA256 list that is built into the plugin (no extra files, no symbolic links, every checksum must match); on any mismatch nothing is changed. The downloaded files are native code that Obsidian then loads, so the checksums are the safeguard: they come from the plugin itself, not from the download.
+- Binary download, only when you press "Binärdateien laden" in the settings, never automatically: one ZIP (about 40 KB) with the compiled `node-pty` for your computer from `github.com/nyko073006/glasscockpit/releases/download/<plugin version>/glasscockpit-native-<darwin|win32>-<arch>.zip`. The plugin sends no data beyond the request itself. The address is fixed in the code. Before anything is installed, every file of the download is compared against a SHA256 list that is built into the plugin (no extra files, no symbolic links, every checksum must match); on any mismatch nothing is changed. The downloaded files are native code that Obsidian then loads, so the checksums are the safeguard: they come from the plugin itself, not from the download.
 - Claude Code itself talks to Anthropic. That is the `claude` program, not this plugin.
 
 **No telemetry.** The plugin sends no usage data, no analytics and no crash reports.
@@ -191,7 +207,7 @@ This follows the disclosure rules of the Obsidian developer policies.
 
 ## Limits
 
-- macOS only. `native/` holds binaries for Apple Silicon (arm64) and Intel (x64); the loader picks by architecture. The arm64 build is the tested one, x64 is untested inside Obsidian.
+- macOS and Windows only. `native/` holds binaries for Apple Silicon (arm64) and Intel (x64) on macOS and for x64 and ARM64 on Windows; the loader picks by system and architecture. On macOS the arm64 build is the tested one, x64 is untested inside Obsidian. Windows has no status line, no limits and no sandbox yet (see "Windows").
 - The interface is German.
 - Parts of the IDE bridge use an unofficial protocol of Claude Code and may break with an update. Errors only go to the developer console.
 - Some behavior can only be checked inside Obsidian. Tests cover the logic, not the whole plugin.

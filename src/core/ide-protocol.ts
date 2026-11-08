@@ -2,6 +2,7 @@
 // Clean-Room nach PROTOCOL.md (coder/claudecode.nvim) und der Probe vom 05.10.2026 (claude 2.1.289). Das Protokoll ist nicht
 // offiziell dokumentiert und bei Updates schon gebrochen: Alles dazu liegt in src/core/ide-*.ts und src/host/ide-*.ts.
 import { DIFF_TOOLS, type DiffToolResult, type OpenDiffArgs, parseOpenDiffArgs } from "./ide-diff";
+import { type Platform, isAbsolutePath, isRootRelative, joinPath, matchVaultCase, relativeInside, resolveAgainst, trimTrailingSep } from "./platform-path";
 
 /** Name im Lockfile und in serverInfo. Räumt auch die eigenen verwaisten Lockfiles auf. */
 export const IDE_NAME = "Glasscockpit";
@@ -136,6 +137,10 @@ export interface DispatchContext {
   diffEnabled?: () => boolean;
   /** Verbindung, von der die Anfrage kommt (für openDiff: Zuordnung zur Sitzung). */
   clientId?: number | null;
+  /** Plattform der Pfade (Abend 42); fehlt sie, gilt darwin. */
+  platform?: Platform;
+  /** Vault-Pfade aller Dateien (Obsidians Liste), bei jeder Anfrage frisch gelesen; nur unter win32 gesetzt, für die Schreibweise. */
+  vaultPaths?: () => readonly string[];
 }
 
 export type ResolvedPath = { ok: true; path: string; absolute: string } | { ok: false; reason: string };
@@ -143,23 +148,45 @@ export type ResolvedPath = { ok: true; path: string; absolute: string } | { ok: 
 /**
  * Pfad einer Notiz innerhalb des Vaults. Erlaubt: absolut unter dem Vault-Ordner oder relativ dazu. Abgelehnt: alles
  * Übrige, jedes Segment `..` (auch wenn der Pfad im Vault bliebe), leer, NUL-Zeichen, `~`, der Vault selbst.
+ * Unter win32 gelten beide Trenner, Groß-/Kleinschreibung ist egal (`c:/vault/a.md` liegt in `C:\Vault`), `absolute` ist der
+ * Backslash-Pfad mit der Schreibweise der Basis, und ein Name mit `:` (Laufwerk ohne Trenner, Datenstrom) ist ungültig.
+ * Wurzelrelativ (`\x`, `/x`) gilt am Laufwerk der Basis; `C:a.md` bleibt abgelehnt. Mit paths (Obsidians Dateiliste) gewinnt unter
+ * win32 die Schreibweise der Datei dort (`c:\vault\ORDNER\a.md` öffnet `Ordner/a.md`, es entsteht keine zweite Datei).
  */
-export function resolveInVault(base: string, input: string): ResolvedPath {
-  const root = base.replace(/\/+$/, "");
+export function resolveInVault(base: string, input: string, platform: Platform = "darwin", paths?: readonly string[]): ResolvedPath {
+  const win = platform === "win32";
+  const root = win ? trimTrailingSep(platform, base) : base.replace(/\/+$/, "");
   if (root === "") return { ok: false, reason: "Vault-Ordner unbekannt" };
   if (input.trim() === "") return { ok: false, reason: "Pfad ist leer" };
   if (input.includes("\0")) return { ok: false, reason: "Pfad enthält ein ungültiges Zeichen" };
   if (input.startsWith("~")) return { ok: false, reason: "Pfad liegt außerhalb des Vaults" };
   let rest = input;
-  if (input.startsWith("/")) {
+  if (win) {
+    if (isAbsolutePath(platform, input)) {
+      const inside = relativeInside(platform, root, input);
+      if (inside === null) return { ok: false, reason: "Pfad liegt außerhalb des Vaults" };
+      rest = inside;
+    } else if (isRootRelative(input)) {
+      // „\a.md“ gilt am Laufwerk der Basis; was dort nicht im Vault liegt, ist außerhalb. Ein .. meldet sich vor dem Auflösen.
+      if (input.split(/[\\/]+/).includes("..")) return { ok: false, reason: "Pfad darf kein .. enthalten" };
+      const abs = resolveAgainst(platform, root, input);
+      const inside = abs === null ? null : relativeInside(platform, root, abs);
+      if (inside === null) return { ok: false, reason: "Pfad liegt außerhalb des Vaults" };
+      rest = inside;
+    } else if (/^[A-Za-z]:|^[\\/]/.test(input)) {
+      // „C:a.md“ (Laufwerk ohne Trenner) und „\\\\x“ (doppelter Trenner ohne UNC) zeigen auf einen Ort außerhalb des Vault-Ordners.
+      return { ok: false, reason: "Pfad liegt außerhalb des Vaults" };
+    }
+  } else if (input.startsWith("/")) {
     if (!input.startsWith(`${root}/`)) return { ok: false, reason: "Pfad liegt außerhalb des Vaults" };
     rest = input.slice(root.length + 1);
   }
-  const segments = rest.split("/").filter((s) => s !== "" && s !== ".");
+  const segments = rest.split(win ? /[\\/]+/ : "/").filter((s) => s !== "" && s !== ".");
   if (segments.includes("..")) return { ok: false, reason: "Pfad darf kein .. enthalten" };
   if (segments.length === 0) return { ok: false, reason: "Pfad zeigt keine Datei" };
-  const path = segments.join("/");
-  return { ok: true, path, absolute: `${root}/${path}` };
+  if (win && segments.some((s) => s.includes(":"))) return { ok: false, reason: "Pfad enthält ein ungültiges Zeichen" };
+  const path = matchVaultCase(platform, segments.join("/"), paths ?? []);
+  return { ok: true, path, absolute: win ? joinPath(platform, root, ...path.split("/")) : `${root}/${path}` };
 }
 
 async function callTool(id: Id, params: unknown, ctx: DispatchContext): Promise<RpcResponse> {
@@ -180,7 +207,7 @@ async function callTool(id: Id, params: unknown, ctx: DispatchContext): Promise<
         if (typeof args.filePath !== "string") return rpcError(id, RPC.INVALID_PARAMS, "filePath muss Text sein");
         const base = ctx.vaultBase();
         if (base === null) return rpcResult(id, errorResult("Vault-Ordner unbekannt"));
-        const file = resolveInVault(base, args.filePath);
+        const file = resolveInVault(base, args.filePath, ctx.platform, ctx.vaultPaths?.());
         if (!file.ok) return rpcResult(id, errorResult(file.reason));
         const target = { path: file.path, absolute: file.absolute };
         return rpcResult(id, await h[name](target));
@@ -198,7 +225,7 @@ async function callDiffTool(id: Id, name: string, args: Record<string, unknown>,
   const diff = ctx.handlers.diff;
   if (!diff || !diffOffered(ctx)) return rpcError(id, RPC.INVALID_PARAMS, `Unbekanntes Tool: ${name}`);
   if (name === "openDiff") {
-    const parsed = parseOpenDiffArgs(args);
+    const parsed = parseOpenDiffArgs(args, ctx.platform);
     if (!parsed.ok) return rpcResult(id, errorResult(parsed.reason));
     return rpcResult(id, await diff.openDiff(parsed.args, ctx.clientId ?? null));
   }
@@ -241,13 +268,25 @@ export interface SelectionParams {
   selection: { start: Position; end: Position; isEmpty: boolean };
 }
 
-/** file://-URL: Segmente kodiert, Schrägstriche bleiben. */
-export const fileUrl = (path: string): string => `file://${path.split("/").map(encodeURIComponent).join("/")}`;
+const encodeSegments = (path: string): string => path.split("/").map(encodeURIComponent).join("/");
+
+/**
+ * file://-URL: Segmente kodiert, Schrägstriche bleiben. win32: Backslashes werden zu Schrägstrichen, ein Laufwerk bleibt wörtlich
+ * (`C:\x\a b.md` → `file:///C:/x/a%20b.md`), ein UNC-Pfad wird zu `file://server/share/…`.
+ */
+export function fileUrl(path: string, platform: Platform = "darwin"): string {
+  if (platform !== "win32") return `file://${encodeSegments(path)}`;
+  const p = path.replace(/\\/g, "/");
+  if (p.startsWith("//")) return `file://${encodeSegments(p.slice(2))}`;
+  const drive = /^([A-Za-z]:)(\/.*)?$/.exec(p);
+  if (drive) return `file:///${drive[1]}${encodeSegments(drive[2] ?? "")}`;
+  return `file://${p.startsWith("/") ? "" : "/"}${encodeSegments(p)}`;
+}
 
 /** Parameter von selection_changed (Felder wie in PROTOCOL.md). Zeilen und Spalten zählen ab 0. */
-export function selectionParams(a: { filePath: string; text: string; start: Position; end: Position }): SelectionParams {
+export function selectionParams(a: { filePath: string; text: string; start: Position; end: Position }, platform: Platform = "darwin"): SelectionParams {
   const isEmpty = a.start.line === a.end.line && a.start.character === a.end.character;
-  return { text: a.text, filePath: a.filePath, fileUrl: fileUrl(a.filePath), selection: { start: a.start, end: a.end, isEmpty } };
+  return { text: a.text, filePath: a.filePath, fileUrl: fileUrl(a.filePath, platform), selection: { start: a.start, end: a.end, isEmpty } };
 }
 
 /** Parameter von at_mentioned (PROTOCOL.md: filePath, lineStart, lineEnd). */
@@ -300,3 +339,5 @@ export function authorized(header: string | string[] | undefined, token: string)
 
 /** Umgebung, mit der Claude Code die IDE von selbst findet (Probe 05.10.2026: Verbindung ohne /ide). */
 export const ideEnv = (port: number): Record<string, string> => ({ ENABLE_IDE_INTEGRATION: "true", CLAUDE_CODE_SSE_PORT: String(port) });
+/** Die Schlüssel aus ideEnv; geerbt (aus einer Elternsitzung) fallen sie beim Start weg (Abend 41b). */
+export const IDE_ENV_KEYS = ["ENABLE_IDE_INTEGRATION", "CLAUDE_CODE_SSE_PORT"] as const;

@@ -4,6 +4,7 @@ import { USAGE_SNAPSHOT_FILE } from "../core/constants";
 import { Observable } from "../core/observable";
 import { expandHome } from "../core/settings";
 import { parseUsageSnapshot, type TokenCounter, type UsageSnapshot, usageView } from "../core/usage";
+import { hostPlatform } from "./host-platform";
 import { readSnapshotFile, type SnapshotRead } from "./usage-fs";
 
 export interface UsageCardDeps {
@@ -34,7 +35,7 @@ export class UsageCard {
   constructor(_owner: ItemView, el: HTMLElement, deps: UsageCardDeps) {
     this.el = el;
     this.deps = deps;
-    this.snapshotPath = expandHome(USAGE_SNAPSHOT_FILE, homedir());
+    this.snapshotPath = expandHome(USAGE_SNAPSHOT_FILE, homedir(), hostPlatform());
   }
 
   start(): void {

@@ -3,6 +3,7 @@ import { type KillHandle, type KillSignal, escalateKill } from "./kill-escalatio
 import { RingBuffer } from "./ring-buffer";
 import { ModeTracker } from "./terminal-modes";
 import { canResize } from "./shell";
+import type { Platform } from "./platform-path";
 import type { TimerApi } from "./view-tracker";
 
 export interface Disposable {
@@ -16,7 +17,7 @@ export interface PtyLike {
   write(data: string): void;
   resize(cols: number, rows: number): void;
   kill(signal?: string): void;
-  /** Prozess-ID (node-pty setzt sie; node-pty startet mit setsid, pid ist zugleich die Prozessgruppe). */
+  /** Prozess-ID (node-pty setzt sie; auf dem Mac startet node-pty mit setsid, pid ist zugleich die Prozessgruppe; unter Windows die PID des Programms, das node-pty in der ConPTY startet (innerPid): claude.exe, bei claude.cmd aber cmd.exe; ihr Baum fällt über taskkill /T). */
   readonly pid?: number;
 }
 
@@ -26,6 +27,10 @@ export interface ManagerOptions {
   killGraceMs?: number;
   /** Signal an die ganze Prozessgruppe (-pid); ohne Angabe oder bei Fehler geht SIGKILL an die PTY. */
   signalGroup?: (pid: number, signal: KillSignal) => void;
+  /** Plattform; Vorgabe darwin. Unter win32 gibt es keine Signale: kill() ohne Signal, dann forceKillTree. */
+  platform?: Platform;
+  /** Beendet den Prozessbaum (win32: taskkill /T /F). Darf nie werfen. */
+  forceKillTree?: (pid: number) => void;
 }
 
 /** Was die Views über eine Sitzung wissen müssen: Art (für „Session-ID kopieren“) und Tab-Titel. */
@@ -37,7 +42,7 @@ export interface SessionMeta {
 export interface SessionSpec {
   id: string;
   file: string;
-  args: string[];
+  args: string[] | string;
   cwd: string;
   env: Record<string, string>;
   cols: number;
@@ -102,6 +107,8 @@ export class SessionManager {
   private readonly timers: TimerApi;
   private readonly killGraceMs: number;
   private readonly signalGroup: ManagerOptions["signalGroup"];
+  private readonly platform: Platform;
+  private readonly forceKillTree: ManagerOptions["forceKillTree"];
   private readonly changeSubs = new Set<() => void>();
 
   constructor(factory: PtyFactory, ringMax?: number, options: ManagerOptions = {}) {
@@ -113,6 +120,8 @@ export class SessionManager {
     };
     this.killGraceMs = options.killGraceMs ?? KILL_ESCALATION_MS;
     this.signalGroup = options.signalGroup;
+    this.platform = options.platform ?? "darwin";
+    this.forceKillTree = options.forceKillTree;
   }
 
   /** Idempotent: Eine laufende Sitzung bleibt, eine beendete wird ersetzt. */
@@ -244,9 +253,10 @@ export class SessionManager {
   }
 
   /**
-   * Beendet die PTY (falls sie läuft) und vergisst die Sitzung. Unbekannte id: nichts. SIGHUP sofort, lebt der
+   * Beendet die PTY (falls sie läuft) und vergisst die Sitzung. Unbekannte id: nichts. Mac: SIGHUP sofort, lebt der
    * Prozess nach der Frist noch, SIGKILL an die Prozessgruppe (Kinder bleiben sonst als Waisen zurück, gemessen
-   * am 05.10.2026). Das Versprechen löst auf, sobald der Prozess weg oder SIGKILL gesendet ist.
+   * am 05.10.2026). Windows (platform "win32"): kill() der PTY ohne Signal, nach der Frist taskkill /T /F auf den Baum
+   * (forceKillTree). Das Versprechen löst auf, sobald der Prozess weg oder die zweite Stufe gesendet ist.
    */
   kill(id: string): Promise<void> {
     const session = this.sessions.get(id);
@@ -283,6 +293,13 @@ export class SessionManager {
   private send(id: string, session: Session, signal: KillSignal): void {
     try {
       const pid = session.pty.pid;
+      if (this.platform === "win32") {
+        // Windows kennt keine Signale: erste Stufe kill der PTY ohne Argument (genau einmal, node-pty #983), zweite
+        // der Prozessbaum. Ohne pid oder forceKillTree bleibt es nach der Frist bei nichts.
+        if (signal === "SIGHUP") session.pty.kill();
+        else if (pid !== undefined) this.forceKillTree?.(pid);
+        return;
+      }
       if (signal === "SIGKILL" && pid !== undefined && this.signalGroup) {
         try {
           this.signalGroup(pid, signal);

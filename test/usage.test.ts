@@ -40,14 +40,30 @@ describe("parseUsageSnapshot", () => {
     const s = parseUsageSnapshot(JSON.stringify({ rate_limits: { five_hour: { used_percentage: 1, resets_at: 2 } } }));
     expect(s).toEqual({ writtenAt: null, windows: { five_hour: { usedPercentage: 1, resetsAt: 2 } } });
   });
+  it("observed_at je Fenster wird gelesen; fehlt es oder ist es keine endliche Zahl, fehlt observedAt", () => {
+    const s = parseUsageSnapshot(JSON.stringify({ written_at: 100, rate_limits: { five_hour: { used_percentage: 1, resets_at: 200, observed_at: 150 }, seven_day: { used_percentage: 2, resets_at: 300, observed_at: "x" } } }));
+    expect(s?.windows.five_hour).toEqual({ usedPercentage: 1, resetsAt: 200, observedAt: 150 });
+    // Das Fenster bleibt, nur observedAt fehlt (toEqual allein übersähe ein Feld mit dem Wert undefined).
+    expect(s?.windows.seven_day).toEqual({ usedPercentage: 2, resetsAt: 300 });
+    expect(s?.windows.seven_day).not.toHaveProperty("observedAt");
+    // ±Infinity nur als Rohtext: JSON.parse macht aus 1e999 Infinity und aus -1e999 -Infinity, JSON.stringify schriebe null.
+    const unendlich = parseUsageSnapshot('{"written_at":100,"rate_limits":{"five_hour":{"used_percentage":1,"resets_at":200,"observed_at":1e999},"seven_day":{"used_percentage":2,"resets_at":300,"observed_at":-1e999}}}');
+    expect(unendlich?.windows.five_hour).toEqual({ usedPercentage: 1, resetsAt: 200 });
+    expect(unendlich?.windows.five_hour).not.toHaveProperty("observedAt");
+    expect(unendlich?.windows.seven_day).toEqual({ usedPercentage: 2, resetsAt: 300 });
+    expect(unendlich?.windows.seven_day).not.toHaveProperty("observedAt");
+  });
 });
 
 describe("usageView", () => {
-  const snap = (writtenAt: number | null, five?: [number, number], week?: [number, number]) => ({
+  /** Fenster als [Prozent, resets_at, observed_at?]; observedAt nur, wenn angegeben. */
+  type Fenster = [number, number, number?];
+  const fenster = ([pct, resets, observed]: Fenster) => ({ usedPercentage: pct, resetsAt: resets, ...(observed === undefined ? {} : { observedAt: observed }) });
+  const snap = (writtenAt: number | null, five?: Fenster, week?: Fenster) => ({
     writtenAt,
     windows: {
-      ...(five ? { five_hour: { usedPercentage: five[0], resetsAt: five[1] } } : {}),
-      ...(week ? { seven_day: { usedPercentage: week[0], resetsAt: week[1] } } : {}),
+      ...(five ? { five_hour: fenster(five) } : {}),
+      ...(week ? { seven_day: fenster(week) } : {}),
     },
   });
   it("Prozent gerundet und Restzeit bis resets_at, 5 Stunden vor Woche", () => {
@@ -79,6 +95,25 @@ describe("usageView", () => {
   it("Alter unbekannt und Uhr der Datei in der Zukunft", () => {
     expect(usageView(snap(null), NOW.getTime()).ageText).toBe("Alter unbekannt");
     expect(usageView(snap(NOW_S + 50), NOW.getTime()).ageSec).toBe(0);
+  });
+  it("Alter ab der jüngsten Beobachtung, nicht ab written_at (written_at erneuert jeder Tab alle 30 s)", () => {
+    const v = usageView(snap(NOW_S - 10, [23, NOW_S + 3600, NOW_S - 1800], [41, NOW_S + 86400, NOW_S - 600]), NOW.getTime());
+    expect(v.ageSec).toBe(600);
+    expect(v.ageText).toBe("vor 10 Min.");
+  });
+  it("nur ein Fenster mit observed_at: dessen Alter", () => {
+    expect(usageView(snap(NOW_S - 5, [23, NOW_S + 3600], [41, NOW_S + 86400, NOW_S - 120]), NOW.getTime()).ageSec).toBe(120);
+  });
+  it("Beobachtung in der Zukunft: Alter 0", () => {
+    const v = usageView(snap(NOW_S - 600, undefined, [41, NOW_S + 86400, NOW_S + 50]), NOW.getTime());
+    expect(v.ageSec).toBe(0);
+    expect(v.ageText).toBe("gerade eben");
+  });
+  it("abgelaufenes Fenster zählt mit: seine Beobachtung ist die jüngste", () => {
+    expect(usageView(snap(NOW_S - 900, [23, NOW_S - 60, NOW_S - 120], [41, NOW_S + 86400, NOW_S - 600]), NOW.getTime()).ageSec).toBe(120);
+  });
+  it("ohne written_at: Alter ab observed_at", () => {
+    expect(usageView(snap(null, [23, NOW_S + 3600, NOW_S - 300]), NOW.getTime()).ageSec).toBe(300);
   });
 });
 
@@ -327,6 +362,7 @@ describe("TokenCounter (Abend 13)", () => {
       scan: async (now) => { scans.push(now); return { tokens: 100 * scans.length, tokensSub: 30 * scans.length, skipped: 1, lines: 10 }; },
       write: async (content) => { writes.push(content); },
       settings: () => cfg,
+      platform: "darwin",
       now: () => new Date(clock.ms),
       log: (m) => logs.push(m),
       ...over,
@@ -361,6 +397,20 @@ describe("TokenCounter (Abend 13)", () => {
     await r.counter.requestRun();
     expect(r.counter.state()).toEqual({ kind: "ok", count: { tokens: 100, tokensSub: 30, skipped: 1, lines: 10 } });
     expect(r.writes).toEqual([tokensFileContent({ tokens: 100, tokensSub: 30, skipped: 1, lines: 10 }, NOW)]);
+  });
+  it("win32 (Abend 43): writeTokensFile true gespeichert, trotzdem nie geschrieben; der Wert bleibt, das Zählen läuft weiter", async () => {
+    const r = rig({ platform: "win32" });
+    await r.counter.requestRun();
+    r.clock.ms += 61_000;
+    await r.counter.requestRun();
+    expect(r.writes).toEqual([]);
+    expect(r.cfg.writeTokensFile).toBe(true);
+    expect(r.counter.state()).toEqual({ kind: "ok", count: { tokens: 200, tokensSub: 60, skipped: 1, lines: 10 } });
+  });
+  it("darwin (Abend 43): schreibt wie bisher", async () => {
+    const r = rig({ platform: "darwin" });
+    await r.counter.requestRun();
+    expect(r.writes).toHaveLength(1);
   });
   it("aus: nichts schreiben, aber weiter zählen", async () => {
     const r = rig({}, { writeTokensFile: false, usagePollSec: 60 });

@@ -75,6 +75,13 @@ describe("resolveCredentials", () => {
   });
 });
 
+describe("telegramText unter win32", () => {
+  it("kürzt den Ordner mit ~ und Backslash", () =>
+    expect(telegramText("done", "Notizen", "C:\\Users\\x\\Documents\\p", "C:\\Users\\x", "win32")).toBe("✅ Notizen ist fertig\n~\\Documents\\p"));
+  it("ohne Plattform (darwin) bleibt der Windows-Pfad stehen", () =>
+    expect(telegramText("done", "A", "C:\\Users\\x\\p", "C:\\Users\\x")).toBe("✅ A ist fertig\nC:\\Users\\x\\p"));
+});
+
 describe("telegramText", () => {
   it("fertig, Ordner mit ~", () =>
     expect(telegramText("done", "Notizen", "/Users/alex/Documents/x", "/Users/alex")).toBe("✅ Notizen ist fertig\n~/Documents/x"));

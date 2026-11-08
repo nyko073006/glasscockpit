@@ -2,6 +2,7 @@
 // Das Token steht nie in einer Einstellung; es kommt bei jedem Versand frisch aus der .env-Datei.
 import type { AttentionSignal } from "./attention";
 import { shortPath } from "./claude-launch";
+import type { Platform } from "./platform-path";
 
 export type Resolved = { ok: true; token: string; chatId: string } | { ok: false; reason: string };
 export type SendResult = { ok: true } | { ok: false; reason: string };
@@ -64,9 +65,9 @@ export function resolveCredentials(envText: string | null, accessText: string | 
 }
 
 /** Nur Klartext, kein Inhalt aus der Unterhaltung: Sitzungsname und Ordner. */
-export function telegramText(signal: AttentionSignal, name: string, cwd: string, home: string): string {
+export function telegramText(signal: AttentionSignal, name: string, cwd: string, home: string, platform: Platform = "darwin"): string {
   const head = signal === "done" ? `✅ ${name} ist fertig` : `❓ ${name} hat eine Frage`;
-  return cwd === "" ? head : `${head}\n${shortPath(cwd, home)}`;
+  return cwd === "" ? head : `${head}\n${shortPath(cwd, home, platform)}`;
 }
 
 /** Senden, wenn die Art an ist, der Mac lange genug ruht (unbekannt zählt nur bei 0) und der Abstand je Sitzung gilt. */

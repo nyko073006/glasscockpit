@@ -3,13 +3,16 @@ import type { Terminal } from "@xterm/xterm";
 import { PASTE_DEBOUNCE_MS } from "../core/constants";
 import { planDrop } from "../core/dropped-paths";
 import { type NameResolver, parseUriList, pathsFromText } from "../core/drop-sources";
-import { keyToSequence } from "../core/keymap";
+import { keyToSequence, windowsClipboardAction } from "../core/keymap";
+import type { Platform } from "../core/platform-path";
 import { acceptPaste, preparePaste } from "../core/paste";
 import { readClipboard, writeClipboard } from "./clipboard";
 import { electronModule } from "./electron";
 import type { PopoutWindow } from "./popout-window";
 
 export interface TerminalInputOptions {
+  /** Plattform des Rechners (hostPlatform()): Tastenbelegung und Zwischenablage-Kürzel. */
+  platform: Platform;
   term: Terminal;
   /** Container der Pane. Listener hängen an seinem Dokument und Fenster (Pop-out). */
   container: HTMLElement;
@@ -31,7 +34,7 @@ interface ElectronBits {
 const electron = (): ElectronBits | null => electronModule<ElectronBits>();
 
 /**
- * Eingabe der Pane: Mac-Tasten, Cmd+V/C/A, Drag-and-drop.
+ * Eingabe der Pane: Mac-Tasten, Cmd+V/C/A (Windows: Ctrl+C/V und Ctrl+Shift+C/V), Drag-and-drop.
  * Cmd+V läuft über zwei Wege (Tastenhandler und paste-Ereignis, etwa aus dem Kontextmenü),
  * die Entprellung lässt nur den ersten durch.
  */
@@ -112,15 +115,35 @@ export class TerminalInput {
   private onKey(ev: KeyboardEvent): boolean {
     if (ev.type !== "keydown") return true;
 
-    const seq = keyToSequence(ev, process.platform);
+    const seq = keyToSequence(ev, this.opts.platform);
     if (seq !== null) {
       ev.preventDefault();
       this.opts.write(seq);
       return false;
     }
 
+    // Windows: Ctrl+C (mit Auswahl), Ctrl+V und Ctrl+Shift+C/V. return false hält xterm davon ab, ein zweites paste-Ereignis auszulösen.
+    if (this.opts.platform === "win32") {
+      const action = windowsClipboardAction(ev, this.opts.term.hasSelection());
+      if (action === "copy") {
+        ev.preventDefault();
+        void this.copy(this.opts.term.getSelection());
+        return false;
+      }
+      if (action === "paste") {
+        ev.preventDefault();
+        void this.paste();
+        return false;
+      }
+      // Ctrl+Shift+C ohne Auswahl: nichts tun, kein ^C an Claude.
+      if (action === "none") {
+        ev.preventDefault();
+        return false;
+      }
+    }
+
     // Nur Cmd allein; Option+Zeichen (@ auf der deutschen Tastatur) erledigt schon keyToSequence.
-    if (process.platform === "darwin" && ev.metaKey && !ev.altKey && !ev.ctrlKey && !ev.shiftKey) {
+    if (this.opts.platform === "darwin" && ev.metaKey && !ev.altKey && !ev.ctrlKey && !ev.shiftKey) {
       switch (ev.key.toLowerCase()) {
         case "v":
           ev.preventDefault();
@@ -188,12 +211,12 @@ export class TerminalInput {
             .filter(Boolean);
         },
       ],
-      ["3 (text/uri-list)", () => parseUriList(dt.getData("text/uri-list"))],
+      ["3 (text/uri-list)", () => parseUriList(dt.getData("text/uri-list"), this.opts.platform)],
       [
         "4 (text/plain)",
         () => {
           const base = this.opts.vaultBase();
-          return pathsFromText(dt.getData("text/plain"), base ?? "", (abs) => base !== null && existsSync(abs), this.opts.resolveName);
+          return pathsFromText(dt.getData("text/plain"), base ?? "", (abs) => base !== null && existsSync(abs), this.opts.resolveName, this.opts.platform);
         },
       ],
     ];
@@ -202,7 +225,7 @@ export class TerminalInput {
       if (paths.length === 0) continue;
       console.debug(`Glasscockpit: Drop über Stufe ${name}`, paths);
       // Pfade, die Claude als @-Erwähnung nicht lesen kann, werden nicht eingefügt; die übrigen schon.
-      const { text, notice } = planDrop(paths);
+      const { text, notice } = planDrop(paths, this.opts.platform);
       if (notice) this.opts.notify(notice);
       if (text) this.opts.write(text);
       return;

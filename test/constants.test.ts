@@ -6,6 +6,7 @@ import {
   PLUGIN_ID,
   TERMINAL_FONT_FAMILY,
   TERMINAL_MAC_OPTION_IS_META,
+  terminalFontFamily,
   VIEW_TYPE_DASHBOARD,
   VIEW_TYPE_TERMINAL,
 } from "../src/core/constants";
@@ -50,6 +51,11 @@ describe("(a) Namensraum und Konstanten", () => {
 describe("Terminal-Optionen", () => {
   it("Schrift ist Monaco mit Rückfall (Entscheidung vom 04.10.2026)", () => {
     expect(TERMINAL_FONT_FAMILY).toBe("Monaco, Menlo, monospace");
+  });
+  it("terminalFontFamily: darwin wie bisher, win32 Cascadia Mono, Consolas", () => {
+    expect(terminalFontFamily("darwin")).toBe("Monaco, Menlo, monospace");
+    expect(terminalFontFamily("darwin")).toBe(TERMINAL_FONT_FAMILY);
+    expect(terminalFontFamily("win32")).toBe('"Cascadia Mono", Consolas, monospace');
   });
 
   // Mit Option als Meta schickt Option+L auf der deutschen Mac-Tastatur ESC l statt @.

@@ -1,7 +1,8 @@
-import { posix } from "node:path";
+import { posix, win32 } from "node:path";
 import type { ILink } from "@xterm/xterm";
 import { describe, expect, it, vi } from "vitest";
 import { type CellRow, MAX_PATH_PROBES } from "../src/core/file-links";
+import type { Platform } from "../src/core/platform-path";
 import { FileLinkProvider, type LinkTarget, openTerminalPath } from "../src/host/file-links";
 import { guardLinkProvider } from "../src/host/link-guard";
 
@@ -22,7 +23,7 @@ const dirsOf = (...files: string[]): Set<string> => {
 function setup(
   lines: CellRow[],
   files: string[],
-  opts: { enabled?: boolean; cwd?: string | null; claudeDirs?: boolean; bases?: string[]; spaces?: boolean; dirs?: string[] } = {},
+  opts: { enabled?: boolean; cwd?: string | null; claudeDirs?: boolean; bases?: string[]; spaces?: boolean; dirs?: string[]; platform?: Platform; home?: string } = {},
 ) {
   const open = vi.fn<(t: LinkTarget) => void>();
   const isFile = vi.fn((p: string) => files.includes(p));
@@ -33,7 +34,8 @@ function setup(
   const provider = new FileLinkProvider({
     row: (y) => lines[y - 1] ?? null,
     cwd: () => (opts.cwd === undefined ? "/repo" : opts.cwd),
-    home: "/Users/n",
+    home: opts.home ?? "/Users/n",
+    platform: opts.platform ?? "darwin",
     enabled: () => opts.enabled ?? true,
     isFile,
     claudeDirs: () => opts.claudeDirs ?? true,
@@ -54,6 +56,21 @@ const click = (meta: boolean, extra: { button?: number; ctrlKey?: boolean; altKe
   ({ button: 0, ctrlKey: false, altKey: false, metaKey: meta, ...extra, preventDefault: vi.fn() }) as unknown as MouseEvent & {
     preventDefault: ReturnType<typeof vi.fn>;
   };
+
+// Nachgestellt nach xterm 6.0.0 (src/browser/Linkifier.ts, _handleNewLink): xterm liest decorations, ruft hover und
+// ersetzt link.decorations danach durch ein Objekt mit Settern. Nur Zuweisungen an dessen Eigenschaften kommen an.
+const xtermHover = (link: ILink, meta: boolean, event: MouseEvent = click(meta)) => {
+  const state = { underline: link.decorations?.underline ?? true, pointerCursor: link.decorations?.pointerCursor ?? true };
+  link.hover?.(event, link.text);
+  const tracked = {} as ILink["decorations"] & object;
+  Object.defineProperties(tracked, {
+    underline: { get: () => state.underline, set: (v: boolean) => { state.underline = v; } },
+    pointerCursor: { get: () => state.pointerCursor, set: (v: boolean) => { state.pointerCursor = v; } },
+  });
+  link.decorations = tracked;
+  return state;
+};
+const tick = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 
 describe("FileLinkProvider", () => {
   it("existierende Datei wird Link mit Bereich in Zellen", () => {
@@ -105,20 +122,6 @@ describe("FileLinkProvider", () => {
     const { links } = setup([rowOf("/abs/a.md")], ["/abs/a.md"], { enabled: false });
     expect(links(1)).toBeUndefined();
   });
-  // Nachgestellt nach xterm 6.0.0 (src/browser/Linkifier.ts, _handleNewLink): xterm liest decorations, ruft hover und
-  // ersetzt link.decorations danach durch ein Objekt mit Settern. Nur Zuweisungen an dessen Eigenschaften kommen an.
-  const xtermHover = (link: ILink, meta: boolean) => {
-    const state = { underline: link.decorations?.underline ?? true, pointerCursor: link.decorations?.pointerCursor ?? true };
-    link.hover?.(click(meta), link.text);
-    const tracked = {} as ILink["decorations"] & object;
-    Object.defineProperties(tracked, {
-      underline: { get: () => state.underline, set: (v: boolean) => { state.underline = v; } },
-      pointerCursor: { get: () => state.pointerCursor, set: (v: boolean) => { state.pointerCursor = v; } },
-    });
-    link.decorations = tracked;
-    return state;
-  };
-  const tick = () => new Promise<void>((resolve) => queueMicrotask(resolve));
 
   it("unterstrichen nur mit gedrückter Cmd-Taste, auch beim Drücken und Loslassen über dem Link", async () => {
     const { links, provider } = setup([rowOf("/abs/a.md")], ["/abs/a.md"]);
@@ -431,7 +434,7 @@ describe("FileLinkProvider: Pfade mit Leerzeichen (Abend 38)", () => {
   it("Einstellung wird bei jeder Abfrage frisch gelesen", () => {
     let on = false;
     const provider = new FileLinkProvider({
-      row: () => rowOf("/d/a b.md"), cwd: () => "/", home: "/h", enabled: () => true, isFile: (p) => p === "/d/a b.md", claudeDirs: () => false,
+      row: () => rowOf("/d/a b.md"), cwd: () => "/", home: "/h", platform: "darwin", enabled: () => true, isFile: (p) => p === "/d/a b.md", claudeDirs: () => false,
       bases: () => [], isDir: (p) => p === "/d" || p === "/", spaces: () => on, open: () => undefined,
     });
     const ask = () => { let r: ILink[] | undefined; provider.provideLinks(1, (l) => (r = l)); return r?.length ?? 0; };
@@ -445,6 +448,7 @@ describe("FileLinkProvider: Pfade mit Leerzeichen (Abend 38)", () => {
 
 describe("openTerminalPath: Vault-Datei als Tab, sonst Fenster", () => {
   const deps = (opened: boolean) => ({
+    platform: "darwin" as const,
     vaultBase: () => "/V",
     openInVault: vi.fn(async () => opened),
     openInModal: vi.fn(),
@@ -465,5 +469,107 @@ describe("openTerminalPath: Vault-Datei als Tab, sonst Fenster", () => {
     await openTerminalPath({ path: "/repo/a.ts", line: null, col: null }, d);
     expect(d.openInVault).not.toHaveBeenCalled();
     expect(d.openInModal).toHaveBeenCalledWith({ path: "/repo/a.ts", line: null, col: null });
+  });
+});
+
+// Abend 42, Task 2: Windows. Ctrl+Klick öffnet, Ctrl unterstreicht; Pfade mit Laufwerk und Backslash.
+/** Der erste Link der Zeile; fehlt er, fällt der Test an dieser Zusicherung, nicht an einem Zugriff auf undefined. */
+function firstLink(links: (y: number) => ILink[] | undefined): ILink {
+  const link = links(1)?.[0];
+  expect(link).toBeDefined();
+  return link as ILink;
+}
+
+describe("FileLinkProvider unter win32", () => {
+  const W = { platform: "win32" as const, home: "C:\\Users\\n", cwd: "C:\\repo" };
+  const dirsW = (...files: string[]): string[] => files.flatMap((f) => { const out: string[] = []; for (let d = win32.dirname(f); win32.dirname(d) !== d; d = win32.dirname(d)) out.push(d); return out; });
+
+  it("Ctrl+Klick öffnet den Pfad (relativ mit Backslash, Zeile und Spalte), Cmd und einfacher Klick nicht", () => {
+    const { links, open } = setup([rowOf("siehe src\\main.ts:10:2 ok")], ["C:\\repo\\src\\main.ts"], W);
+    const link = firstLink(links);
+    expect(link.text).toBe("src\\main.ts:10:2");
+    link.activate(click(false), link.text);
+    link.activate(click(true), link.text);
+    expect(open).not.toHaveBeenCalled();
+    const event = click(false, { ctrlKey: true });
+    link.activate(event, link.text);
+    expect(open).toHaveBeenCalledWith({ path: "C:\\repo\\src\\main.ts", line: 10, col: 2 });
+    expect(event.preventDefault).toHaveBeenCalled();
+  });
+  it.each([
+    ["Ctrl+Mittelklick", { button: 1, ctrlKey: true }],
+    ["Ctrl+Rechtsklick", { button: 2, ctrlKey: true }],
+    ["Ctrl+Alt+Linksklick (AltGr)", { button: 0, ctrlKey: true, altKey: true }],
+  ])("%s öffnet nicht und lässt das Ereignis unberührt", (_name, extra) => {
+    const { links, open } = setup([rowOf("C:\\repo\\a.md")], ["C:\\repo\\a.md"], W);
+    const link = firstLink(links);
+    const event = click(false, extra);
+    link.activate(event, link.text);
+    expect(open).not.toHaveBeenCalled();
+    expect(event.preventDefault).not.toHaveBeenCalled();
+  });
+  it("absoluter Pfad mit Laufwerk, auch mit Schrägstrichen; ~\\ gegen home", () => {
+    const { links, open } = setup([rowOf("C:\\repo\\a.md c:/repo/b.md ~\\c.md")], ["C:\\repo\\a.md", "c:\\repo\\b.md", "C:\\Users\\n\\c.md"], W);
+    const found = links(1) ?? [];
+    expect(found.map((l) => l.text)).toEqual(["C:\\repo\\a.md", "c:/repo/b.md", "~\\c.md"]);
+    for (const l of found) l.activate(click(false, { ctrlKey: true }), l.text);
+    expect(open.mock.calls.map(([t]) => t.path)).toEqual(["C:\\repo\\a.md", "c:\\repo\\b.md", "C:\\Users\\n\\c.md"]);
+  });
+  it("Unterstrichen mit gedrückter Ctrl-Taste beim Überfahren, nicht mit Cmd", async () => {
+    const { links } = setup([rowOf("C:\\repo\\a.md")], ["C:\\repo\\a.md"], W);
+    const link = firstLink(links);
+    const mitCtrl = xtermHover(link, false, click(false, { ctrlKey: true }));
+    await tick();
+    expect(mitCtrl).toEqual({ underline: true, pointerCursor: true });
+    const mitCmd = xtermHover(firstLink(setup([rowOf("C:\\repo\\a.md")], ["C:\\repo\\a.md"], W).links), true);
+    await tick();
+    expect(mitCmd).toEqual({ underline: false, pointerCursor: false });
+  });
+  it("setModifier schaltet die Unterstreichung wie auf dem Mac", async () => {
+    const { links, provider } = setup([rowOf("C:\\repo\\a.md")], ["C:\\repo\\a.md"], W);
+    const state = xtermHover(firstLink(links), false);
+    await tick();
+    provider.setModifier(true);
+    expect(state).toEqual({ underline: true, pointerCursor: true });
+    provider.setModifier(false);
+    expect(state).toEqual({ underline: false, pointerCursor: false });
+  });
+  it("Gegentest: Auf dem Mac unterstreicht Ctrl beim Überfahren nicht und Ctrl+Klick öffnet nicht", async () => {
+    const { links, open } = setup([rowOf("/abs/a.md")], ["/abs/a.md"]);
+    const link = firstLink(links);
+    const state = xtermHover(link, false, click(false, { ctrlKey: true }));
+    await tick();
+    expect(state).toEqual({ underline: false, pointerCursor: false });
+    link.activate(click(false, { ctrlKey: true }), link.text);
+    expect(open).not.toHaveBeenCalled();
+  });
+  it("relative Pfade über Claudes Ordner (Basisordner mit Laufwerk)", () => {
+    const { links, open } = setup([rowOf("src\\x.ts")], ["C:\\proj\\app\\src\\x.ts"], { ...W, bases: ["C:\\proj\\app"] });
+    const link = firstLink(links);
+    link.activate(click(false, { ctrlKey: true }), link.text);
+    expect(open).toHaveBeenCalledWith({ path: "C:\\proj\\app\\src\\x.ts", line: null, col: null });
+  });
+  it("Pfade mit Leerzeichen, Klammern und # über die Verlängerung", () => {
+    const full = "C:\\Users\\Jürgen Müller\\Mein Ordner (alt)\\a #1.md";
+    const { links, open } = setup([rowOf(`Datei: ${full} fertig`)], [full], { ...W, spaces: true, dirs: dirsW(full) });
+    const found = links(1) ?? [];
+    expect(found.map((l) => l.text)).toEqual([full]);
+    found[0].activate(click(false, { ctrlKey: true }), found[0].text);
+    expect(open).toHaveBeenCalledWith({ path: full, line: null, col: null });
+  });
+});
+
+describe("openTerminalPath unter win32", () => {
+  it("Vault-Datei mit anderer Schreibweise und Schrägstrichen: Tab mit vault-relativem Pfad", async () => {
+    const d = { vaultBase: () => "C:\\Vault", openInVault: vi.fn(async () => true), openInModal: vi.fn(), platform: "win32" as const };
+    await openTerminalPath({ path: "c:\\vault\\Ordner\\a.md", line: null, col: null }, d);
+    expect(d.openInVault).toHaveBeenCalledWith("Ordner/a.md", { path: "c:\\vault\\Ordner\\a.md", line: null, col: null });
+    expect(d.openInModal).not.toHaveBeenCalled();
+  });
+  it("Gegentest: Nachbarordner C:\\Vault2 liegt nicht im Vault: Fenster", async () => {
+    const d = { vaultBase: () => "C:\\Vault", openInVault: vi.fn(async () => true), openInModal: vi.fn(), platform: "win32" as const };
+    await openTerminalPath({ path: "C:\\Vault2\\a.md", line: null, col: null }, d);
+    expect(d.openInVault).not.toHaveBeenCalled();
+    expect(d.openInModal).toHaveBeenCalled();
   });
 });

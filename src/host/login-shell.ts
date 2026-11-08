@@ -20,7 +20,7 @@ export function readLoginShell(shell: string, timeoutMs: number): Promise<LoginS
 
     let child: ReturnType<typeof spawn>;
     try {
-      child = spawn(shell, ["-i", "-l", "-c", loginShellScript()], { stdio: ["ignore", "pipe", "ignore"] });
+      child = spawn(shell, ["-i", "-l", "-c", loginShellScript()], { stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
     } catch (fehler) {
       resolve({ ok: false, reason: fehler instanceof Error ? fehler.message : String(fehler) });
       return;

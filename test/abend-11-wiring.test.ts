@@ -30,7 +30,7 @@ describe("Abend 11: Verdrahtung", () => {
     const view = src("src/host/terminal-view.ts");
     expect(view).not.toMatch(/new TranscriptReader\(\s*(this\.)?sessionId/);
     expect(view).not.toMatch(/new TranscriptReader\(\s*id\b/);
-    expect(view).toMatch(/new TranscriptReader\(claudeId\)/);
+    expect(view).toMatch(/new TranscriptReader\(claudeId, undefined, undefined, hostPlatform\(\)\)/);
     expect(view).toMatch(/claudeIdOf\(/);
     expect(view).not.toMatch(/tabTitle\(record\.name,\s*this\.sessionId\)/);
     expect(view).not.toMatch(/headerTitle\(record\.name,\s*id,/);
@@ -45,7 +45,9 @@ describe("Abend 11: Verdrahtung", () => {
     expect(main).toMatch(/new SessionManager\([\s\S]*?timers:\s*\{[^}]*window\.setTimeout/);
     const manager = src("src/core/session-manager.ts");
     expect(manager).toMatch(/escalateKill\(/);
-    expect(manager).not.toMatch(/pty\.kill\(\)/);
+    // Abend 41: pty.kill() ohne Signal kommt genau einmal vor, im win32-Zweig von send.
+    expect(manager.match(/pty\.kill\(\)/g)).toHaveLength(1);
+    expect(manager).toMatch(/private send\([\s\S]*?platform === "win32"[\s\S]*?pty\.kill\(\)[\s\S]*?return;\s*\}/);
   });
 
   it("Sitzung frisch starten: Command vorhanden, nur für Claude-Sitzungen", () => {

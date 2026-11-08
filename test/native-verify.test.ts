@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { NATIVE_TARGETS } from "../src/core/shell";
-import { DOWNLOAD_TARGETS, type FoundEntry, isSafeRelPath, nativeStatusText, nativeAssetName, nativeAssetUrl, verifyNative } from "../src/core/native-verify";
+import {
+  DOWNLOAD_TARGETS, downloadDoneText, type FoundEntry, isSafeRelPath, nativeAssetName, nativeAssetUrl, nativeDownloadHint, nativeStatusText,
+  verifyNative, zipListingProblem,
+} from "../src/core/native-verify";
 
 const H1 = "a".repeat(64);
 const H2 = "b".repeat(64);
@@ -119,5 +122,56 @@ describe("Abend 26 (5): Statuszeile der Einstellungen", () => {
   it("nennt Ziel und Zustand", () => {
     expect(nativeStatusText(true, "darwin-arm64")).toBe("Binärdateien vorhanden für darwin-arm64.");
     expect(nativeStatusText(false, "darwin-x64")).toBe("Binärdateien fehlen für darwin-x64.");
+  });
+});
+
+describe("Abend 40 (3): zipListingProblem", () => {
+  it("Listing von tar.exe mit CRLF, Ordnern mit Schrägstrich und leeren Zeilen ist in Ordnung", () => {
+    expect(zipListingProblem("lib/\r\nlib/index.js\r\nprebuilds/win32-x64/conpty.node\r\n")).toBeNull();
+    expect(zipListingProblem("lib/\nlib/index.js\n\n")).toBeNull();
+    expect(zipListingProblem("")).toBeNull();
+  });
+
+  it("./, .., absolut und Laufwerk scheitern mit dem Namen als JSON", () => {
+    for (const name of ["./lib/index.js", "../x", "/abs", "C:\\x"]) {
+      expect(zipListingProblem(`${name}\n`), name).toBe(`Unzulässiger Pfad im ZIP: ${JSON.stringify(name)}`);
+      expect(zipListingProblem(`lib/index.js\r\n${name}\r\n`), name).toBe(`Unzulässiger Pfad im ZIP: ${JSON.stringify(name)}`);
+    }
+  });
+
+  it("Laufwerk mit Schrägstrich, Laufwerk ohne Trenner und NTFS-Datenstrom scheitern: kein Doppelpunkt im Namen", () => {
+    for (const name of ["C:/Windows/x", "C:x", "lib/index.js:s", "C:/", "c:/windows/"]) {
+      expect(zipListingProblem(`${name}\n`), name).toBe(`Unzulässiger Pfad im ZIP: ${JSON.stringify(name)}`);
+      expect(zipListingProblem(`lib/index.js\r\n${name}\r\n`), name).toBe(`Unzulässiger Pfad im ZIP: ${JSON.stringify(name)}`);
+    }
+  });
+
+  it("der erste Verstoß wird genannt, auch hinter gültigen Zeilen und bei Ordnern", () => {
+    expect(zipListingProblem("lib/\n../a\n/b\n")).toBe('Unzulässiger Pfad im ZIP: "../a"');
+    expect(zipListingProblem("lib/\n../\n")).toBe('Unzulässiger Pfad im ZIP: "../"');
+    expect(zipListingProblem("a//b\n")).toBe('Unzulässiger Pfad im ZIP: "a//b"');
+  });
+});
+
+describe("Abend 40 (3): Texte der Binär-Einstellung", () => {
+  // Der Mac-Text ist wörtlich der von vor Abend 40 (settings-tab.ts, ab „Der Knopf lädt …“).
+  const MAC =
+    "Der Knopf lädt einmalig die Dateien für diesen Mac von github.com/nyko073006/glasscockpit (Release 0.3.9) und prüft sie gegen feste SHA256-Summen im Plugin. Nichts anderes wird geladen.";
+
+  it("darwin: der alte Text; win32: derselbe mit „für diesen PC“", () => {
+    expect(nativeDownloadHint("darwin", "0.3.9")).toBe(MAC);
+    const win = nativeDownloadHint("win32", "0.3.9");
+    expect(win).toBe(MAC.replace("für diesen Mac", "für diesen PC"));
+    expect(win).toContain("für diesen PC");
+    expect(win).not.toContain("Mac");
+  });
+
+  it("downloadDoneText: nur Windows mit schon geladenem node-pty verlangt den Neustart", () => {
+    const neu = "Binärdateien geladen (7 Dateien). Neue Sitzungen starten jetzt.";
+    const neustart = "Binärdateien geladen (7 Dateien). Obsidian neu starten, damit sie gelten.";
+    expect(downloadDoneText(7, "darwin", false)).toBe(neu);
+    expect(downloadDoneText(7, "darwin", true)).toBe(neu);
+    expect(downloadDoneText(7, "win32", false)).toBe(neu);
+    expect(downloadDoneText(7, "win32", true)).toBe(neustart);
   });
 });

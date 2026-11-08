@@ -1,6 +1,7 @@
 // Diff-Ansicht (Abend 17): Die drei Tools der IDE-Brücke, mit denen Claude Code einen Diff in der IDE zeigen lässt
 // (openDiff, close_tab, closeAllDiffTabs). Rein. Clean-Room nach PROTOCOL.md (coder/claudecode.nvim) und der Probe vom
 // 05.10.2026; nichts aus GPL-Paketen. Eigene Strukturtypen, damit ide-protocol.ts von hier importieren kann, nicht umgekehrt.
+import { type Platform, isAbsolutePath } from "./platform-path";
 
 export interface DiffToolResult { content: Array<{ type: "text"; text: string }>; isError?: boolean }
 
@@ -47,25 +48,25 @@ export type Decision = "accepted" | "rejected";
 
 const text = (value: string): DiffToolResult => ({ content: [{ type: "text", text: value }] });
 
-/** Pflichtfeld aus den Argumenten: Text, nicht leer (bei Pfaden und Tab-Namen), Pfade absolut und ohne NUL. */
-function field(args: Record<string, unknown>, name: string, mayBeEmpty: boolean): { ok: true; value: string } | { ok: false; reason: string } {
+/** Pflichtfeld aus den Argumenten: Text, nicht leer (bei Pfaden und Tab-Namen), Pfade absolut (der Plattform) und ohne NUL. */
+function field(args: Record<string, unknown>, name: string, mayBeEmpty: boolean, platform: Platform): { ok: true; value: string } | { ok: false; reason: string } {
   const v = args[name];
   if (typeof v !== "string") return { ok: false, reason: `${name} muss Text sein` };
   if (!mayBeEmpty && v.trim() === "") return { ok: false, reason: `${name} ist leer` };
   if (name.endsWith("_path") && v.includes("\0")) return { ok: false, reason: `${name} enthält ein ungültiges Zeichen` };
-  if (name.endsWith("_path") && !v.startsWith("/")) return { ok: false, reason: `${name} muss ein absoluter Pfad sein` };
+  if (name.endsWith("_path") && !isAbsolutePath(platform, v)) return { ok: false, reason: `${name} muss ein absoluter Pfad sein` };
   return { ok: true, value: v };
 }
 
 /** Argumente von openDiff (Namen wie in PROTOCOL.md). Pfade müssen absolut sein: Geschrieben wird nur an genau new_file_path. */
-export function parseOpenDiffArgs(args: Record<string, unknown>): OpenDiffParse {
-  const oldFilePath = field(args, "old_file_path", false);
+export function parseOpenDiffArgs(args: Record<string, unknown>, platform: Platform = "darwin"): OpenDiffParse {
+  const oldFilePath = field(args, "old_file_path", false, platform);
   if (!oldFilePath.ok) return oldFilePath;
-  const newFilePath = field(args, "new_file_path", false);
+  const newFilePath = field(args, "new_file_path", false, platform);
   if (!newFilePath.ok) return newFilePath;
-  const newFileContents = field(args, "new_file_contents", true);
+  const newFileContents = field(args, "new_file_contents", true, platform);
   if (!newFileContents.ok) return newFileContents;
-  const tabName = field(args, "tab_name", false);
+  const tabName = field(args, "tab_name", false, platform);
   if (!tabName.ok) return tabName;
   return { ok: true, args: { oldFilePath: oldFilePath.value, newFilePath: newFilePath.value, newFileContents: newFileContents.value, tabName: tabName.value } };
 }

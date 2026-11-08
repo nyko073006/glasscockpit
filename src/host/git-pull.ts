@@ -2,6 +2,7 @@ import { execFile } from "child_process";
 import { existsSync } from "fs";
 import { join } from "path";
 import { GIT_PULL_TIMEOUT_MS } from "../core/constants";
+import { type Platform, withPathDirs } from "../core/platform-path";
 import { isUnset } from "../core/unset";
 import { type PullResult, PullState, pullDue, pullResultFromExec } from "../core/pull-state";
 
@@ -12,7 +13,7 @@ export function runGitPull(dir: string, env: Record<string, string>): Promise<Pu
       execFile(
         "git",
         ["pull", "--ff-only"],
-        { cwd: dir, timeout: GIT_PULL_TIMEOUT_MS, env: { ...env, GIT_TERMINAL_PROMPT: "0" } },
+        { cwd: dir, timeout: GIT_PULL_TIMEOUT_MS, env: { ...env, GIT_TERMINAL_PROMPT: "0" }, windowsHide: true },
         (err, _stdout, stderr) => resolve(pullResultFromExec(err, String(stderr ?? ""))),
       );
     } catch (fehler) {
@@ -28,6 +29,8 @@ export interface PullDeps {
   settings: () => { briefingsDir: string; pullIntervalMin: number };
   /** PATH-Ordner der Login-Shell (vom Launcher, nicht neu gelesen). */
   pathDirs: () => Promise<string[]>;
+  /** Plattform für den PATH der Git-Aufrufe (Abend 41, ab Abend 43 Pflicht). */
+  platform: Platform;
   now: () => number;
   /** Nach jedem Pull-Lauf (Knopf, Öffnen, Takt), auch wenn der Pull ausfällt: hier hängt die Repo-Ampel (Abend 18), kein zweiter Takt. */
   afterPull?: () => void;
@@ -89,7 +92,7 @@ export class PullController {
         return;
       }
       const dirs = await this.deps.pathDirs();
-      const result = await runGitPull(dir, { ...(process.env as Record<string, string>), PATH: dirs.join(":") });
+      const result = await runGitPull(dir, withPathDirs(process.env, dirs, this.deps.platform));
       this.state.finish(result, this.deps.now());
     } catch (fehler) {
       this.state.finish({ ok: false, stderr: fehler instanceof Error ? fehler.message : String(fehler) }, this.deps.now());

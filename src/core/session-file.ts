@@ -1,7 +1,7 @@
 /**
  * Sitzungsdatei (Abend 18): `statusline/statusline-command.sh` schreibt je Claude-Sitzung
  * `~/.claude/cockpit/sessions/<session_id>.json`:
- * `{ session_id, written_at, context_tokens, used_percentage, model }`.
+ * `{ session_id, written_at, context_tokens, used_percentage, model }`, seit 43e zusätzlich `api_ms` und `api_at` (für die Statuszeile, hier nicht gelesen).
  * `written_at` sind ganze Unix-Sekunden, wie in usage.json und tokens-today.json.
  * Rein: kein Dateizugriff, kein obsidian/electron/node-pty.
  */

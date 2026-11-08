@@ -24,6 +24,42 @@ describe("formatDroppedPaths", () => {
   });
 });
 
+describe("formatDroppedPaths unter win32", () => {
+  it("Backslash wird zu Schrägstrich, ohne Leerzeichen keine Anführungszeichen", () => {
+    expect(formatDroppedPaths(["C:\\Users\\x\\a.md"], "win32")).toBe("@C:/Users/x/a.md ");
+  });
+  it("Leerzeichen und Umlaut: Anführungsform mit Schrägstrichen", () => {
+    expect(formatDroppedPaths(["C:\\Users\\Jürgen Müller\\a b.md"], "win32")).toBe('@"C:/Users/Jürgen Müller/a b.md" ');
+  });
+  it("Umlaut, Leerzeichen, Klammern und # im Pfad bleiben unverändert (nur die Trenner ändern sich)", () => {
+    expect(formatDroppedPaths(["C:\\Users\\Jürgen Müller\\Mein Ordner (alt)\\a #1.md"], "win32")).toBe('@"C:/Users/Jürgen Müller/Mein Ordner (alt)/a #1.md" ');
+    expect(formatDroppedPaths(["C:\\x\\(alt)\\a#1.md"], "win32")).toBe("@C:/x/(alt)/a#1.md ");
+  });
+  it("UNC-Pfad behält die zwei Schrägstriche am Anfang", () => {
+    expect(formatDroppedPaths(["\\\\srv\\s\\a.md"], "win32")).toBe("@//srv/s/a.md ");
+  });
+  it("mehrere Pfade und leere Liste", () => {
+    expect(formatDroppedPaths(["C:\\a", "C:\\b c"], "win32")).toBe('@C:/a @"C:/b c" ');
+    expect(formatDroppedPaths([], "win32")).toBe("");
+  });
+  it("darwin mit ausdrücklicher Angabe: Backslash weiter in Anführungsform", () => {
+    expect(formatDroppedPaths(["C:\\x\\y"], "darwin")).toBe('@"C:\\x\\y" ');
+  });
+  it('planDrop: win32 mit " und Leerzeichen wird abgelehnt, die Meldung nennt den Namen', () => {
+    expect(planDrop(['C:\\p\\a "b" c.txt', "C:\\p\\ok.txt"], "win32")).toEqual({
+      text: "@C:/p/ok.txt ",
+      notice: 'Pfad mit " kann Claude nicht als @-Erwähnung lesen: a "b" c.txt',
+    });
+  });
+  it("planDrop: win32 mit \" ohne Leerzeichen geht durch (unmaskiert)", () => {
+    expect(planDrop(['C:\\p\\x"y.txt'], "win32").text).toBe('@C:/p/x"y.txt ');
+  });
+  it("splitDroppedPaths: win32 ohne Leerzeichen hat keinen Backslash-Grund mehr", () => {
+    expect(splitDroppedPaths(['C:\\p\\x"y.txt'], "win32")).toEqual({ accepted: ['C:\\p\\x"y.txt'], rejected: [] });
+    expect(splitDroppedPaths(['C:\\p\\x "y.txt'], "win32")).toEqual({ accepted: [], rejected: ['C:\\p\\x "y.txt'] });
+  });
+});
+
 describe("splitDroppedPaths", () => {
   it('Pfad mit " ohne Leerzeichen und Backslash geht durch', () => {
     expect(splitDroppedPaths(['/Users/alex/x"y.txt'])).toEqual({ accepted: ['/Users/alex/x"y.txt'], rejected: [] });

@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vite
 import WebSocket from "ws";
 import { IDE_TOOLS, jsonResult, textResult, type IdeHandlers } from "../src/core/ide-protocol";
 import { IdeServer, pidAlive } from "../src/host/ide-server";
+import { ON_WINDOWS } from "./helpers/platform";
 
 const TOKEN = "0123456789abcdef0123456789abcdef";
 const VAULT = "/Users/x/Vault";
@@ -31,6 +32,7 @@ function handlers(): IdeHandlers {
 
 function make(over: Partial<ConstructorParameters<typeof IdeServer>[0]> = {}): IdeServer {
   return new IdeServer({
+    platform: "darwin",
     lockDir: dir,
     workspaceFolders: () => [VAULT],
     vaultBase: () => VAULT,
@@ -100,7 +102,8 @@ describe("Start und Lockfile", () => {
       pid: process.pid, workspaceFolders: [VAULT], ideName: "Glasscockpit", transport: "ws", authToken: TOKEN,
     });
   });
-  it("Lockfile hat Modus 0600, und es bleibt keine temporäre Datei zurück", async () => {
+  // Windows: prüft den POSIX-Modus 0o600 (Inventur H22)
+  it.skipIf(ON_WINDOWS)("Lockfile hat Modus 0600, und es bleibt keine temporäre Datei zurück", async () => {
     const port = await server.start();
     expect(statSync(join(dir, `${port}.lock`)).mode & 0o777).toBe(0o600);
     expect(readdirSync(dir)).toEqual([`${port}.lock`]);
@@ -112,7 +115,8 @@ describe("Start und Lockfile", () => {
     expect(existsSync(join(tief, `${port}.lock`))).toBe(true);
     await s.stop();
   });
-  it("neuer Lockfile-Ordner bekommt Modus 0700, ein vorhandener behält seine Rechte", async () => {
+  // Windows: prüft POSIX-Modi 0o700 und 0o755 (Inventur H22)
+  it.skipIf(ON_WINDOWS)("neuer Lockfile-Ordner bekommt Modus 0700, ein vorhandener behält seine Rechte", async () => {
     const neu = join(dir, "neu");
     const s = make({ lockDir: neu });
     await s.start();

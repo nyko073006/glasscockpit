@@ -295,7 +295,7 @@ describe("IdeDiff am echten Server (ws-Client wie Claude)", () => {
 
   async function start(diff: IdeDiff, an = true): Promise<WebSocket> {
     server = new IdeServer({
-      lockDir: dir, workspaceFolders: () => ["/v"], vaultBase: () => "/v", pid: process.pid, isPidAlive: pidAlive, newToken: () => TOKEN, warn: () => undefined,
+      platform: "darwin", lockDir: dir, workspaceFolders: () => ["/v"], vaultBase: () => "/v", pid: process.pid, isPidAlive: pidAlive, newToken: () => TOKEN, warn: () => undefined,
       handlers: {
         getCurrentSelection: () => jsonResult({}), getLatestSelection: () => jsonResult({}), getOpenEditors: () => jsonResult({}), getWorkspaceFolders: () => jsonResult({}),
         openFile: () => jsonResult({}), checkDocumentDirty: () => jsonResult({}), saveDocument: () => jsonResult({}), diff: diff.handlers(),

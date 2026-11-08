@@ -87,6 +87,21 @@ describe("Anzeigehelfer", () => {
     expect(diffTabTitle("/r/x/a.ts")).toBe("Diff: a.ts");
     expect(diffTabTitle("/a.ts")).toBe("Diff: a.ts");
   });
+  it("displayPath unter Windows: ohne Rücksicht auf Schreibweise und Trenner, vault-relativ mit /", () => {
+    expect(displayPath("C:\\v\\a\\b.md", "C:\\V", "win32")).toBe("a/b.md");
+    expect(displayPath("c:/v/a/b.md", "C:\\V\\", "win32")).toBe("a/b.md");
+    expect(displayPath("C:\\V2\\b.md", "C:\\V", "win32")).toBe("C:\\V2\\b.md");
+    expect(displayPath("D:\\V\\b.md", "C:\\V", "win32")).toBe("D:\\V\\b.md");
+    expect(displayPath("C:\\V", "C:\\V", "win32")).toBe("C:\\V");
+    expect(displayPath("C:\\x\\a.ts", null, "win32")).toBe("C:\\x\\a.ts");
+    // darwin bleibt wie bisher: ein Windows-Pfad liegt dort nie im Vault
+    expect(displayPath("C:\\v\\a\\b.md", "C:\\V")).toBe("C:\\v\\a\\b.md");
+  });
+  it("diffTabTitle unter Windows: letzter Teil an beiden Trennern", () => {
+    expect(diffTabTitle("C:\\v\\a\\b.md", "win32")).toBe("Diff: b.md");
+    expect(diffTabTitle("c:/v/a/b.md", "win32")).toBe("Diff: b.md");
+    expect(diffTabTitle("C:\\v\\a\\b.md")).toBe("Diff: C:\\v\\a\\b.md");
+  });
   it("hunkHeader im Stil von unified diff", () => {
     expect(hunkHeader({ oldStart: 7, oldCount: 7, newStart: 7, newCount: 8, lines: [] })).toBe("@@ −7,7 +7,8 @@");
     expect(hunkHeader({ oldStart: 0, oldCount: 0, newStart: 1, newCount: 2, lines: [] })).toBe("@@ −0,0 +1,2 @@");

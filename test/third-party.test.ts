@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import esbuild from "esbuild";
 import { describe, expect, it } from "vitest";
@@ -60,6 +60,27 @@ describe("THIRD-PARTY-NOTICES", () => {
     expect(erzeuge()).toBe(a);
     const namen = [...a.matchAll(/^## (\S+) \d/gm)].map((m) => m[1]);
     expect(namen).toEqual([...namen].sort());
+  });
+
+  it("nennt die Windows-Teile von node-pty (Ersatzdatei, ConPTY-DLL) mit Herkunft und Microsoft-Lizenztext", () => {
+    const text = erzeuge();
+    const kopf = "## node-pty: Windows parts";
+    const start = text.indexOf(kopf);
+    expect(start, "Abschnitt fehlt").toBeGreaterThanOrEqual(0);
+    // Reihenfolge: nach allen Paketen, vor dem Bildabschnitt.
+    expect(start).toBeGreaterThan(text.indexOf("## ws "));
+    expect(start).toBeLessThan(text.indexOf("## Background image"));
+    const abschnitt = text.slice(start).split(/\n## /)[0];
+    expect(abschnitt).toContain("native/win32-*/lib/windowsConoutConnection.js");
+    expect(abschnitt).toContain("conpty.dll");
+    expect(abschnitt).toContain("OpenConsole.exe");
+    expect(abschnitt).toContain("1.23.251008001");
+    expect(abschnitt).toContain("Copyright (c) Microsoft Corporation");
+    expect(abschnitt).toContain("Permission is hereby granted");
+    // Die Fassung der DLL, die node-pty mitbringt, ist die, die der Abschnitt nennt.
+    expect(readdirSync(resolve(ROOT, "node_modules", "node-pty", "third_party", "conpty"))).toEqual(["1.23.251008001"]);
+    // Lizenztext ohne CRLF, wie bei den Paketen.
+    expect(text).not.toContain("\r");
   });
 
   it("nennt das Hintergrundbild mit Herkunft, ohne eine Lizenz zu behaupten", () => {

@@ -1,7 +1,8 @@
 // Baut die Release-Dateien in dist/ aus dem fertigen Build: <id>-<version>.zip (Komplettpaket), je Plattform
 // <id>-native-<ziel>.zip (nur native/<ziel>/, Download-Knopf des Plugins) und main.js, manifest.json, styles.css einzeln (Store, BRAT). Typen entfernt Node selbst (ab 22.18).
 // Aufbau im ZIP: <id>/ mit main.js, manifest.json, styles.css, LICENSE, THIRD-PARTY-NOTICES.md und native/
-// (darwin-arm64 und darwin-x64, Struktur des npm-Pakets). Rechte stammen aus dem Dateisystem (zip -X, kein Mac-Zusatz).
+// (darwin-arm64, darwin-x64, win32-arm64 und win32-x64, Struktur des npm-Pakets; win32 ohne chmod). Rechte stammen aus dem
+// Dateisystem (zip -X, kein Mac-Zusatz).
 import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";

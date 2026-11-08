@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { KEYWORDS, LANGUAGE_IDS, languageForPath } from "../src/core/code-languages";
+import { KEYWORDS, LANGUAGE_IDS, isMarkdownPath, languageForPath } from "../src/core/code-languages";
 import { ROOT } from "./helpers/files";
 
 // Abend 32: Sprache je Datei für den Datei-Viewer. Rein, ohne CodeMirror; die Wortlisten stammen aus den legacy-mode-Dateien.
@@ -31,6 +31,16 @@ describe("languageForPath", () => {
     expect(languageForPath("/a.b/Makefile")).toBeNull();
     expect(languageForPath("/r/foo.test.ts")).toBe("typescript");
     expect(languageForPath("/r/.eslintrc.json")).toBe("json");
+  });
+});
+
+describe("isMarkdownPath", () => {
+  it("md und markdown, ohne Rücksicht auf Groß-/Kleinschreibung", () => {
+    for (const p of ["a.md", "A.MD", "x/y.markdown"]) expect(isMarkdownPath(p), p).toBe(true);
+  });
+
+  it("keine Endung, Punktdatei, andere Endungen: falsch", () => {
+    for (const p of ["md", ".md", "a.mdx", "a.md.bak", "a.ts"]) expect(isMarkdownPath(p), p).toBe(false);
   });
 });
 

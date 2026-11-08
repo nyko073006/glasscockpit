@@ -21,6 +21,48 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "control": "extra",
   },
   {
+    "name": "Reihenfolge in „Neue Sitzung“",
+  },
+  {
+    "desc": "Zuletzt benutzt: Projektordner mit der jüngsten Claude-Unterhaltung zuerst, nie benutzte alphabetisch darunter. Alphabetisch: wie bisher. „Weiter“, Vault und Home bleiben oben.",
+  },
+  {
+    "control": "dropdown",
+  },
+  {
+    "option": [
+      "recent",
+      "Zuletzt benutzt",
+    ],
+  },
+  {
+    "option": [
+      "alpha",
+      "Alphabetisch",
+    ],
+  },
+  {
+    "value": "recent",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Ausgeblendete Ordner",
+  },
+  {
+    "desc": "Diese Unterordner des Projektordners erscheinen nicht in „Neue Sitzung“. Mehrere mit Komma trennen. Leer = alle zeigen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "worktrees",
+  },
+  {
+    "control": "extra",
+  },
+  {
     "name": "Höchstzahl laufender Sitzungen",
   },
   {
@@ -288,6 +330,21 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "control": "extra",
   },
   {
+    "name": "Schatten am aktiven Tab (helles Theme)",
+  },
+  {
+    "desc": "Im hellen Theme heben sich die Tabs kaum ab. Ein weicher Schatten markiert den aktiven Tab, beim Wechsel blendet er über. Wirkt sofort.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
     "name": "Präfix des Handoff-Blocks",
   },
   {
@@ -381,6 +438,93 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "control": "extra",
   },
   {
+    "name": "Datei-Viewer: Bilder anzeigen",
+  },
+  {
+    "desc": "Bilder (png, jpg, gif, webp, svg, bmp, ico) zeigt das Fenster als Bild, eingepasst und zoombar. Aus: Hinweis und Knopf ‚Mit Standardprogramm öffnen‘. Wirkt beim nächsten Öffnen eines Fensters.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Höchstgröße Bilder (MB)",
+  },
+  {
+    "desc": "Größere Bilder zeigt das Fenster nicht, nur einen Hinweis mit Knopf (1 bis 200).",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "20",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Startbreite (%)",
+  },
+  {
+    "desc": "Anteil an der Breite des Obsidian-Fensters beim Öffnen (40 bis 100). Wirkt beim nächsten Öffnen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "90",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Starthöhe (%)",
+  },
+  {
+    "desc": "Anteil an der Höhe des Obsidian-Fensters beim Öffnen (40 bis 100). Wirkt beim nächsten Öffnen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "90",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Schriftgröße (px)",
+  },
+  {
+    "desc": "Startschrift im Fenster (8 bis 32). Cmd+Plus, Cmd+Minus, Cmd+0 und Cmd+Mausrad zoomen im offenen Fenster. Wirkt beim nächsten Öffnen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "14",
+  },
+  {
+    "control": "extra",
+  },
+  {
     "name": "Datei-Viewer: Vorschläge beim Tippen",
   },
   {
@@ -391,6 +535,162 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
   },
   {
     "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Markdown färben",
+  },
+  {
+    "desc": "Färbt .md-Dateien: Fließtext, Code, Befehle, Überschriften, Links, Marker und Frontmatter. Der Text bleibt Rohtext. Wirkt beim nächsten Öffnen eines Fensters.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Farbe Fließtext",
+  },
+  {
+    "desc": "Leer: Vorgabe des Themes. Sonst Farbe wie #ff6b6b, gilt in hellem und dunklem Theme. Wirkt beim nächsten Öffnen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "placeholder": "#8fd18f",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Farbe Code",
+  },
+  {
+    "desc": "Leer: Vorgabe des Themes. Sonst Farbe wie #ff6b6b, gilt in hellem und dunklem Theme. Wirkt beim nächsten Öffnen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "placeholder": "#f0a35e",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Farbe Befehle",
+  },
+  {
+    "desc": "Leer: Vorgabe des Themes. Sonst Farbe wie #ff6b6b, gilt in hellem und dunklem Theme. Wirkt beim nächsten Öffnen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "placeholder": "#ff6b6b",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Farbe Überschriften",
+  },
+  {
+    "desc": "Leer: Vorgabe des Themes. Sonst Farbe wie #ff6b6b, gilt in hellem und dunklem Theme. Wirkt beim nächsten Öffnen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "placeholder": "#ffffff",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Farbe Links",
+  },
+  {
+    "desc": "Leer: Vorgabe des Themes. Sonst Farbe wie #ff6b6b, gilt in hellem und dunklem Theme. Wirkt beim nächsten Öffnen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "placeholder": "#6cb6ff",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Farbe Marker",
+  },
+  {
+    "desc": "Leer: Vorgabe des Themes. Sonst Farbe wie #ff6b6b, gilt in hellem und dunklem Theme. Wirkt beim nächsten Öffnen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "placeholder": "#9a9a9a",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Farbe Frontmatter",
+  },
+  {
+    "desc": "Leer: Vorgabe des Themes. Sonst Farbe wie #ff6b6b, gilt in hellem und dunklem Theme. Wirkt beim nächsten Öffnen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "placeholder": "#9a9a9a",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Datei-Viewer: Befehle in Backticks",
+  },
+  {
+    "desc": "Beginnt Text in Backticks mit einem dieser Wörter (oder mit $ oder ./), färbt das Fenster ihn als Befehl, sonst als Code. Wörter durch Leerzeichen getrennt. Wirkt beim nächsten Öffnen.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "npm npx node git gh cd ls cat grep rg find mkdir rm mv cp curl brew claude obsidian codex agy python python3 pip make sed awk open ssh chmod echo export source xcodebuild swift",
   },
   {
     "control": "extra",
@@ -888,7 +1188,7 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "name": "Output-Tokens je Tag: Median",
   },
   {
-    "desc": "Bis hierher ist das Tokens-Instrument grün (1000 bis 100000000). Muss unter dem p90 liegen. Vorgabe aus „Output-Kennzahlen“ (03.10.2026).",
+    "desc": "Darunter ist das Tokens-Instrument gelb, ab hier grün (1000 bis 100000000). Muss unter dem p90 liegen.",
   },
   {
     "control": "text",
@@ -897,7 +1197,7 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "inputType": "number",
   },
   {
-    "value": "340000",
+    "value": "800000",
   },
   {
     "control": "extra",
@@ -906,7 +1206,7 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "name": "Output-Tokens je Tag: p90",
   },
   {
-    "desc": "Bis hierher gelb, darüber rot (1000 bis 100000000). Muss über dem Median liegen.",
+    "desc": "Hier ist der Ring voll, ab hier läuft der Regenbogen (1000 bis 100000000). Muss über dem Median liegen.",
   },
   {
     "control": "text",
@@ -915,7 +1215,7 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "inputType": "number",
   },
   {
-    "value": "870000",
+    "value": "4500000",
   },
   {
     "control": "extra",

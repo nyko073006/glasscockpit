@@ -2,18 +2,37 @@ import { type App, Notice, type Plugin, PluginSettingTab, type Setting, type Set
 import { homedir } from "os";
 import { parseSearches } from "../core/research";
 import { EFFORT_STEPS } from "../core/constants";
-import { DEFAULT_SETTINGS, invalidMessage, parseNumberInput, type CockpitSettings } from "../core/settings";
+import { DEFAULT_SETTINGS, effectiveSoundFile, invalidMessage, parseNumberInput, type CockpitSettings } from "../core/settings";
 import type { SessionStore } from "../core/session-store";
 import { TEST_TEXT } from "../core/telegram";
 import { addRadar, canAddRadar, removeRadar, renameRadar, setRadarFile, RADAR_FULL_HINT, RADAR_VISIBLE_HINT } from "../core/radar-list";
 import { sendTelegram } from "./telegram-send";
-import { nativeStatusText } from "../core/native-verify";
+import { downloadDoneText, nativeDownloadHint, nativeStatusText } from "../core/native-verify";
 import { downloadNative, nativeInstalled } from "./native-download";
-import { pluginDirOf, REAL_DOWNLOAD_DEPS } from "./native-download-fetch";
+import { hostTarget } from "./host-platform";
+import { modKeyName } from "../core/keymap";
+import type { Platform } from "../core/platform-path";
+import { pluginDirOf, realDownloadDeps } from "./native-download-fetch";
+import type { NativeLoader } from "./native-loader";
+
+/** Das Plugin, wie die Seite es braucht (Abend 40): dazu der Lader von node-pty, denn die Meldung nach dem Download hängt davon ab, ob er schon geladen ist. */
+type SettingsPlugin = Plugin & { nativeLoader: Pick<NativeLoader, "isLoaded"> };
 
 type BoolKey = { [K in keyof CockpitSettings]: CockpitSettings[K] extends boolean ? K : never }[keyof CockpitSettings];
 type TextKey = { [K in keyof CockpitSettings]: CockpitSettings[K] extends string ? K : never }[keyof CockpitSettings];
-type ChoiceKey = "dashboardLayout" | "nextEffort" | "cockpitCrop";
+type ChoiceKey = "dashboardLayout" | "nextEffort" | "cockpitCrop" | "newSessionOrder";
+/** Farbfelder des Markdown-Modus: Schlüssel, Titel und Platzhalter (die dunkle Vorgabe aus dem CSS). */
+const MD_COLOR_FIELDS: ReadonlyArray<readonly [TextKey, string, string]> = [
+  ["fileViewerMdText", "Datei-Viewer: Farbe Fließtext", "#8fd18f"],
+  ["fileViewerMdCode", "Datei-Viewer: Farbe Code", "#f0a35e"],
+  ["fileViewerMdCommand", "Datei-Viewer: Farbe Befehle", "#ff6b6b"],
+  ["fileViewerMdHeading", "Datei-Viewer: Farbe Überschriften", "#ffffff"],
+  ["fileViewerMdLink", "Datei-Viewer: Farbe Links", "#6cb6ff"],
+  ["fileViewerMdMarker", "Datei-Viewer: Farbe Marker", "#9a9a9a"],
+  ["fileViewerMdFrontmatter", "Datei-Viewer: Farbe Frontmatter", "#9a9a9a"],
+];
+const MD_COLOR_DESC = "Leer: Vorgabe des Themes. Sonst Farbe wie #ff6b6b, gilt in hellem und dunklem Theme. Wirkt beim nächsten Öffnen.";
+
 type NumKey = { [K in keyof CockpitSettings]: CockpitSettings[K] extends number ? K : never }[keyof CockpitSettings];
 
 // Einstellungsseite (seit Abend 34 deklarativ über getSettingDefinitions): Werte kommen aus store.settings(), geschrieben wird nur über
@@ -24,19 +43,34 @@ type NumKey = { [K in keyof CockpitSettings]: CockpitSettings[K] extends number 
 //   oder daneben hinterlässt (gesperrt, roter Grund, Fehlerliste), setzt render selbst zurück oder gibt eine Aufräumfunktion zurück.
 export class CockpitSettingTab extends PluginSettingTab {
   private readonly store: SessionStore;
-  private readonly plugin: Plugin;
+  private readonly plugin: SettingsPlugin;
+  private readonly platform: Platform;
   private nativeBusy = false;
 
-  constructor(app: App, plugin: Plugin, store: SessionStore) {
+  /** platform: Plattform dieses Rechners (Abend 42); sie bestimmt die Taste in den Texten (Cmd oder Ctrl). */
+  constructor(app: App, plugin: SettingsPlugin, store: SessionStore, platform: Platform) {
     super(app, plugin);
     this.plugin = plugin;
     this.store = store;
+    this.platform = platform;
   }
 
   getSettingDefinitions(): SettingDefinitionItem[] {
+    // Cmd auf dem Mac, Ctrl unter Windows: Datei-Links (Klick, Speichern im Fenster) und Kopieren nach Markieren mit Shift.
+    const mod = modKeyName(this.platform);
+    const win = this.platform === "win32";
     return [
       this.group("Sitzungen", [
         this.textField("projectsRoot", "Projektordner", "Unterordner erscheinen in „Neue Sitzung“. ~ steht für dein Home. Leer = aus."),
+        this.choiceField(
+          "newSessionOrder", "Reihenfolge in „Neue Sitzung“",
+          "Zuletzt benutzt: Projektordner mit der jüngsten Claude-Unterhaltung zuerst, nie benutzte alphabetisch darunter. Alphabetisch: wie bisher. „Weiter“, Vault und Home bleiben oben.",
+          { recent: "Zuletzt benutzt", alpha: "Alphabetisch" },
+        ),
+        this.textField("hiddenProjectDirs", "Ausgeblendete Ordner", "Diese Unterordner des Projektordners erscheinen nicht in „Neue Sitzung“. Mehrere mit Komma trennen. Leer = alle zeigen."),
+        ...(this.platform === "win32"
+          ? [this.textField("windowsShell", "Shell unter Windows", "Leer = automatisch: PowerShell 7 (pwsh.exe), sonst Windows PowerShell.")]
+          : []),
         this.numberField("maxSessions", "Höchstzahl laufender Sitzungen", "Ab dieser Zahl startet keine weitere Sitzung."),
         this.toggleField(
           "reopenAfterDisable", "Tabs nach dem Abschalten wieder öffnen",
@@ -53,7 +87,7 @@ export class CockpitSettingTab extends PluginSettingTab {
         ),
         this.toggleField(
           "fixedPrompt", "Eingabezeile fest (Vollbild)",
-          "An: Claude läuft im Vollbild-Modus, die Eingabezeile bleibt unten stehen und das Mausrad scrollt den Verlauf in Claude. Ziehen markiert in Claude und kopiert beim Loslassen, Shift+Ziehen markiert im Terminal (dann Cmd+C). Suchen im Verlauf mit Ctrl+O und /. Der Scrollback des Terminals bleibt leer. Aus: klassisch, der Verlauf liegt im Scrollback. Wirkt für neu gestartete Sitzungen.",
+          `An: Claude läuft im Vollbild-Modus, die Eingabezeile bleibt unten stehen und das Mausrad scrollt den Verlauf in Claude. Ziehen markiert in Claude und kopiert beim Loslassen, Shift+Ziehen markiert im Terminal (dann ${mod}+C). Suchen im Verlauf mit Ctrl+O und /. Der Scrollback des Terminals bleibt leer. Aus: klassisch, der Verlauf liegt im Scrollback. Wirkt für neu gestartete Sitzungen.`,
         ),
         this.toggleField(
           "skipPermissions", "Rechteabfragen überspringen",
@@ -67,9 +101,11 @@ export class CockpitSettingTab extends PluginSettingTab {
         ),
         this.toggleField(
           "claudeExclusionSandbox", "Auch Shell-Befehle sperren (Sandbox)",
-          "An: Claude-Sitzungen laufen in Claudes Sandbox, dann scheitern auch grep -r und Skripte an ausgeschlossenen Dateien. Achtung: In der Sandbox schreibt Claude nur im Arbeitsordner und im Temp-Ordner, Netzzugriffe brauchen eine Freigabe, gh oder git push können haken. Wirkt nur, wenn Einträge gesperrt werden. Braucht die Sperre darüber: Ist sie aus, ist dieser Schalter aus. Gilt ab dem nächsten Sitzungsstart.",
+          "An: Claude-Sitzungen laufen in Claudes Sandbox, dann scheitern auch grep -r und Skripte an ausgeschlossenen Dateien. Achtung: In der Sandbox schreibt Claude nur im Arbeitsordner und im Temp-Ordner, Netzzugriffe brauchen eine Freigabe, gh oder git push können haken. Wirkt nur, wenn Einträge gesperrt werden. Braucht die Sperre darüber: Ist sie aus, ist dieser Schalter aus. Gilt ab dem nächsten Sitzungsstart."
+            + (this.platform === "win32" ? " Unter Windows nicht verfügbar: Claude Code hat dort keine Sandbox." : ""),
           undefined,
-          () => !this.store.settings().claudeExclusion,
+          // Unter Windows gesperrt, der gespeicherte Wert bleibt (ein Vault kann zwischen Mac und Windows wandern).
+          () => this.platform === "win32" || !this.store.settings().claudeExclusion,
         ),
         this.toggleField(
           "ideBridge", "IDE-Brücke für Claude-Sitzungen",
@@ -95,13 +131,17 @@ export class CockpitSettingTab extends PluginSettingTab {
           "Hebt Text, der zu blass auf dem Hintergrund steht, auf dieses Kontrastverhältnis an (1 bis 21, 1 = aus). Nötig im hellen Theme, weil Claude Code manche Texte fest weiß schickt. Wirkt sofort auf offene Terminals.",
           "0.5",
         ),
+        this.toggleField(
+          "tabShadow", "Schatten am aktiven Tab (helles Theme)",
+          "Im hellen Theme heben sich die Tabs kaum ab. Ein weicher Schatten markiert den aktiven Tab, beim Wechsel blendet er über. Wirkt sofort.",
+        ),
         this.textField(
           "handoffPrefix", "Präfix des Handoff-Blocks",
           "Ein Codeblock, dessen erste nichtleere Zeile so beginnt, steht oben im Terminal als fester Knopf „Handoff kopieren“, auch nach /clear, bis ein neuerer Block kommt. Groß- und Kleinschreibung zählt. Leer: kein Knopf (sofort). Ein neues Präfix gilt ab der nächsten Änderung des Transkripts.",
         ),
         this.toggleField(
-          "fileLinks", "Pfade per Cmd+Klick öffnen",
-          "An: Dateipfade im Terminal (absolut, mit ~ oder relativ zum Startordner der Sitzung, auch mit :zeile) öffnen per Cmd+Klick. Dateien im Vault als Tab, alle anderen in einem Fenster zum Lesen und Ändern (Cmd+S speichert, Esc schließt). Ein einfacher Klick markiert weiter Text. Wirkt sofort.",
+          "fileLinks", `Pfade per ${mod}+Klick öffnen`,
+          `An: Dateipfade im Terminal (absolut, mit ~ oder relativ zum Startordner der Sitzung, auch mit :zeile) öffnen per ${mod}+Klick. Dateien im Vault als Tab, alle anderen in einem Fenster zum Lesen und Ändern (${mod}+S speichert, Esc schließt). Ein einfacher Klick markiert weiter Text. Wirkt sofort.`,
         ),
         this.toggleField(
           "fileLinksClaudeDirs", "Relative Pfade auch in Claudes Ordnern suchen",
@@ -120,8 +160,38 @@ export class CockpitSettingTab extends PluginSettingTab {
           "Größere Dateien zeigt das Fenster nicht, nur einen Hinweis (1 bis 50).",
         ),
         this.toggleField(
+          "fileViewerImages", "Datei-Viewer: Bilder anzeigen",
+          "Bilder (png, jpg, gif, webp, svg, bmp, ico) zeigt das Fenster als Bild, eingepasst und zoombar. Aus: Hinweis und Knopf ‚Mit Standardprogramm öffnen‘. Wirkt beim nächsten Öffnen eines Fensters.",
+        ),
+        this.numberField(
+          "fileViewerImageMaxMb", "Datei-Viewer: Höchstgröße Bilder (MB)",
+          "Größere Bilder zeigt das Fenster nicht, nur einen Hinweis mit Knopf (1 bis 200).",
+        ),
+        this.numberField(
+          "fileViewerWidthPct", "Datei-Viewer: Startbreite (%)",
+          "Anteil an der Breite des Obsidian-Fensters beim Öffnen (40 bis 100). Wirkt beim nächsten Öffnen.",
+        ),
+        this.numberField(
+          "fileViewerHeightPct", "Datei-Viewer: Starthöhe (%)",
+          "Anteil an der Höhe des Obsidian-Fensters beim Öffnen (40 bis 100). Wirkt beim nächsten Öffnen.",
+        ),
+        this.numberField(
+          "fileViewerFontSize", "Datei-Viewer: Schriftgröße (px)",
+          `Startschrift im Fenster (8 bis 32). ${mod}+Plus, ${mod}+Minus, ${mod}+0 und ${mod}+Mausrad zoomen im offenen Fenster. Wirkt beim nächsten Öffnen.`,
+        ),
+        this.toggleField(
           "fileViewerAutocomplete", "Datei-Viewer: Vorschläge beim Tippen",
           "An: Das Fenster schlägt beim Tippen Wörter aus der Datei und Schlüsselwörter der Sprache vor (Enter übernimmt, Esc schließt die Liste). Aus: Liste nur mit Ctrl+Leertaste. Wirkt beim nächsten Öffnen eines Fensters.",
+        ),
+        this.toggleField(
+          "fileViewerMarkdown", "Datei-Viewer: Markdown färben",
+          "Färbt .md-Dateien: Fließtext, Code, Befehle, Überschriften, Links, Marker und Frontmatter. Der Text bleibt Rohtext. Wirkt beim nächsten Öffnen eines Fensters.",
+        ),
+        ...MD_COLOR_FIELDS.map(([key, name, placeholder]) =>
+          this.textField(key, name, MD_COLOR_DESC, placeholder)),
+        this.textField(
+          "fileViewerMdCommands", "Datei-Viewer: Befehle in Backticks",
+          "Beginnt Text in Backticks mit einem dieser Wörter (oder mit $ oder ./), färbt das Fenster ihn als Befehl, sonst als Code. Wörter durch Leerzeichen getrennt. Wirkt beim nächsten Öffnen.",
         ),
       ]),
 
@@ -139,10 +209,19 @@ export class CockpitSettingTab extends PluginSettingTab {
         this.toggleField("showOpenTasks", "Laufende Hintergrundaufgaben im Tab zeigen (⏳)"),
         this.toggleField("markTab", "Markierung am Tab"),
         this.toggleField("alertSound", "Ton"),
-        this.toggleField("alertBanner", "macOS-Banner"),
-        this.textField("soundFile", "Klangdatei", "Pfad zur Klangdatei, abgespielt mit afplay."),
+        this.toggleField("alertBanner", win ? "Windows-Benachrichtigung" : "macOS-Banner"),
+        this.textField(
+          "soundFile", "Klangdatei",
+          win ? "Pfad zur Klangdatei (WAV oder MP3), abgespielt in Obsidian. Leer oder Mac-Pfad = Windows-Ton." : "Pfad zur Klangdatei, abgespielt mit afplay.",
+          // Platzhalter nur unter Windows: der Ton, der bei leerem Feld läuft. SystemRoot liest der Host wie in terminal-view.
+          win ? effectiveSoundFile(this.platform, "", process.env.SystemRoot ?? "") : undefined,
+        ),
         this.numberField("alertGapMs", "Mindestabstand zwischen zwei Alarmen (ms)", "Höchstens ein Alarm je Sitzung in diesem Abstand."),
-        this.numberField("bannerSeconds", "Banner ausblenden nach (Sekunden)", "So lange bleibt das macOS-Banner stehen (1 bis 60), dann verschwindet es von selbst und steht auch nicht in der Mitteilungszentrale. Je Sitzung gibt es höchstens ein Banner: Ein neues ersetzt das alte."),
+        this.numberField("bannerSeconds", "Banner ausblenden nach (Sekunden)",
+          win
+            ? "So lange bleibt die Benachrichtigung stehen (1 bis 60), dann verschwindet sie von selbst. Je Sitzung gibt es höchstens ein Banner: Ein neues ersetzt das alte."
+            : "So lange bleibt das macOS-Banner stehen (1 bis 60), dann verschwindet es von selbst und steht auch nicht in der Mitteilungszentrale. Je Sitzung gibt es höchstens ein Banner: Ein neues ersetzt das alte.",
+        ),
       ]),
 
       this.group("Telegram", [
@@ -170,14 +249,20 @@ export class CockpitSettingTab extends PluginSettingTab {
         this.textField("continuePrompt", "Text für „Hiermit weiterarbeiten“", "Wird an die aktive Claude-Sitzung gesendet. {ordner} wird durch den Briefing-Ordner ersetzt."),
         this.textField("tasksFile", "Aufgabenliste", "Markdown-Datei im Vault mit den Aufgaben (- [ ] ...), endet auf .md. Wird nie automatisch angelegt."),
         this.numberField("skillButtons", "Zahl der Skill-Knöpfe", "So viele Skills zeigt die Karte „Skills“ als Knöpfe (1 bis 30), zuletzt benutzte zuerst."),
-        this.numberField("usagePollSec", "Usage-Abstand (Sekunden)", "So oft liest die Karte „Usage“ den Schnappschuss der Statuszeile und die heutigen Transkripte (10 bis 3600), auch bei geschlossenem Dashboard."),
-        this.toggleField("writeTokensFile", "Tokens für die Statuszeile schreiben", "Schreibt nach jedem Zählerlauf die heutigen Output-Tokens nach ~/.claude/cockpit/tokens-today.json. Aus: Das Cockpit zählt weiter, die Statuszeile zeigt dann nur noch die letzte Summe mit ihrem Alter."),
+        this.numberField("usagePollSec", "Usage-Abstand (Sekunden)", "So oft liest die Karte „Usage“ den Schnappschuss der Statuszeile und die heutigen Transkripte (10 bis 3600), auch bei geschlossenem Dashboard." + (win ? " Unter Windows noch ohne Statuszeile, Limits fehlen." : "")),
+        this.toggleField("writeTokensFile", "Tokens für die Statuszeile schreiben",
+          "Schreibt nach jedem Zählerlauf die heutigen Output-Tokens nach ~/.claude/cockpit/tokens-today.json. Aus: Das Cockpit zählt weiter, die Statuszeile zeigt dann nur noch die letzte Summe mit ihrem Alter."
+            + (win ? " Unter Windows nicht verfügbar: Die Statuszeile gibt es dort noch nicht." : ""),
+          undefined,
+          // Unter Windows gesperrt, der gespeicherte Wert bleibt (ein Vault kann zwischen Mac und Windows wandern).
+          win ? () => true : undefined,
+        ),
         this.numberField("contextWarn", "Kontext: Warnschwelle (Tokens)", "Ab hier wird das Kontext-Instrument gelb und die Statuszeile gelb (1000 bis 1000000). Muss unter der Handoff-Schwelle liegen; beide gehen über thresholds.json an die Statuszeile."),
         this.numberField("contextHandoff", "Kontext: Handoff-Schwelle (Tokens)", "Ab hier rot mit Handoff-Hinweis (1000 bis 1000000). Muss über der Warnschwelle liegen. Beide zusammen höher stellen: erst diese, dann die Warnschwelle."),
         this.numberField("clearableMinContextPct", "Handoff frühestens ab Kontext (%)", "Erst ab diesem Kontextanteil gilt eine Session als übergabereif (0 bis 100). Geht über thresholds.json an den Stop-Hook aus „npm run deploy:hook“ (README, „Übergabe-Signal“)."),
         this.numberField("clearableMinPrompts", "Handoff frühestens ab Nachrichten", "Erst ab so vielen eigenen Nachrichten in der Session (1 bis 50), damit wirklich etwas passiert ist. Gilt zusammen mit dem Kontextanteil."),
-        this.numberField("tokensDayMedian", "Output-Tokens je Tag: Median", "Bis hierher ist das Tokens-Instrument grün (1000 bis 100000000). Muss unter dem p90 liegen. Vorgabe aus „Output-Kennzahlen“ (03.10.2026)."),
-        this.numberField("tokensDayP90", "Output-Tokens je Tag: p90", "Bis hierher gelb, darüber rot (1000 bis 100000000). Muss über dem Median liegen."),
+        this.numberField("tokensDayMedian", "Output-Tokens je Tag: Median", "Darunter ist das Tokens-Instrument gelb, ab hier grün (1000 bis 100000000). Muss unter dem p90 liegen."),
+        this.numberField("tokensDayP90", "Output-Tokens je Tag: p90", "Hier ist der Ring voll, ab hier läuft der Regenbogen (1000 bis 100000000). Muss über dem Median liegen."),
         this.textField("focusHeading", "Überschrift des Tagesfokus", "Die ersten zwei Punkte unter dieser Überschrift im heutigen Briefing zeigt die Kanzel. Eine Zeile."),
         this.textField("inboxDir", "Inbox-Ordner", "Ordner im Vault, dessen Notizen die Vault-Lage zählt, ohne führenden Schrägstrich. Leer = aus."),
         this.textField("hubsDir", "Projekt-Ordner (Vault)", "Ordner im Vault mit einem Unterordner je Projekt und dessen HUB-Datei. Leer = Handoffs aus."),
@@ -215,11 +300,13 @@ export class CockpitSettingTab extends PluginSettingTab {
         render: (setting) => {
           // Erst hier lesen: getSettingDefinitions() läuft schon bei addSettingTab() für den Suchindex.
           const dir = pluginDirOf(this.app, this.plugin.manifest);
-          const target = `${process.platform}-${process.arch}`;
-          const status = dir === null ? "Der Vault liegt nicht im Dateisystem, die Binärdateien lassen sich nicht ablegen." : nativeStatusText(nativeInstalled(dir, process.platform, process.arch), target);
+          const { platform: rawPlatform, arch } = hostTarget();
+          const target = `${rawPlatform}-${arch}`;
+          const platform = this.platform;
+          const status = dir === null ? "Der Vault liegt nicht im Dateisystem, die Binärdateien lassen sich nicht ablegen." : nativeStatusText(nativeInstalled(dir, rawPlatform, arch), target);
           setting
             .setName(name)
-            .setDesc(`${status} Der Knopf lädt einmalig die Dateien für diesen Mac von github.com/nyko073006/glasscockpit (Release ${this.plugin.manifest.version}) und prüft sie gegen feste SHA256-Summen im Plugin. Nichts anderes wird geladen.`);
+            .setDesc(`${status} ${nativeDownloadHint(platform, this.plugin.manifest.version)}`);
           setting.addButton((b) =>
             b
               .setButtonText("Binärdateien laden")
@@ -231,12 +318,12 @@ export class CockpitSettingTab extends PluginSettingTab {
                   b.setDisabled(true);
                   try {
                     const r = await downloadNative(
-                      { pluginDir: dir, platform: process.platform, arch: process.arch, version: this.plugin.manifest.version },
-                      REAL_DOWNLOAD_DEPS,
+                      { pluginDir: dir, platform: rawPlatform, arch, version: this.plugin.manifest.version },
+                      realDownloadDeps(platform),
                       (schritt) => { setting.setDesc(schritt); },
                     );
                     new Notice(
-                      r.ok ? `Binärdateien geladen (${r.files} Dateien). Neue Sitzungen starten jetzt.` : `Binärdateien: ${r.reason}`,
+                      r.ok ? downloadDoneText(r.files, platform, this.plugin.nativeLoader.isLoaded()) : `Binärdateien: ${r.reason}`,
                       r.ok ? 8000 : 15000,
                     );
                   } finally {
@@ -266,7 +353,7 @@ export class CockpitSettingTab extends PluginSettingTab {
             b.setButtonText("Testnachricht senden").onClick(async () => {
               b.setDisabled(true);
               try {
-                const r = await sendTelegram(TEST_TEXT, this.store.settings(), homedir());
+                const r = await sendTelegram(TEST_TEXT, this.store.settings(), homedir(), this.platform);
                 new Notice(r.ok ? "Telegram: gesendet" : `Telegram: ${r.reason}`, 8000);
               } finally {
                 b.setDisabled(false);
@@ -405,7 +492,7 @@ export class CockpitSettingTab extends PluginSettingTab {
     };
   }
 
-  private textField(key: TextKey, name: string, desc: string): SettingGroupItem {
+  private textField(key: TextKey, name: string, desc: string, placeholder?: string): SettingGroupItem {
     return {
       name,
       desc,
@@ -413,6 +500,7 @@ export class CockpitSettingTab extends PluginSettingTab {
         setting.setName(name).setDesc(desc);
         this.clearError(setting);
         setting.addText((t) => {
+          if (placeholder) t.setPlaceholder(placeholder);
           t.setValue(this.store.settings()[key]);
           let invalid = false;
           // Nur bei change (Verlassen des Feldes), nicht bei jedem Tastendruck.

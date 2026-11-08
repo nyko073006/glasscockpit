@@ -1,6 +1,8 @@
-import { type App, FileSystemAdapter, type PluginManifest, requestUrl } from "obsidian";
+import { type App, type PluginManifest, requestUrl } from "obsidian";
 import { NATIVE_DOWNLOAD_TIMEOUT_MS } from "../core/constants";
-import { defaultClearQuarantine, defaultExtract, type DownloadDeps } from "./native-download";
+import type { Platform } from "../core/platform-path";
+import { vaultBasePath } from "./host-platform";
+import { defaultClearQuarantine, defaultExtract, type DownloadDeps, windowsExtract } from "./native-download";
 
 /** Die einzige Stelle, die für den Binär-Download ins Netz geht: requestUrl mit Zeitlimit (nie fetch). */
 async function fetchBytes(url: string): Promise<{ status: number; bytes: Uint8Array }> {
@@ -19,15 +21,18 @@ async function fetchBytes(url: string): Promise<{ status: number; bytes: Uint8Ar
   }
 }
 
-export const REAL_DOWNLOAD_DEPS: DownloadDeps = {
-  fetchBytes,
-  extract: defaultExtract,
-  clearQuarantine: defaultClearQuarantine,
-};
+/**
+ * Die echten Abhängigkeiten des Downloads je Plattform. Mac: ditto und xattr. Windows: tar.exe und kein Quarantäne-Schritt
+ * (es gibt dort kein xattr, und die Bytes schreibt das Plugin selbst, nicht ein Browser).
+ */
+export function realDownloadDeps(platform: Platform): DownloadDeps {
+  if (platform === "win32") return { fetchBytes, extract: windowsExtract, clearQuarantine: async () => {} };
+  return { fetchBytes, extract: defaultExtract, clearQuarantine: defaultClearQuarantine };
+}
 
 /** Absoluter Plugin-Ordner, oder null, wenn der Vault nicht im Dateisystem liegt. */
 export function pluginDirOf(app: App, manifest: PluginManifest): string | null {
-  const adapter = app.vault.adapter;
-  if (!(adapter instanceof FileSystemAdapter) || !manifest.dir) return null;
-  return `${adapter.getBasePath()}/${manifest.dir}`;
+  const base = vaultBasePath(app);
+  if (base === null || !manifest.dir) return null;
+  return `${base}/${manifest.dir}`;
 }

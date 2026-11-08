@@ -1,5 +1,6 @@
 import { type App, MarkdownView } from "obsidian";
 import { openVaultFile } from "./vault-open";
+import { type Platform, joinPath, lastSegment, trimTrailingSep } from "../core/platform-path";
 import { type IdeHandlers, type SelectionParams, type ToolResult, fileUrl, jsonResult, mentionLines, selectionParams, textResult } from "../core/ide-protocol";
 
 // IDE-Brücke (Abend 16): Was Claude Code vom Editor sehen darf, aus der Obsidian-API. Gelesen wird immer frisch.
@@ -18,13 +19,27 @@ export class IdeEditor {
   private readonly emit: (params: SelectionParams) => void;
   /** Abend 33: vault-relativer Pfad ausgeschlossen (Obsidians „Ausgeschlossene Dateien“, Einstellung claudeExclusion)? Dann sieht Claude die Notiz nicht. */
   private readonly excluded: (vaultPath: string) => boolean;
+  /** Abend 42: Plattform der Pfade, die Claude sieht (Backslashes und file:///C:/ unter Windows). */
+  private readonly platform: Platform;
 
   /** emit meldet eine geänderte Auswahl (selection_changed). */
-  constructor(app: App, vaultBase: () => string | null, emit: (params: SelectionParams) => void, excluded: (vaultPath: string) => boolean = () => false) {
+  constructor(
+    app: App,
+    vaultBase: () => string | null,
+    emit: (params: SelectionParams) => void,
+    excluded: (vaultPath: string) => boolean = () => false,
+    platform: Platform,
+  ) {
     this.app = app;
     this.vaultBase = vaultBase;
     this.emit = emit;
     this.excluded = excluded;
+    this.platform = platform;
+  }
+
+  /** Absoluter Pfad einer Notiz: Mac wie bisher mit "/", Windows mit "\\" (Basis als Langname aus vaultBasePath). */
+  private absoluteOf(base: string, vaultPath: string): string {
+    return this.platform === "win32" ? joinPath(this.platform, base, vaultPath) : `${base.replace(/\/+$/, "")}/${vaultPath}`;
   }
 
   /** Auswahl der aktiven Markdown-Ansicht; null, wenn gerade keine aktiv ist (etwa das Terminal im Vordergrund) oder ihre Notiz ausgeschlossen ist. */
@@ -89,12 +104,15 @@ export class IdeEditor {
     const editor = view.editor;
     const from = editor.getCursor("from");
     const to = editor.getCursor("to");
-    const params = selectionParams({
-      filePath: `${base.replace(/\/+$/, "")}/${file.path}`,
-      text: editor.getSelection(),
-      start: { line: from.line, character: from.ch },
-      end: { line: to.line, character: to.ch },
-    });
+    const params = selectionParams(
+      {
+        filePath: this.absoluteOf(base, file.path),
+        text: editor.getSelection(),
+        start: { line: from.line, character: from.ch },
+        end: { line: to.line, character: to.ch },
+      },
+      this.platform,
+    );
     return { params, vaultPath: file.path };
   }
 
@@ -111,12 +129,12 @@ export class IdeEditor {
   }
 
   private openEditors(): ToolResult {
-    const base = this.vaultBase()?.replace(/\/+$/, "") ?? "";
+    const base = this.vaultBase() ?? "";
     const active = this.app.workspace.getActiveViewOfType(MarkdownView);
     const tabs = this.markdownViews()
       .filter((view) => view.file && !this.excluded(view.file.path))
       .map((view) => ({
-        uri: fileUrl(`${base}/${view.file?.path ?? ""}`),
+        uri: fileUrl(this.absoluteOf(base, view.file?.path ?? ""), this.platform),
         isActive: view === active,
         label: view.file?.name ?? "",
         languageId: "markdown",
@@ -126,9 +144,10 @@ export class IdeEditor {
   }
 
   private workspaceFolders(): ToolResult {
-    const base = this.vaultBase()?.replace(/\/+$/, "");
+    const raw = this.vaultBase();
+    const base = raw ? (this.platform === "win32" ? trimTrailingSep(this.platform, raw) : raw.replace(/\/+$/, "")) : "";
     if (!base) return jsonResult({ success: false, message: "Vault-Ordner unbekannt" });
-    return jsonResult({ success: true, folders: [{ name: base.slice(base.lastIndexOf("/") + 1), uri: fileUrl(base), path: base }], rootPath: base });
+    return jsonResult({ success: true, folders: [{ name: lastSegment(this.platform, base), uri: fileUrl(base, this.platform), path: base }], rootPath: base });
   }
 
   /** Notiz öffnen, ohne dem Terminal den Fokus zu nehmen; gemeinsam mit den Pfad-Links im Terminal (vault-open.ts). */

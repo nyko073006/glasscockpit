@@ -1,13 +1,18 @@
 import { type App, type FuzzyMatch, FuzzySuggestModal, Notice } from "obsidian";
 import { readdirSync } from "fs";
 import { homedir } from "os";
-import { type SessionChoice, loadProjectDirs, sessionChoices, vaultFirst } from "../core/new-session";
+import { hostPlatform } from "./host-platform";
+import { type SessionChoice, loadProjectDirs, parseHiddenDirs, sessionChoices, vaultFirst } from "../core/new-session";
 
 export interface NewSessionDeps {
   vaultPath: () => string;
   projectsRoot: () => string;
+  /** Nachtrag Abend 41: Einstellung „Ausgeblendete Ordner“ (Rohtext), bei jedem Öffnen frisch gelesen. */
+  hiddenDirs: () => string;
   /** Abend 19h: Einträge „Weiter: …“, beim Öffnen frisch gelesen. */
   handoffs: SessionChoice[];
+  /** Nachtrag 40a: Leser „zuletzt benutzt“ oder undefined (Einstellung „Alphabetisch“); bei jedem Aufruf frisch, innerhalb eines Dialogs derselbe Leser. */
+  lastUsed: () => ((cwd: string) => number) | undefined;
   choose: (choice: SessionChoice) => void;
 }
 
@@ -28,13 +33,14 @@ export class NewSessionModal extends FuzzySuggestModal<SessionChoice> {
       readdirSync(r, { withFileTypes: true })
         .filter((entry) => entry.isDirectory())
         .map((entry) => entry.name),
+      hostPlatform(),
     );
     if (error !== undefined) {
       console.warn(`Glasscockpit: Projekte-Ordner nicht lesbar (${root}), nur Vault und Home`, error);
       if (!this.warned) new Notice(`Projektordner nicht lesbar: ${root} (${error}). Einstellungen → Glasscockpit.`, 10000);
       this.warned = true;
     }
-    return [...this.deps.handoffs, ...sessionChoices(this.deps.vaultPath(), home, root, dirs)];
+    return [...this.deps.handoffs, ...sessionChoices(this.deps.vaultPath(), home, root, dirs, this.deps.lastUsed(), parseHiddenDirs(this.deps.hiddenDirs()), hostPlatform())];
   }
 
   /** „claude (Vault)“ steht vor den Projekten, offene Handoffs („Weiter“) stehen davor: Enter ohne Eingabe nimmt den obersten Eintrag, bei offenen Handoffs also „Weiter“, sonst den Vault. */

@@ -1,5 +1,5 @@
 import { appendFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_LINK_BASES, MAX_TOOL_PATHS, TRANSCRIPT_TAIL_BYTES } from "../src/core/constants";
@@ -24,7 +24,7 @@ async function schreibeAntwort(): Promise<void> {
 
 describe("TranscriptReader", () => {
   it("force umgeht die Drosselung der Ordnersuche", async () => {
-    const reader = new TranscriptReader(ID, root);
+    const reader = new TranscriptReader(ID, root, homedir(), "darwin");
     expect(await reader.read()).toEqual({ changed: false, blocks: [], handoff: null });
     await schreibeAntwort();
     // Ohne force bleibt die Suche gedrosselt.
@@ -35,7 +35,7 @@ describe("TranscriptReader", () => {
 
   it("findet die Datei beim ersten Poll", async () => {
     await schreibeAntwort();
-    const result = await new TranscriptReader(ID, root).read();
+    const result = await new TranscriptReader(ID, root, homedir(), "darwin").read();
     expect(result.blocks).toEqual([{ lang: "sh", code: "ls -la" }]);
   });
 });
@@ -46,7 +46,7 @@ describe("TranscriptReader: Lesefehler lassen den alten Stand (Abend 29)", () =>
 
   it("wirft das Lesen, geht der Fehler an den Aufrufer, und der nächste Aufruf ohne force liest erneut, obwohl Größe und mtime gleich sind", async () => {
     await schreibeAntwort();
-    const reader = new TranscriptReader(ID, root);
+    const reader = new TranscriptReader(ID, root, homedir(), "darwin");
     const spy = vi.spyOn(proto, "readTail").mockRejectedValueOnce(new Error("EIO"));
     try {
       await expect(reader.read()).rejects.toThrow("EIO");
@@ -64,7 +64,7 @@ describe("TranscriptReader: Lesefehler lassen den alten Stand (Abend 29)", () =>
 
   it("wächst die Datei und das Lesen scheitert, liest der nächste Aufruf das neue Ende und behält den Stand davor", async () => {
     await schreibeAntwort();
-    const reader = new TranscriptReader(ID, root);
+    const reader = new TranscriptReader(ID, root, homedir(), "darwin");
     expect((await reader.read()).blocks).toEqual([{ lang: "sh", code: "ls -la" }]);
     const mehr = { type: "assistant", message: { id: "m2", content: [{ type: "text", text: "```sh\npwd\n```" }] } };
     await appendFile(join(root, "proj", `${ID}.jsonl`), JSON.stringify(mehr) + "\n");
@@ -90,33 +90,33 @@ describe("TranscriptReader: Handoff-Block (Abend 19b)", () => {
 
   it("liefert den Handoff-Block einer früheren Antwort, auch wenn die letzte Antwort keinen Block hat", async () => {
     await schreibe([antwort("m1", "Start:\n```text\nHandoff: weiter\nzweite Zeile\n```"), antwort("m2", "ok")]);
-    const r = await new TranscriptReader(ID, root).read(true, P);
+    const r = await new TranscriptReader(ID, root, homedir(), "darwin").read(true, P);
     expect(r.handoff).toBe("Handoff: weiter\nzweite Zeile");
     expect(r.blocks).toEqual([]);
   });
 
   it("derselbe Block steht auch in blocks, wenn die letzte Antwort ihn enthält (Voraussetzung fürs Entdoppeln)", async () => {
     await schreibe([antwort("m1", "x\n```\nHandoff: jetzt\n```\n\n```sh\nls\n```")]);
-    const r = await new TranscriptReader(ID, root).read(true, P);
+    const r = await new TranscriptReader(ID, root, homedir(), "darwin").read(true, P);
     expect(r.handoff).toBe("Handoff: jetzt");
     expect(r.blocks.map((b) => b.code)).toContain(r.handoff);
   });
 
   it("ohne Präfix (Vorgabe leer) oder ohne passenden Block ist handoff null", async () => {
     await schreibe([antwort("m1", "```\nHandoff: da\n```")]);
-    expect((await new TranscriptReader(ID, root).read(true)).handoff).toBeNull();
-    expect((await new TranscriptReader(ID, root).read(true, "Übergabe:")).handoff).toBeNull();
+    expect((await new TranscriptReader(ID, root, homedir(), "darwin").read(true)).handoff).toBeNull();
+    expect((await new TranscriptReader(ID, root, homedir(), "darwin").read(true, "Übergabe:")).handoff).toBeNull();
   });
 
   it("unveränderte Datei: changed false und handoff null, der Aufrufer behält seinen Wert", async () => {
     await schreibe([antwort("m1", "```\nHandoff: da\n```")]);
-    const reader = new TranscriptReader(ID, root);
+    const reader = new TranscriptReader(ID, root, homedir(), "darwin");
     expect((await reader.read(false, P)).handoff).toBe("Handoff: da");
     expect(await reader.read(false, P)).toEqual({ changed: false, blocks: [], handoff: null });
   });
 
   it("fehlende Datei: handoff null", async () => {
-    expect(await new TranscriptReader(ID, root).read(true, P)).toEqual({ changed: false, blocks: [], handoff: null });
+    expect(await new TranscriptReader(ID, root, homedir(), "darwin").read(true, P)).toEqual({ changed: false, blocks: [], handoff: null });
   });
 });
 
@@ -138,10 +138,10 @@ describe("Handoff über /clear: zwei Leser, ein HandoffKeeper (Schlüssel Cockpi
 
     // Vor /clear: Startnachricht, danach Antworten ohne Block. Die Leiste zeigt nur den festen Knopf.
     await writeFile(datei(ID), [antwort("m1", "```\nHandoff: alt\n```"), antwort("m2", "ok")].join("\n") + "\n");
-    expect(arten(await poll(new TranscriptReader(ID, root)))).toEqual(["handoff"]);
+    expect(arten(await poll(new TranscriptReader(ID, root, homedir(), "darwin")))).toEqual(["handoff"]);
 
     // /clear: neuer Leser, die neue Datei gibt es noch nicht. Der feste Knopf steht weiter.
-    const neuerLeser = new TranscriptReader(NEU, root);
+    const neuerLeser = new TranscriptReader(NEU, root, homedir(), "darwin");
     expect(arten(await poll(neuerLeser))).toEqual(["handoff"]);
     expect(keeper.get("cockpit-1")).toBe("Handoff: alt");
 
@@ -167,10 +167,17 @@ describe("TranscriptReader: Basisordner aus Werkzeugaufrufen (Abend 27b)", () =>
     await mkdir(join(root, "proj"), { recursive: true });
     await writeFile(join(root, "proj", `${ID}.jsonl`), zeilen.join("\n") + "\n");
   }
-  const leser = () => new TranscriptReader(ID, root, HOME);
+  const leser = () => new TranscriptReader(ID, root, HOME, "darwin");
 
   it("ohne gelesenes Transkript keine Basisordner", () => {
     expect(leser().linkBases()).toEqual([]);
+  });
+
+  it("Abend 42: unter win32 Ordner mit Laufwerk aus cd, ~\\ und Dateizugriffen, neueste zuerst, nie home", async () => {
+    await schreibe([call("cd C:\\Users\\u\\proj\\alt && dir"), call("cd ~\\proj\\neu\\src && dir")]);
+    const win = new TranscriptReader(ID, root, "C:\\Users\\u", "win32");
+    await win.read();
+    expect(win.linkBases()).toEqual(["C:\\Users\\u\\proj\\neu\\src", "C:\\Users\\u\\proj\\neu", "C:\\Users\\u\\proj", "C:\\Users\\u\\proj\\alt"]);
   });
 
   it("Ordner aus cd und Dateizugriffen, neueste zuerst, nie home", async () => {
@@ -209,7 +216,7 @@ describe("TranscriptReader: Basisordner aus Werkzeugaufrufen (Abend 27b)", () =>
     await schreibe([call("cd ~/proj/alt && ls")]);
     const reader = leser();
     await reader.read();
-    const nach = new TranscriptReader("66666666-7777-8888-9999-000000000000", root, HOME);
+    const nach = new TranscriptReader("66666666-7777-8888-9999-000000000000", root, HOME, "darwin");
     await nach.read();
     expect(nach.linkBases()).toEqual([]);
     expect(reader.linkBases()).not.toEqual([]);
@@ -270,19 +277,19 @@ describe("TranscriptReader: offene Hintergrundaufgaben (Abend 28)", () => {
   }
 
   it("ein neuer Leser beginnt leer", () => {
-    expect(new TranscriptReader(ID, root).openTasks(T0, 60 * MIN)).toBe(0);
+    expect(new TranscriptReader(ID, root, homedir(), "darwin").openTasks(T0, 60 * MIN)).toBe(0);
   });
 
   it("zählt Starts ohne Ende aus dem gelesenen Transkript", async () => {
     await schreibe([start(A), start(B)]);
-    const reader = new TranscriptReader(ID, root);
+    const reader = new TranscriptReader(ID, root, homedir(), "darwin");
     await reader.read();
     expect(reader.openTasks(T0 + MIN, 60 * MIN)).toBe(2);
   });
 
   it("ein Ende in einem späteren read schließt die Aufgabe", async () => {
     await schreibe([start(A), start(B)]);
-    const reader = new TranscriptReader(ID, root);
+    const reader = new TranscriptReader(ID, root, homedir(), "darwin");
     await reader.read();
     await haenge([ende(A)]);
     expect((await reader.read()).changed).toBe(true);
@@ -294,7 +301,7 @@ describe("TranscriptReader: offene Hintergrundaufgaben (Abend 28)", () => {
 
   it("das Höchstalter wirkt beim Abfragen, ohne dass das Transkript sich ändert", async () => {
     await schreibe([start(A)]);
-    const reader = new TranscriptReader(ID, root);
+    const reader = new TranscriptReader(ID, root, homedir(), "darwin");
     await reader.read();
     expect(reader.openTasks(T0 + 60 * MIN, 60 * MIN)).toBe(1);
     expect(reader.openTasks(T0 + 60 * MIN + 1, 60 * MIN)).toBe(0);
@@ -302,7 +309,7 @@ describe("TranscriptReader: offene Hintergrundaufgaben (Abend 28)", () => {
 
   it("der Zustand bleibt, auch wenn der Start aus dem gelesenen Ende der Datei fällt", async () => {
     await schreibe([start(A)]);
-    const reader = new TranscriptReader(ID, root);
+    const reader = new TranscriptReader(ID, root, homedir(), "darwin");
     await reader.read();
     // Mehr als das gelesene Ende: der Start liegt danach nicht mehr im Text, den read() sieht.
     const fueller = JSON.stringify({ type: "assistant", message: { id: "f", content: [{ type: "text", text: "x".repeat(1000) }] } });
@@ -317,7 +324,7 @@ describe("TranscriptReader: offene Hintergrundaufgaben (Abend 28)", () => {
 
   it("force liest dieselbe Datei erneut, ohne etwas doppelt zu zählen", async () => {
     await schreibe([start(A)]);
-    const reader = new TranscriptReader(ID, root);
+    const reader = new TranscriptReader(ID, root, homedir(), "darwin");
     await reader.read();
     await reader.read(true);
     await reader.read(true);
@@ -325,7 +332,7 @@ describe("TranscriptReader: offene Hintergrundaufgaben (Abend 28)", () => {
   });
 
   it("fehlende Datei: keine Aufgaben, kein Fehler", async () => {
-    const reader = new TranscriptReader(ID, root);
+    const reader = new TranscriptReader(ID, root, homedir(), "darwin");
     await reader.read(true);
     expect(reader.openTasks(T0, 60 * MIN)).toBe(0);
   });

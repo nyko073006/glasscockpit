@@ -73,7 +73,7 @@ afterEach(() => {
 
 describe("TerminalInput.drop: Meldung und Schreiben aus planDrop", () => {
   /** Echte TerminalInput; der Drop-Listener am Fake-Dokument ist der, den die Klasse selbst anmeldet. */
-  function aufbau(resolveName: TerminalInputOptions["resolveName"] = () => null) {
+  function aufbau(resolveName: TerminalInputOptions["resolveName"] = () => null, platform: TerminalInputOptions["platform"] = "darwin", base: string = BASE) {
     const geschrieben: string[] = [];
     const gemeldet: string[] = [];
     const listener: Record<string, (ev: unknown) => void> = {};
@@ -88,8 +88,9 @@ describe("TerminalInput.drop: Meldung und Schreiben aus planDrop", () => {
     new TerminalInput({
       term: term as never,
       container: container as never,
+      platform,
       write: (data) => geschrieben.push(data),
-      vaultBase: () => BASE,
+      vaultBase: () => base,
       resolveName,
       notify: (text) => gemeldet.push(text),
     });
@@ -127,6 +128,31 @@ describe("TerminalInput.drop: Meldung und Schreiben aus planDrop", () => {
     drop({ "text/uri-list": [OK, MIT_LEERZEICHEN].map(fileUrl).join("\n") });
     expect(geschrieben).toEqual([`@${OK} @"${MIT_LEERZEICHEN}" `]);
     expect(gemeldet).toEqual([]);
+  });
+
+  it("win32: Datei mit Pfad (File.path) wird zur @-Erwähnung mit Schrägstrichen", () => {
+    const { geschrieben, gemeldet, drop } = aufbau(undefined, "win32", "C:\\Users\\x\\Mein Vault");
+    drop({}, [{ path: "C:\\Users\\Jürgen Müller\\a b.md" }, { path: "C:\\Users\\x\\c.md" }]);
+    expect(geschrieben).toEqual(['@"C:/Users/Jürgen Müller/a b.md" @C:/Users/x/c.md ']);
+    expect(gemeldet).toEqual([]);
+  });
+
+  it("win32: text/uri-list mit file:///C:/… liefert den Laufwerkspfad", () => {
+    const { geschrieben, drop } = aufbau(undefined, "win32", "C:\\Users\\x\\Mein Vault");
+    drop({ "text/uri-list": "file:///C:/Users/x/a%20b.md\r\nfile://srv/share/c.md" });
+    expect(geschrieben).toEqual(['@"C:/Users/x/a b.md" @//srv/share/c.md ']);
+  });
+
+  it("win32: obsidian://-Drop wird gegen den Windows-Vault aufgelöst", () => {
+    const { geschrieben, drop } = aufbau((name) => (name === "Notiz" ? "Projekte/Notiz.md" : null), "win32", "C:\\Users\\x\\Mein Vault");
+    drop({ "text/plain": "obsidian://open?vault=Mein%20Vault&file=Notiz" });
+    expect(geschrieben).toEqual(['@"C:/Users/x/Mein Vault/Projekte/Notiz.md" ']);
+  });
+
+  it("win32: Pfad aus text/plain (Laufwerk) wird übernommen", () => {
+    const { geschrieben, drop } = aufbau(undefined, "win32", "C:\\Users\\x\\Mein Vault");
+    drop({ "text/plain": "C:\\a\\b.md" });
+    expect(geschrieben).toEqual(["@C:/a/b.md "]);
   });
 
   it("dasselbe gilt für Dateien mit Pfad (erste Stufe, File.path)", () => {

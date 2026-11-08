@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   MAX_RULES_PER_FILTER, escapeGlob, excludedTargets, exclusionNotice, exclusionRules, exclusionSettings, isExcluded,
-  parseIgnoreFilters, planExclusion, type ExclusionTargets,
+  parseIgnoreFilters, planExclusion, windowsRuleRoot, type ExclusionTargets,
 } from "../src/core/exclusion";
 
 const V = "/Users/x/Vault";
@@ -261,5 +261,89 @@ describe("Größe (Review Focus)", () => {
     const ms = performance.now() - t0;
     expect(ms).toBeLessThan(500);
     expect(t).toEqual(T({ skipped: ["ordner (3000 Einzelpfade)"] }));
+  });
+});
+
+// Abend 42, Task 5: Regeln für Laufwerkspfade. Claude normalisiert unter Windows zu POSIX-Form (C:\Users\alice -> /c/Users/alice).
+describe("windowsRuleRoot", () => {
+  it("Laufwerk klein, Trenner /, Rest unverändert, Trenner am Ende weg", () => {
+    expect(windowsRuleRoot("C:\\Users\\x\\Mein Vault\\")).toBe("/c/Users/x/Mein Vault");
+    expect(windowsRuleRoot("c:/a")).toBe("/c/a");
+    expect(windowsRuleRoot("D:\\Ünï Çode\\Vault")).toBe("/d/Ünï Çode/Vault");
+  });
+  it("Laufwerkswurzel: /c", () => {
+    expect(windowsRuleRoot("C:\\")).toBe("/c");
+    expect(windowsRuleRoot("C:")).toBe("/c");
+  });
+  it("UNC, absoluter Pfad ohne Laufwerk und Laufwerk-relativ: null", () => {
+    expect(windowsRuleRoot("\\\\srv\\share\\V")).toBeNull();
+    expect(windowsRuleRoot("//srv/share/V")).toBeNull();
+    expect(windowsRuleRoot("\\Users\\x")).toBeNull();
+    expect(windowsRuleRoot("C:foo")).toBeNull();
+    expect(windowsRuleRoot("/Users/x/Vault")).toBeNull();
+  });
+});
+
+describe("exclusionRules unter win32 (Abend 42)", () => {
+  const WV = "C:\\Users\\x\\Vault";
+  it("Ordner: Read und Edit mit //c/…", () => {
+    const rules = exclusionRules(WV, T({ folders: ["Privat"] }), "win32");
+    expect(rules).toContain("Read(//c/Users/x/Vault/Privat/**)");
+    expect(rules).toContain("Edit(//c/Users/x/Vault/Privat/**)");
+    expect(rules).toHaveLength(2);
+  });
+  it("Klammern im Ordnernamen werden maskiert", () => {
+    expect(exclusionRules(WV, T({ folders: ["Alt (2020)"] }), "win32")).toContain("Read(//c/Users/x/Vault/Alt \\(2020\\)/**)");
+  });
+  it("Klammern, Leerzeichen und Umlaute im Vault-Pfad: Leerzeichen/Umlaute bleiben, Klammern maskiert, Trenner am Ende egal", () => {
+    expect(exclusionRules("c:\\Users\\Jürgen Müller\\Mein Vault (alt)\\", T({ files: ["a #1.md"] }), "win32")).toEqual([
+      "Edit(//c/Users/Jürgen Müller/Mein Vault \\(alt\\)/a #1.md)",
+      "Read(//c/Users/Jürgen Müller/Mein Vault \\(alt\\)/a #1.md)",
+    ]);
+  });
+  it("Pfadanfänge wie auf dem Mac, nur mit Laufwerkswurzel", () => {
+    expect(exclusionRules(WV, T({ prefixes: ["Privat", "Geheim/"] }), "win32")).toEqual([
+      "Edit(//c/Users/x/Vault/Geheim/**)", "Edit(//c/Users/x/Vault/Privat*)", "Edit(//c/Users/x/Vault/Privat*/**)",
+      "Read(//c/Users/x/Vault/Geheim/**)", "Read(//c/Users/x/Vault/Privat*)", "Read(//c/Users/x/Vault/Privat*/**)",
+    ]);
+  });
+  it("UNC-Vault: keine Regeln", () => {
+    expect(exclusionRules("\\\\srv\\share\\V", T({ folders: ["Privat"] }), "win32")).toEqual([]);
+  });
+  it("darwin unverändert: ohne Plattform und mit darwin dieselben Regeln, ein Windows-Pfad wird nicht umgedeutet", () => {
+    const t = T({ folders: ["Privat"] });
+    expect(exclusionRules(V, t)).toEqual(["Edit(//Users/x/Vault/Privat/**)", "Read(//Users/x/Vault/Privat/**)"]);
+    expect(exclusionRules(V, t, "darwin")).toEqual(exclusionRules(V, t));
+    expect(exclusionRules(WV, t, "darwin").join()).not.toContain("//c/");
+  });
+});
+
+describe("planExclusion unter win32 (Abend 42)", () => {
+  const WV = "C:\\Users\\x\\Vault";
+  const input = { enabled: true, sandbox: false, raw: ["Vertraulich/"], entries: [e("Vertraulich", true), e("Vertraulich/a.md")], vaultAbs: WV, platform: "win32" as const };
+  it("Regeln mit Laufwerkswurzel und dieselbe Meldung wie auf dem Mac", () => {
+    const p = planExclusion(input);
+    expect(p.settings).toEqual({ permissions: { deny: ["Edit(//c/Users/x/Vault/Vertraulich/**)", "Read(//c/Users/x/Vault/Vertraulich/**)"] } });
+    expect(p.notice).toBe("Ausschluss aktiv: 1 Eintrag gesperrt, Shell-Befehle wie grep -r nicht (Sandbox aus).");
+    expect(p.filters.map((f) => f.text)).toEqual(["Vertraulich/"]);
+  });
+  it("sandbox: true ergibt keinen Schlüssel sandbox, die Regeln bleiben, die Meldung nennt die Sandbox als aus", () => {
+    const p = planExclusion({ ...input, sandbox: true });
+    expect(p.settings).not.toHaveProperty("sandbox");
+    expect(p.settings).toHaveProperty("permissions");
+    expect(p.notice).toBe("Ausschluss aktiv: 1 Eintrag gesperrt, Shell-Befehle wie grep -r nicht (Sandbox aus).");
+  });
+  it("Gegenprobe: auf darwin setzt sandbox: true den Block weiterhin", () => {
+    expect(planExclusion({ ...input, vaultAbs: V, sandbox: true, platform: "darwin" }).settings).toHaveProperty("sandbox");
+    expect(planExclusion({ ...input, vaultAbs: V, sandbox: true, platform: undefined }).settings).toHaveProperty("sandbox");
+  });
+  it("UNC-Vault: keine Regeln, die Meldung zum Netzwerkpfad, Filter für die Brücke bleiben", () => {
+    const p = planExclusion({ ...input, vaultAbs: "\\\\srv\\share\\V", sandbox: true });
+    expect(p.settings).toEqual({});
+    expect(p.notice).toBe("Ausschluss unter Windows nur für Vaults auf einem Laufwerk (C:\\…), nicht auf einem Netzwerkpfad.");
+    expect(p.filters.map((f) => f.text)).toEqual(["Vertraulich/"]);
+  });
+  it("UNC-Vault ohne Einträge in der Liste: keine Meldung (nichts zu sperren)", () => {
+    expect(planExclusion({ ...input, vaultAbs: "\\\\srv\\share\\V", raw: undefined })).toEqual({ settings: {}, notice: null, filters: [] });
   });
 });

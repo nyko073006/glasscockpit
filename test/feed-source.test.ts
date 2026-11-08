@@ -11,6 +11,7 @@ function rig(over: Partial<FeedSourceDeps> = {}) {
   const reads = { files: 0, vault: 0, focus: 0, radar: 0 };
   const live = { sessions: [] as ReturnType<FeedSourceDeps["radarInputs"]> };
   const deps: FeedSourceDeps = {
+    platform: "darwin",
     settings: () => ({ ...DEFAULT_SETTINGS, radars: [{ name: "Eins", stateFile: "~/projekt/state.json" }, { name: "Zwei", stateFile: "~/depot/state.json" }], nextEffort: "high", telegramOnDone: true, alertSound: false, alertBanner: true }),
     now: () => 1_000,
     radarInputs: () => live.sessions,

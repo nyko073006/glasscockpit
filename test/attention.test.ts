@@ -1,5 +1,7 @@
+import { spawnSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { alertDue, attentionSequence, bannerText, hookCommand, hookSettings, markedTitle, parseAttention, react } from "../src/core/attention";
+import { alertDue, attentionSequence, bannerText, hookCommand, hookSettings, markedTitle, parseAttention, react, windowsHookArgs, windowsSessionScript, windowsSettings, windowsSignalScript } from "../src/core/attention";
+import { system32Path } from "../src/core/platform-path";
 
 describe("hookSettings", () => {
   it("Stop → done, AskUserQuestion und Rechtefrage → question", () => {
@@ -54,8 +56,9 @@ import { headerTitle, tabTitle } from "../src/core/claude-launch";
 import { TranscriptReader } from "../src/host/transcript-reader";
 import { DEFAULT_SETTINGS } from "../src/core/settings";
 import { FakeTimers } from "./helpers/fakes";
+import { ON_WINDOWS } from "./helpers/platform";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 
 const OLD = "baf7f9fe-1111-4222-8333-444455556666";
@@ -74,24 +77,29 @@ describe("Hooks SessionStart und UserPromptSubmit", () => {
   });
   it("busy-Sequenz hat dasselbe Format wie done", () =>
     expect(attentionSequence("busy")).toBe("\x1b]777;notify;Glasscockpit;cockpit:busy\x07"));
-  it("der busy-Befehl gibt in echter Shell die Sequenz aus", () => {
+  // Windows: führt den Hook-Befehl in /bin/sh aus (Inventur H14)
+  it.skipIf(ON_WINDOWS)("der busy-Befehl gibt in echter Shell die Sequenz aus", () => {
     const out = JSON.parse(runHook(hookCommand("busy"), "{}"));
     expect(out.terminalSequence).toBe(attentionSequence("busy"));
   });
-  it("der Sitzungs-Befehl gibt aus stdin-JSON die Sequenz mit der session_id aus", () => {
+  // Windows: führt den Hook-Befehl in /bin/sh aus (Inventur H14)
+  it.skipIf(ON_WINDOWS)("der Sitzungs-Befehl gibt aus stdin-JSON die Sequenz mit der session_id aus", () => {
     const out = runHook(sessionHookCommand(), JSON.stringify({ session_id: NEW, transcript_path: "/x/y.jsonl", source: "clear" }));
     expect(JSON.parse(out).terminalSequence).toBe(`\x1b]777;notify;Glasscockpit;cockpit:session:${NEW}\x07`);
   });
-  it("auch bei mehrzeiligem JSON und anderer Feldreihenfolge", () => {
+  // Windows: führt den Hook-Befehl in /bin/sh aus (Inventur H14)
+  it.skipIf(ON_WINDOWS)("auch bei mehrzeiligem JSON und anderer Feldreihenfolge", () => {
     const out = runHook(sessionHookCommand(), `{\n  "source": "resume",\n  "session_id": "${NEW}"\n}\n`);
     expect(JSON.parse(out).terminalSequence).toContain(`cockpit:session:${NEW}`);
   });
-  it("zwei session_id-Felder (etwa verschachtelt): genau eine Zeile mit der ersten", () => {
+  // Windows: führt den Hook-Befehl in /bin/sh aus (Inventur H14)
+  it.skipIf(ON_WINDOWS)("zwei session_id-Felder (etwa verschachtelt): genau eine Zeile mit der ersten", () => {
     const out = runHook(sessionHookCommand(), `{"session_id": "${NEW}", "x": {"session_id": "${OLD}"}}`);
     expect(out.trim().split("\n")).toHaveLength(1);
     expect(JSON.parse(out).terminalSequence).toContain(NEW);
   });
-  it("fehlende, kaputte oder fremde session_id: keine Ausgabe", () => {
+  // Windows: führt den Hook-Befehl in /bin/sh aus (Inventur H14)
+  it.skipIf(ON_WINDOWS)("fehlende, kaputte oder fremde session_id: keine Ausgabe", () => {
     for (const stdin of ["", "{}", "kein json", '{"session_id": ""}', '{"session_id": "abc"}', `{"session_id": "${NEW}x"}`, '{"session_id": "../../etc;rm -rf"}', `{"session_id": 5}`]) {
       expect(runHook(sessionHookCommand(), stdin)).toBe("");
     }
@@ -102,7 +110,8 @@ describe("Frage nur einmal je Rückfrage", () => {
   // Gemessen am 06.10.2026 (claude 2.1.291, Wegwerf-Sitzung mit protokollierenden Hooks): AskUserQuestion löst sofort
   // PreToolUse aus, 6 s später Notification mit genau diesem stdin – ohne Werkzeugnamen, ein Textfilter kann nicht greifen.
   const echt = JSON.stringify({ hook_event_name: "Notification", message: "Claude needs your permission", notification_type: "permission_prompt" });
-  it("Notification meldet weiter question (echte Rechtefragen ohne PreToolUse gehen nicht verloren)", () => {
+  // Windows: führt den Hook-Befehl in /bin/sh aus (Inventur H14)
+  it.skipIf(ON_WINDOWS)("Notification meldet weiter question (echte Rechtefragen ohne PreToolUse gehen nicht verloren)", () => {
     expect(JSON.parse(hookSettings()).hooks.Notification[0].hooks[0].command).toBe(hookCommand("question"));
     expect(runHook(hookCommand("question"), echt)).toContain("cockpit:question");
   });
@@ -160,8 +169,8 @@ describe("Sitzungswechsel nach /clear", () => {
     const text = (t: string) => JSON.stringify({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: t }] } }) + "\n";
     writeFileSync(join(root, "p", `${OLD}.jsonl`), text("alt\n```sh\nalt-code\n```"));
     writeFileSync(join(root, "p", `${NEW}.jsonl`), text("neu\n```sh\nneu-code\n```"));
-    const alt = await new TranscriptReader(OLD, root).read(true);
-    const neu = await new TranscriptReader(NEW, root).read(true);
+    const alt = await new TranscriptReader(OLD, root, homedir(), "darwin").read(true);
+    const neu = await new TranscriptReader(NEW, root, homedir(), "darwin").read(true);
     expect(alt.blocks.map((b) => b.code)).toEqual(["alt-code"]);
     expect(neu.blocks.map((b) => b.code)).toEqual(["neu-code"]);
   });
@@ -229,5 +238,177 @@ describe("hookSettings mit Zusatz (Abend 33)", () => {
   });
   it("ohne Zusatz genau wie vorher", () => {
     expect(Object.keys(JSON.parse(hookSettings()))).toEqual(["hooks"]);
+  });
+});
+
+const MAC_OHNE_ZUSATZ = "{\"hooks\":{\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"printf '%s\\\\n' '{\\\"terminalSequence\\\":\\\"\\\\u001b]777;notify;Glasscockpit;cockpit:done\\\\u0007\\\"}'\"}]}],\"PreToolUse\":[{\"matcher\":\"AskUserQuestion\",\"hooks\":[{\"type\":\"command\",\"command\":\"printf '%s\\\\n' '{\\\"terminalSequence\\\":\\\"\\\\u001b]777;notify;Glasscockpit;cockpit:question\\\\u0007\\\"}'\"}]}],\"PostToolUse\":[{\"matcher\":\"AskUserQuestion\",\"hooks\":[{\"type\":\"command\",\"command\":\"printf '%s\\\\n' '{\\\"terminalSequence\\\":\\\"\\\\u001b]777;notify;Glasscockpit;cockpit:busy\\\\u0007\\\"}'\"}]}],\"Notification\":[{\"matcher\":\"permission_prompt|elicitation_dialog\",\"hooks\":[{\"type\":\"command\",\"command\":\"printf '%s\\\\n' '{\\\"terminalSequence\\\":\\\"\\\\u001b]777;notify;Glasscockpit;cockpit:question\\\\u0007\\\"}'\"}]}],\"UserPromptSubmit\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"printf '%s\\\\n' '{\\\"terminalSequence\\\":\\\"\\\\u001b]777;notify;Glasscockpit;cockpit:busy\\\\u0007\\\"}'\"}]}],\"SessionStart\":[{\"matcher\":\"clear|resume|fork\",\"hooks\":[{\"type\":\"command\",\"command\":\"id=$(grep -Eo '\\\"session_id\\\" *: *\\\"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\\\"' | head -n 1 | grep -Eo '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}'); [ -n \\\"$id\\\" ] && printf '%s%s%s\\\\n' '{\\\"terminalSequence\\\":\\\"\\\\u001b]777;notify;Glasscockpit;cockpit:session:' \\\"$id\\\" '\\\\u0007\\\"}'; true\"}]}]}}";
+const MAC_MIT_ZUSATZ = "{\"permissions\":{\"deny\":[\"Read(//a/**)\"]},\"hooks\":{\"Stop\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"printf '%s\\\\n' '{\\\"terminalSequence\\\":\\\"\\\\u001b]777;notify;Glasscockpit;cockpit:done\\\\u0007\\\"}'\"}]}],\"PreToolUse\":[{\"matcher\":\"AskUserQuestion\",\"hooks\":[{\"type\":\"command\",\"command\":\"printf '%s\\\\n' '{\\\"terminalSequence\\\":\\\"\\\\u001b]777;notify;Glasscockpit;cockpit:question\\\\u0007\\\"}'\"}]}],\"PostToolUse\":[{\"matcher\":\"AskUserQuestion\",\"hooks\":[{\"type\":\"command\",\"command\":\"printf '%s\\\\n' '{\\\"terminalSequence\\\":\\\"\\\\u001b]777;notify;Glasscockpit;cockpit:busy\\\\u0007\\\"}'\"}]}],\"Notification\":[{\"matcher\":\"permission_prompt|elicitation_dialog\",\"hooks\":[{\"type\":\"command\",\"command\":\"printf '%s\\\\n' '{\\\"terminalSequence\\\":\\\"\\\\u001b]777;notify;Glasscockpit;cockpit:question\\\\u0007\\\"}'\"}]}],\"UserPromptSubmit\":[{\"hooks\":[{\"type\":\"command\",\"command\":\"printf '%s\\\\n' '{\\\"terminalSequence\\\":\\\"\\\\u001b]777;notify;Glasscockpit;cockpit:busy\\\\u0007\\\"}'\"}]}],\"SessionStart\":[{\"matcher\":\"clear|resume|fork\",\"hooks\":[{\"type\":\"command\",\"command\":\"id=$(grep -Eo '\\\"session_id\\\" *: *\\\"[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\\\"' | head -n 1 | grep -Eo '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}'); [ -n \\\"$id\\\" ] && printf '%s%s%s\\\\n' '{\\\"terminalSequence\\\":\\\"\\\\u001b]777;notify;Glasscockpit;cockpit:session:' \\\"$id\\\" '\\\\u0007\\\"}'; true\"}]}]}}";
+
+describe("hookSettings: Mac byte-gleich (Abend 42, Charakterisierung vom unveränderten Stand 57838ba)", () => {
+  it("hookSettings({}) ist genau dieses Literal", () => {
+    expect(hookSettings({})).toBe(MAC_OHNE_ZUSATZ);
+  });
+  it("hookSettings mit permissions-Zusatz: Zusatz zuerst, dann hooks, genau dieses Literal", () => {
+    expect(hookSettings({ permissions: { deny: ["Read(//a/**)"] } })).toBe(MAC_MIT_ZUSATZ);
+  });
+});
+
+const PS = "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
+const decode = (b64: string) => Buffer.from(b64, "base64").toString("utf16le");
+interface WinEntry { type: string; command: string; args: string[] }
+interface HookGroup { matcher?: string; hooks: WinEntry[] }
+const groupsOf = (json: string) => (JSON.parse(json) as { hooks: Record<string, HookGroup[]> }).hooks;
+const scriptOf = (entry: WinEntry) => decode(entry.args[4]);
+const allEntries = (json: string) => Object.values(groupsOf(json)).flatMap((groups) => groups.flatMap((g) => g.hooks));
+const SEQ_JSON_DONE = String.raw`{"terminalSequence":"\u001b]777;notify;Glasscockpit;cockpit:done\u0007"}`;
+const UUID = "0f8fad5b-d9cb-469f-a165-70867728950e";
+
+describe("windowsHookArgs (Abend 42)", () => {
+  it("vier feste Schalter, dann das Skript als Base64 von UTF-16LE (festes Literal)", () => {
+    expect(windowsHookArgs("exit 0")).toEqual(["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand", "ZQB4AGkAdAAgADAA"]);
+  });
+  it("Umlaute und Zeichen außerhalb von ASCII überstehen die Kodierung", () => {
+    const script = "Write 'äöü€'";
+    expect(decode(windowsHookArgs(script)[4])).toBe(script);
+  });
+});
+
+describe("windowsSignalScript (Abend 42)", () => {
+  it("ist genau [Console]::Out.Write('<JSON>'); exit 0", () => {
+    expect(windowsSignalScript("done")).toBe(`[Console]::Out.Write('${SEQ_JSON_DONE}'); exit 0`);
+  });
+  it("das JSON steht mit \\u001b und \\u0007 als Text darin, keine echten Steuerzeichen", () => {
+    const s = windowsSignalScript("done");
+    expect(s).toContain(SEQ_JSON_DONE);
+    expect(s).toContain("\\u001b");
+    expect(s).toContain("\\u0007");
+    expect(s).not.toMatch(/[\x00-\x1f]/);
+  });
+  it("genau zwei einfache Anführungszeichen (das JSON enthält keins)", () => {
+    for (const sig of ["done", "question", "busy"] as const) expect(windowsSignalScript(sig).split("'").length - 1).toBe(2);
+  });
+  it("das JSON trägt die Sequenz des jeweiligen Signals", () => {
+    for (const sig of ["done", "question", "busy"] as const) {
+      const m = windowsSignalScript(sig).match(/^\[Console\]::Out\.Write\('([^']*)'\); exit 0$/);
+      expect(m).not.toBeNull();
+      expect(JSON.parse(m![1]).terminalSequence).toBe(attentionSequence(sig));
+    }
+  });
+});
+
+describe("windowsSessionScript (Abend 42)", () => {
+  const script = windowsSessionScript();
+  it("liest stdin mit [Console]::In.ReadToEnd(), sucht mit [regex]::Match, schreibt mit [Console]::Out.Write, endet mit exit 0", () => {
+    expect(script).toContain("[Console]::In.ReadToEnd()");
+    expect(script).toContain("[regex]::Match(");
+    expect(script).toContain("[Console]::Out.Write(");
+    expect(script.endsWith("exit 0")).toBe(true);
+    expect(script).not.toMatch(/[\x00-\x1f]/);
+  });
+  it("Muster aus dem Skript: trifft nur eine echte UUID hinter session_id", () => {
+    const pattern = script.match(/\[regex\]::Match\(\$\w+, '([^']*)'\)/)?.[1];
+    expect(pattern).toBeDefined();
+    const re = new RegExp(pattern!);
+    expect(`{"session_id":"${UUID}","x":1}`.match(re)?.[1]).toBe(UUID);
+    expect(`{"a":2, "session_id" :\n "${UUID.toUpperCase()}"}`.match(re)?.[1]).toBe(UUID.toUpperCase());
+    expect("{}".match(re)).toBeNull();
+    expect("".match(re)).toBeNull();
+    expect('{"session_id":"nicht-gueltig"}'.match(re)).toBeNull();
+    expect(`{"session_id":"${UUID}x"}`.match(re)).toBeNull();
+    expect(`{"other_session_id":"${UUID}"}`.match(re)).toBeNull();
+  });
+  it("Ausgabe bei Treffer = start + id + end: ergibt die Sitzungs-Sequenz, die parseSignal versteht", () => {
+    const m = script.match(/\[Console\]::Out\.Write\('([^']*)' \+ \$\w+\.Groups\[1\]\.Value \+ '([^']*)'\)/);
+    expect(m).not.toBeNull();
+    const out = m![1] + UUID + m![2];
+    expect(JSON.parse(out).terminalSequence).toBe(`\x1b]777;notify;Glasscockpit;cockpit:session:${UUID}\x07`);
+    expect(m![1]).toContain("\\u001b");
+    expect(m![2]).toContain("\\u0007");
+    expect(script.split("'").length - 1).toBe(6);
+  });
+});
+
+describe("windowsSettings (Abend 42, ersetzt Abend 41)", () => {
+  const json = windowsSettings({}, PS);
+  const mac = JSON.parse(hookSettings({})).hooks as Record<string, HookGroup[]>;
+  it("gleiche Ereignisse, Matcher und Anzahl Einträge wie hookSettings({})", () => {
+    const shape = (hooks: Record<string, HookGroup[]>) =>
+      Object.entries(hooks).map(([event, groups]) => [event, groups.map((g) => [g.matcher ?? null, g.hooks.length])]);
+    expect(shape(groupsOf(json))).toEqual(shape(mac));
+    expect(Object.keys(groupsOf(json))).toEqual(["Stop", "PreToolUse", "PostToolUse", "Notification", "UserPromptSubmit", "SessionStart"]);
+  });
+  it("jeder Eintrag: type command, command = PS, args = vier Schalter plus Skript, sonst nichts (kein shell, kein onFailure)", () => {
+    const entries = allEntries(json);
+    expect(entries.length).toBe(6);
+    for (const e of entries) {
+      expect(Object.keys(e)).toEqual(["type", "command", "args"]);
+      expect(e.type).toBe("command");
+      expect(e.command).toBe(PS);
+      expect(e.args.slice(0, 4)).toEqual(["-NoLogo", "-NoProfile", "-NonInteractive", "-EncodedCommand"]);
+      expect(e.args.length).toBe(5);
+      expect("shell" in e).toBe(false);
+      expect("onFailure" in e).toBe(false);
+    }
+  });
+  it("die dekodierten Skripte: Stop → done, PreToolUse → question, PostToolUse → busy, Notification → question, UserPromptSubmit → busy, SessionStart → Sitzungs-Skript", () => {
+    const g = groupsOf(json);
+    expect(scriptOf(g.Stop[0].hooks[0])).toBe(windowsSignalScript("done"));
+    expect(scriptOf(g.PreToolUse[0].hooks[0])).toBe(windowsSignalScript("question"));
+    expect(scriptOf(g.PostToolUse[0].hooks[0])).toBe(windowsSignalScript("busy"));
+    expect(scriptOf(g.Notification[0].hooks[0])).toBe(windowsSignalScript("question"));
+    expect(scriptOf(g.UserPromptSubmit[0].hooks[0])).toBe(windowsSignalScript("busy"));
+    expect(scriptOf(g.SessionStart[0].hooks[0])).toBe(windowsSessionScript());
+  });
+  it("kein Skript enthält ConvertFrom-Json oder Start-Sleep; jedes endet mit exit 0", () => {
+    for (const e of allEntries(json)) {
+      const s = scriptOf(e);
+      expect(s).not.toContain("ConvertFrom-Json");
+      expect(s).not.toContain("Start-Sleep");
+      expect(s.endsWith("exit 0")).toBe(true);
+    }
+  });
+  it("Zusatz zuerst, hooks zuletzt; ein Zusatz namens hooks verdrängt die echten Hooks nicht", () => {
+    const extra = { permissions: { deny: ["Read(//c/x/**)"] }, sandbox: { enabled: false }, hooks: { Stop: [{ hooks: [{ type: "command", command: "printf x" }] }] } };
+    const s = JSON.parse(windowsSettings(extra, PS));
+    expect(Object.keys(s)).toEqual(["permissions", "sandbox", "hooks"]);
+    expect(s.permissions).toEqual(extra.permissions);
+    expect(s.sandbox).toEqual(extra.sandbox);
+    expect(s.hooks).toEqual(JSON.parse(json).hooks);
+  });
+  it("ohne Zusatz nur hooks", () => {
+    expect(Object.keys(JSON.parse(json))).toEqual(["hooks"]);
+  });
+  it("der übergebene powershell-Pfad kommt unverändert in jeden Eintrag", () => {
+    for (const e of allEntries(windowsSettings({}, "D:\\Win\\System32\\x.exe"))) expect(e.command).toBe("D:\\Win\\System32\\x.exe");
+  });
+});
+
+describe("Hook-Skripte in echtem Windows PowerShell (Abend 42, nur unter Windows)", () => {
+  const ps = system32Path(process.env.SystemRoot, "WindowsPowerShell", "v1.0", "powershell.exe");
+  const g = groupsOf(windowsSettings({}, ps));
+  const run = (entry: WinEntry, input: string) => spawnSync(entry.command, entry.args, { input, encoding: "utf8", windowsHide: true });
+  const [start, end] = (() => {
+    const m = windowsSessionScript().match(/Write\('([^']*)' \+ \$\w+\.Groups\[1\]\.Value \+ '([^']*)'\)/);
+    return [m?.[1] ?? "", m?.[2] ?? ""];
+  })();
+  it.runIf(ON_WINDOWS)("Session-Hook mit session_id: stdout genau start + uuid + end, Status 0", () => {
+    const r = run(g.SessionStart[0].hooks[0], `{"session_id":"${UUID}","x":1}`);
+    expect(r.stdout).toBe(start + UUID + end);
+    expect(r.status).toBe(0);
+  });
+  it.runIf(ON_WINDOWS)("Session-Hook mit {} : stdout leer, Status 0", () => {
+    const r = run(g.SessionStart[0].hooks[0], "{}");
+    expect(r.stdout).toBe("");
+    expect(r.status).toBe(0);
+  });
+  it.runIf(ON_WINDOWS)("Session-Hook mit leerem stdin: stdout leer, Status 0", () => {
+    const r = run(g.SessionStart[0].hooks[0], "");
+    expect(r.stdout).toBe("");
+    expect(r.status).toBe(0);
+  });
+  it.runIf(ON_WINDOWS)("Signal-Hook: stdout genau das JSON, Status 0", () => {
+    const r = run(g.Stop[0].hooks[0], "");
+    expect(r.stdout).toBe(SEQ_JSON_DONE);
+    expect(r.status).toBe(0);
   });
 });

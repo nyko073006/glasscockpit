@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { copyNodePty } from "../scripts/lib/native-copy";
 import { computeNativeChecksums, hashTree, renderChecksumsModule } from "../scripts/lib/native-checksums";
 import { NATIVE_CHECKSUMS } from "../src/core/native-checksums";
-import { NATIVE_TARGETS } from "../src/core/shell";
+import { NATIVE_TARGETS, nativeLayout } from "../src/core/shell";
 import { isSafeRelPath, verifyNative } from "../src/core/native-verify";
 import { ROOT } from "./helpers/files";
 
@@ -26,11 +26,12 @@ describe("Abend 26 (2): eingecheckte Prüfsummen", () => {
     expect(datei).toBe(renderChecksumsModule(computeNativeChecksums(PTY)));
   });
 
-  it("genau die Ziele des Loaders, jedes mit den vier Kerndateien", () => {
+  it("genau die Ziele des Loaders, jedes mit seinen Kerndateien", () => {
     expect(Object.keys(NATIVE_CHECKSUMS).sort()).toEqual([...NATIVE_TARGETS].sort());
     for (const t of NATIVE_TARGETS) {
       const pfade = Object.keys(NATIVE_CHECKSUMS[t]);
-      for (const d of ["package.json", "lib/index.js", `prebuilds/${t}/pty.node`, `prebuilds/${t}/spawn-helper`]) {
+      const [platform, arch] = t.split("-");
+      for (const d of ["package.json", ...nativeLayout(platform, arch).required]) {
         expect(pfade, `${t}/${d}`).toContain(d);
       }
       // Nur das eigene Ziel, keine Fremdplattform

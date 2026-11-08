@@ -3,6 +3,7 @@ import { buildDiffView, diffTabTitle, displayPath, hunkHeader } from "../core/di
 import type { DiffRequest } from "../core/diff-sessions";
 import { CSS_PREFIX, VIEW_TYPE_DIFF } from "../core/constants";
 import type { Decision } from "../core/ide-diff";
+import type { Platform } from "../core/platform-path";
 
 // Diff-Ansicht (Abend 17): ein Tab je Diff mit Kopf (Pfad, Zusammenfassung, Annehmen/Ablehnen) und farbigem, zeilenweisem
 // Diff. Alle Rechnung liegt in core (line-diff, diff-view-model); hier nur DOM. Die Ansicht schreibt nie eine Datei.
@@ -14,6 +15,8 @@ export interface DiffViewDeps {
   /** Der Tab wurde geschlossen (auch durch uns nach einer Entscheidung: dann ist die id schon veraltet und es passiert nichts). */
   closed: (id: string) => void;
   vaultBase: () => string | null;
+  /** Abend 42: Plattform der Pfade in der Anzeige (Titel, Kopfzeile). */
+  platform: Platform;
 }
 
 const c = (name: string): string => `${CSS_PREFIX}${name}`;
@@ -34,7 +37,7 @@ export class DiffView extends ItemView {
   }
 
   getDisplayText(): string {
-    return this.req ? diffTabTitle(this.req.newFilePath) : "Diff";
+    return this.req ? diffTabTitle(this.req.newFilePath, this.deps.platform) : "Diff";
   }
 
   getIcon(): string {
@@ -74,12 +77,12 @@ export class DiffView extends ItemView {
     const model = buildDiffView(req.oldContents, req.newFileContents);
 
     const head = root.createDiv({ cls: c("diff-head") });
-    head.createDiv({ cls: c("diff-path"), text: displayPath(req.newFilePath, this.deps.vaultBase()) });
+    head.createDiv({ cls: c("diff-path"), text: displayPath(req.newFilePath, this.deps.vaultBase(), this.deps.platform) });
     head.createDiv({ cls: c("diff-summary"), text: model.summary });
     const buttons = head.createDiv({ cls: c("diff-buttons") });
     buttons.createEl("button", { text: "Ablehnen", cls: c("diff-reject") }).addEventListener("click", () => this.deps.decide(id, "rejected"));
     buttons.createEl("button", { text: "Annehmen", cls: `mod-cta ${c("diff-accept")}` }).addEventListener("click", () => this.deps.decide(id, "accepted"));
-    if (req.oldFilePath !== req.newFilePath) head.createDiv({ cls: c("diff-notes"), text: `Alte Fassung aus ${displayPath(req.oldFilePath, this.deps.vaultBase())}` });
+    if (req.oldFilePath !== req.newFilePath) head.createDiv({ cls: c("diff-notes"), text: `Alte Fassung aus ${displayPath(req.oldFilePath, this.deps.vaultBase(), this.deps.platform)}` });
     for (const note of model.notes) head.createDiv({ cls: c("diff-notes"), text: note });
 
     const body = root.createDiv({ cls: c("diff-body") });

@@ -26,38 +26,45 @@ describe("readExclusion", () => {
   const entries = [folder("/"), folder("Vertraulich"), file("Vertraulich/a.md"), file("offen.md")];
   it("aus: liest nichts, ergibt nichts", async () => {
     const v = vault({ ".obsidian/app.json": '{"userIgnoreFilters":["Vertraulich/"]}' }, entries);
-    expect(await readExclusion(v, "/V", { ...ON, claudeExclusion: false })).toEqual({ settings: {}, notice: null, filters: [] });
+    expect(await readExclusion(v, "/V", { ...ON, claudeExclusion: false }, "darwin")).toEqual({ settings: {}, notice: null, filters: [] });
     expect(v.calls).toEqual([]);
   });
   it("app.json fehlt oder ohne Schlüssel: nichts gesperrt, keine Zeile", async () => {
-    expect(await readExclusion(vault({}, entries), "/V", ON)).toEqual({ settings: {}, notice: null, filters: [] });
-    expect(await readExclusion(vault({ ".obsidian/app.json": '{"alwaysUpdateLinks":true}' }, entries), "/V", ON))
+    expect(await readExclusion(vault({}, entries), "/V", ON, "darwin")).toEqual({ settings: {}, notice: null, filters: [] });
+    expect(await readExclusion(vault({ ".obsidian/app.json": '{"alwaysUpdateLinks":true}' }, entries), "/V", ON, "darwin"))
       .toEqual({ settings: {}, notice: null, filters: [] });
   });
+  it("Plattform win32 (Abend 42): Laufwerkspfad ergibt //c/…-Regeln, ohne Angabe bleibt es darwin", async () => {
+    const files = { ".obsidian/app.json": '{"userIgnoreFilters":["Vertraulich/"]}' };
+    const win = await readExclusion(vault(files, entries), "C:\\Users\\x\\V", { ...ON, claudeExclusionSandbox: true }, "win32");
+    expect(win.settings).toEqual({ permissions: { deny: ["Edit(//c/Users/x/V/Vertraulich/**)", "Read(//c/Users/x/V/Vertraulich/**)"] } });
+    const mac = await readExclusion(vault(files, entries), "/V", ON, "darwin");
+    expect(mac.settings).toEqual({ permissions: { deny: ["Edit(//V/Vertraulich/**)", "Read(//V/Vertraulich/**)"] } });
+  });
   it("Liste aus app.json, Ordner als Ordner erkannt (die Wurzel \"/\" stört nicht)", async () => {
-    const p = await readExclusion(vault({ ".obsidian/app.json": '{"userIgnoreFilters":["vertraulich/"]}' }, entries), "/V", ON);
+    const p = await readExclusion(vault({ ".obsidian/app.json": '{"userIgnoreFilters":["vertraulich/"]}' }, entries), "/V", ON, "darwin");
     expect(p.settings).toEqual({ permissions: { deny: ["Edit(//V/Vertraulich/**)", "Edit(//V/vertraulich/**)", "Read(//V/Vertraulich/**)", "Read(//V/vertraulich/**)"] } });
     expect(p.notice).toBe("Ausschluss aktiv: 1 Eintrag gesperrt, Shell-Befehle wie grep -r nicht (Sandbox aus).");
     expect(p.filters.map((f) => f.text)).toEqual(["vertraulich/"]);
   });
   it("eigener Konfigordner", async () => {
     const v = vault({ ".mein/app.json": '{"userIgnoreFilters":["Vertraulich/"]}' }, entries, ".mein");
-    expect((await readExclusion(v, "/V", ON)).settings).toHaveProperty("permissions");
+    expect((await readExclusion(v, "/V", ON, "darwin")).settings).toHaveProperty("permissions");
     expect(v.calls).toContain("read .mein/app.json");
   });
   it("Sandbox-Schalter wird durchgereicht", async () => {
-    const p = await readExclusion(vault({ ".obsidian/app.json": '{"userIgnoreFilters":["Vertraulich/"]}' }, entries), "/V", { ...ON, claudeExclusionSandbox: true });
+    const p = await readExclusion(vault({ ".obsidian/app.json": '{"userIgnoreFilters":["Vertraulich/"]}' }, entries), "/V", { ...ON, claudeExclusionSandbox: true }, "darwin");
     expect(p.settings).toHaveProperty("sandbox");
   });
   it("kaputtes JSON, null und gültiges JSON ohne Objekt: Sitzung startet ohne Regeln, mit Warnzeile (Review Focus)", async () => {
     for (const text of ["{kaputt", "null", "5", '"x"']) {
-      const p = await readExclusion(vault({ ".obsidian/app.json": text }, entries), "/V", ON);
+      const p = await readExclusion(vault({ ".obsidian/app.json": text }, entries), "/V", ON, "darwin");
       expect(p.settings).toEqual({});
       expect(p.notice).toMatch(/^Ausschluss NICHT aktiv: app\.json nicht lesbar \(.+\)\.$/);
     }
   });
   it("userIgnoreFilters als Text: Fehlerzeile, nichts gesperrt", async () => {
-    const p = await readExclusion(vault({ ".obsidian/app.json": '{"userIgnoreFilters":"Vertraulich/"}' }, entries), "/V", ON);
+    const p = await readExclusion(vault({ ".obsidian/app.json": '{"userIgnoreFilters":"Vertraulich/"}' }, entries), "/V", ON, "darwin");
     expect(p.settings).toEqual({});
     expect(p.notice).toBe("Ausschluss: nichts gesperrt. Fehler in der Ausschlussliste: Ausschlussliste ist keine Liste.");
   });

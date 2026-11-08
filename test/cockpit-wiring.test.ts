@@ -1,12 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { ROOT, listFilesRecursive } from "./helpers/files";
+import { ROOT, listFilesRecursive, relativeToRoot } from "./helpers/files";
 
 const read = (p: string) => readFileSync(join(ROOT, p), "utf8");
 // Auch Zugriff über Klammern (globalThis["setInterval"]) zählt als Takt.
 const INTERVAL = /\bsetInterval\s*\(|\[\s*["'`]setInterval["'`]\s*\]/;
-const SRC = listFilesRecursive(join(ROOT, "src")).filter((f) => f.endsWith(".ts") && !f.endsWith(".d.ts")).map((f) => relative(ROOT, f));
+const SRC = listFilesRecursive(join(ROOT, "src")).filter((f) => f.endsWith(".ts") && !f.endsWith(".d.ts")).map(relativeToRoot);
 const filesWith = (re: RegExp): string[] => SRC.filter((f) => re.test(read(f))).sort();
 const count = (re: RegExp): number => SRC.reduce((n, f) => n + (read(f).match(re)?.length ?? 0), 0);
 
@@ -191,12 +191,34 @@ describe("Cockpit-Ansicht: Schalter und Optik", () => {
     const block = tab.slice(crop, next);
     expect(block).toMatch(/"Cockpit-Ausschnitt"/);
     expect(block).toMatch(/\{\s*crop:\s*"zugeschnitten",\s*full:\s*"voll"\s*\}/);
-    expect(tab).toMatch(/type ChoiceKey = "dashboardLayout" \| "nextEffort" \| "cockpitCrop";/);
+    expect(tab).toMatch(/type ChoiceKey = "dashboardLayout" \| "nextEffort" \| "cockpitCrop" \| "newSessionOrder";/);
+  });
+  it("Neue Sitzung nach zuletzt benutzt (Nachtrag 40a): main übergibt lastUsed je Dialog, der Dialog reicht es als fünftes Argument an sessionChoices", () => {
+    const main = read("src/main.ts");
+    const open = main.slice(main.indexOf("private async openNewSessionModal"));
+    const modalCall = open.slice(open.indexOf("new NewSessionModal("));
+    expect(modalCall).toMatch(/lastUsed:/);
+    expect(modalCall).toMatch(/settings\(\)\.newSessionOrder === "recent"/);
+    expect(modalCall).toMatch(/createLastUsed\(\)/);
+    const modal = read("src/host/new-session-modal.ts");
+    expect(modal).toMatch(/sessionChoices\(this\.deps\.vaultPath\(\), home, root, dirs, this\.deps\.lastUsed\(\), parseHiddenDirs\(this\.deps\.hiddenDirs\(\)\), hostPlatform\(\)\)/);
+    expect(modal).toMatch(/lastUsed: \(\) => \(\(cwd: string\) => number\) \| undefined;/);
+  });
+  it("Ausgeblendete Ordner (Nachtrag Abend 41): main liest die Einstellung bei jedem Öffnen, der Dialog reicht parseHiddenDirs(...) als sechstes Argument an sessionChoices", () => {
+    const main = read("src/main.ts");
+    const open = main.slice(main.indexOf("private async openNewSessionModal"));
+    const modalCall = open.slice(open.indexOf("new NewSessionModal("));
+    expect(modalCall).toMatch(/hiddenDirs: \(\) => store\.settings\(\)\.hiddenProjectDirs,/);
+    const modal = read("src/host/new-session-modal.ts");
+    expect(modal).toMatch(/hiddenDirs: \(\) => string;/);
+    expect(modal).toMatch(/import \{[^}]*parseHiddenDirs[^}]*\} from "\.\.\/core\/new-session"/);
   });
   it("alle neuen Klassen tragen das Präfix cockpit-", () => {
     // Ohne Kommentare; erlaubt sind nur Klassen von Obsidian, an die schon vor Abend 15 Regeln hingen (und „css“ aus @import).
     const ohneKommentare = css.replace(/\/\*[\s\S]*?\*\//g, "");
-    const obsidian = ["css", "setting-item-control", "view-content", "workspace-leaf-content", "workspace-tab-header", "workspace-tab-header-inner-title"];
+    // Nachtrag 41c: Der Tab-Schatten verankert sich an Obsidians Struktur (Theme, Hauptfläche, Tab-Leiste, aktiver Tab).
+    const obsidian = ["css", "setting-item-control", "view-content", "workspace-leaf-content", "workspace-tab-header", "workspace-tab-header-inner-title",
+      "theme-light", "theme-dark", "workspace-split", "mod-root", "workspace-tab-header-container", "is-active"];
     const klassen = [...ohneKommentare.matchAll(/\.([a-z][\w-]*)/g)].map((m) => m[1]).filter((c) => !c.startsWith("cockpit-") && !obsidian.includes(c));
     expect(klassen).toEqual([]);
   });
@@ -204,6 +226,10 @@ describe("Cockpit-Ansicht: Schalter und Optik", () => {
     expect(css).toMatch(/\.cockpit-inst-bar-fill \{[^}]*background:\s*var\(--tone\)/);
     expect(css).toMatch(/\.cockpit-inst-big \{[^}]*font-size:[^;}]*cqw/);
     expect(css).toMatch(/\.cockpit-stage \{[^}]*font-family:[^;}]*(Monaco|Menlo)/);
+    // Abend 41: Windows-Schriften hinter den Mac-Schriften, vor Obsidians Monospace.
+    expect(css).toMatch(/\.cockpit-stage \{[^}]*font-family:\s*Monaco, Menlo,[^;}]*"Cascadia Mono"[^;}]*Consolas[^;}]*var\(--font-monospace\)/);
+    expect(css).toMatch(/\.cockpit-focus-line \{[^}]*font-family:\s*"Helvetica Neue",[^;}]*"Segoe UI"[^;}]*Arial/);
+    expect(css).toMatch(/\.cockpit-newsession-plus \{[^}]*font-family:\s*"SF Mono", Menlo,[^;}]*"Cascadia Mono"[^;}]*Consolas[^;}]*var\(--font-monospace\)/);
     expect(css).toMatch(/\.cockpit-panel:hover[^{]*\{[^}]*drop-shadow/);
     expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\)\s*\{[^@]*\.cockpit-panel[^@]*transition:\s*none/);
   });

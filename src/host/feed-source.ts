@@ -3,6 +3,7 @@ import type { CockpitFeed } from "../core/cockpit-feed";
 import type { OpenHandoff } from "../core/handoffs";
 import type { RadarFileLamp } from "../core/radar-lamp";
 import type { SessionFile } from "../core/session-file";
+import type { Platform } from "../core/platform-path";
 import { expandHome, type CockpitSettings } from "../core/settings";
 import { RADAR_SLOTS } from "../core/constants";
 import { isUnset } from "../core/unset";
@@ -27,6 +28,8 @@ export interface FeedSourceDeps {
   readRadar: (path: string, nowMs: number) => Promise<RadarFileLamp>;
   /** Home für `~` in den Radar-Pfaden. */
   home?: string;
+  /** Plattform des Rechners (hostPlatform()) für `~` in den Radar-Pfaden; fehlt sie, gilt darwin. */
+  platform: Platform;
   log: (message: string) => void;
 }
 
@@ -108,7 +111,7 @@ export class CockpitFeedSource {
       safe("Vault-Lage", () => d.readVault(s, now), null),
       safe("Tagesfokus", () => d.readFocus(s, now), [] as string[]),
       safe("Handoffs", () => d.readHandoffs(s), this.handoffs),
-      Promise.all(radarFiles.map((f) => safe(`Radar ${f}`, () => d.readRadar(expandHome(f, home), nowMs), "red"))),
+      Promise.all(radarFiles.map((f) => safe(`Radar ${f}`, () => d.readRadar(expandHome(f, home, d.platform), nowMs), "red"))),
     ]);
     // Eigene IDs zur Sicherheit noch einmal filtern: Der Leser kennt sie, die Quelle verlässt sich nicht darauf.
     this.files = ownSessionFiles([...files.values()], d.ownClaudeIds());

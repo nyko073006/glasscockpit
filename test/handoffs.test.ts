@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { awaitRunning, expandHome, fillHandoffPrompt, isoDay, markTakenUp, newestOpen, sortHandoffs, touchesHandoffs, type HandoffSource } from "../src/core/handoffs";
+import { awaitRunning, fillHandoffPrompt, isoDay, markTakenUp, newestOpen, sortHandoffs, touchesHandoffs, type HandoffSource } from "../src/core/handoffs";
 
 const doc = (fm: string, body = "Text"): string => `---\n${fm}\n---\n${body}\n`;
 const src = (name: string, fm: string): HandoffSource => ({ path: `P/Projekt A/Handoffs/${name}`, name, text: doc(fm) });
@@ -44,14 +44,6 @@ describe("newestOpen", () => {
   });
   it("fehlender Auftrag wird leerer Text", () => {
     expect(newestOpen("Projekt A", null, [src("2026-01-03 a.md", "status: offen")], parse).item?.task).toBe("");
-  });
-});
-
-describe("expandHome", () => {
-  it("ersetzt führendes ~", () => {
-    expect(expandHome("~/dev/a", "/Users/alex")).toBe("/Users/alex/dev/a");
-    expect(expandHome("~", "/Users/alex")).toBe("/Users/alex");
-    expect(expandHome("/abs/~x", "/Users/alex")).toBe("/abs/~x");
   });
 });
 

@@ -58,6 +58,7 @@ describe("Pull ohne Briefing-Ordner", () => {
     mkdirSync(join(base, ".git"));
     let pathDirsAufrufe = 0;
     const c = new PullController({
+      platform: "darwin",
       vaultBase: () => base,
       settings: () => ({ ...DEFAULT_SETTINGS, briefingsDir: "" }),
       pathDirs: async () => { pathDirsAufrufe++; return []; },

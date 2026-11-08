@@ -33,7 +33,7 @@ export function runGitStatus(dir: string, env: Record<string, string>, timeoutMs
       execFile(
         "git",
         ["--no-optional-locks", "status", "--porcelain=v2", "--branch"],
-        { cwd: dir, timeout: timeoutMs, env: { ...env, GIT_TERMINAL_PROMPT: "0" }, maxBuffer: 16 * 1024 * 1024 },
+        { cwd: dir, timeout: timeoutMs, env: { ...env, GIT_TERMINAL_PROMPT: "0" }, maxBuffer: 16 * 1024 * 1024, windowsHide: true },
         (err, stdout) => (err ? reject(asError(err)) : resolve(String(stdout))),
       );
     } catch (fehler) {
@@ -55,7 +55,7 @@ export function runGitDayLog(dir: string, since: Date, env: Record<string, strin
       execFile(
         "git",
         ["--no-optional-locks", "-c", "core.quotepath=false", "log", "--branches", "--no-merges", `--since=${since.toISOString().replace(/\.\d+Z$/, "Z")}`, "--numstat", `--format=${DAY_LOG_SEP}%H %at`],
-        { cwd: dir, timeout: timeoutMs, env: { ...env, GIT_TERMINAL_PROMPT: "0" }, maxBuffer: 64 * 1024 * 1024 },
+        { cwd: dir, timeout: timeoutMs, env: { ...env, GIT_TERMINAL_PROMPT: "0" }, maxBuffer: 64 * 1024 * 1024, windowsHide: true },
         (err, stdout) => (err ? reject(asError(err)) : resolve(String(stdout))),
       );
     } catch (fehler) {
@@ -74,7 +74,7 @@ export function runGitIdentity(dir: string, env: Record<string, string>, timeout
       execFile(
         "git",
         ["--no-optional-locks", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-        { cwd: dir, timeout: timeoutMs, env: { ...env, GIT_TERMINAL_PROMPT: "0" } },
+        { cwd: dir, timeout: timeoutMs, env: { ...env, GIT_TERMINAL_PROMPT: "0" }, windowsHide: true },
         (err, stdout) => {
           if (err) return reject(asError(err));
           let isMain = false;

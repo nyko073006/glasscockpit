@@ -1,6 +1,6 @@
 /**
  * Usage-Karte (Abend 12). Die Limits kommen aus dem Schnappschuss der Statuszeile
- * (~/.claude/cockpit/usage.json, `{ written_at, rate_limits }`), gerechnet wird hier kein Fenster.
+ * (~/.claude/cockpit/usage.json, `{ written_at, rate_limits }`, je Fenster seit 43e `observed_at`), gerechnet wird hier kein Fenster.
  * Aus den Transkripten kommen nur die Output-Tokens des lokalen Kalendertags.
  *
  * Transkriptformat (erkundet am 05.10.2026, claude 2.1.289): JSONL; zählen nur Zeilen `type: "assistant"`
@@ -9,10 +9,18 @@
  * Zeilen samt altem Zeitstempel in neue Dateien. Deshalb: Schlüssel `message.id` über alle Dateien, höchster Wert.
  */
 
+import type { Platform } from "./platform-path";
+import { effectiveWriteStatusFile } from "./settings";
+
 export type WindowKey = "five_hour" | "seven_day";
 
 /** `resetsAt` in Unix-Sekunden, wie Claude Code es liefert. */
-export interface UsageWindow { usedPercentage: number; resetsAt: number }
+export interface UsageWindow {
+  usedPercentage: number;
+  resetsAt: number;
+  /** Unix-Sekunden, Zeit der Beobachtung (seit 43e); fehlt, wenn die Statuszeile sie nicht kennt. */
+  observedAt?: number;
+}
 export interface UsageSnapshot { writtenAt: number | null; windows: Partial<Record<WindowKey, UsageWindow>> }
 
 export interface UsageRow {
@@ -47,7 +55,10 @@ export function parseUsageSnapshot(text: string): UsageSnapshot | null {
   for (const [key] of WINDOWS) {
     const w = limits[key];
     if (isObject(w) && finite(w.used_percentage) && finite(w.resets_at)) {
-      windows[key] = { usedPercentage: w.used_percentage, resetsAt: w.resets_at };
+      const win: UsageWindow = { usedPercentage: w.used_percentage, resetsAt: w.resets_at };
+      // observed_at (seit 43e) nur als endliche Zahl; sonst fehlt observedAt, das Fenster bleibt.
+      if (finite(w.observed_at)) win.observedAt = w.observed_at;
+      windows[key] = win;
     }
   }
   return { writtenAt: finite(raw.written_at) ? raw.written_at : null, windows };
@@ -72,7 +83,12 @@ export function formatAge(sec: number | null): string {
   return `vor ${plural(Math.floor(sec / 86400), "Tag", "Tagen")}`;
 }
 
-/** Je Fenster Prozent und Restzeit; ist resets_at erreicht, gilt das Fenster als zurückgesetzt (keine alte Zahl). */
+/**
+ * Je Fenster Prozent und Restzeit; ist resets_at erreicht, gilt das Fenster als zurückgesetzt (keine alte Zahl).
+ * Alter (seit 43e) ab der jüngsten Beobachtung statt ab written_at (das erneuert jeder Tab bei jedem Lauf):
+ * größtes `observedAt` aller Fenster; abgelaufene zählen mit, ihre Beobachtung kann auch nach dem Ablauf die
+ * jüngste sein. Fehlt `observedAt` überall, wie bisher ab `writtenAt`. Nie negativ.
+ */
 export function usageView(snapshot: UsageSnapshot, nowMs: number): UsageViewModel {
   const nowSec = nowMs / 1000;
   const rows: UsageRow[] = [];
@@ -87,7 +103,9 @@ export function usageView(snapshot: UsageSnapshot, nowMs: number): UsageViewMode
     const remainingSec = Math.floor(w.resetsAt - nowSec);
     rows.push({ key, label, expired: false, percent, remainingSec, text: `${percent} % · Reset in ${formatRemaining(remainingSec)}` });
   }
-  const ageSec = snapshot.writtenAt === null ? null : Math.max(0, Math.floor(nowSec - snapshot.writtenAt));
+  const observed = WINDOWS.map(([key]) => snapshot.windows[key]?.observedAt).filter((at) => at !== undefined);
+  const since = observed.length > 0 ? Math.max(...observed) : snapshot.writtenAt;
+  const ageSec = since === null ? null : Math.max(0, Math.floor(nowSec - since));
   return { rows, ageSec, ageText: formatAge(ageSec) };
 }
 
@@ -260,6 +278,8 @@ export interface TokenCounterDeps {
   write: (content: string) => Promise<void>;
   /** Gelesen bei jeder Nutzung, nie beim Start gemerkt. */
   settings: () => { writeTokensFile: boolean; usagePollSec: number };
+  /** Plattform des Hosts: unter win32 wird die Datei nie geschrieben (effectiveWriteStatusFile). */
+  platform: Platform;
   now: () => Date;
   /** Schreib- und Abonnentenfehler nur melden (Konsole), nie werfen. */
   log: (message: string) => void;
@@ -318,7 +338,7 @@ export class TokenCounter {
       const count = await this.deps.scan(now);
       this.current = { kind: "ok", count };
       this.okAt = now.getTime();
-      if (this.deps.settings().writeTokensFile) {
+      if (effectiveWriteStatusFile(this.deps.platform, this.deps.settings().writeTokensFile)) {
         try {
           await this.deps.write(tokensFileContent(count, now));
         } catch (fehler) {

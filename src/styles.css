@@ -87,6 +87,24 @@
   font-weight: 600;
 }
 
+/* Tab-Schatten (Nachtrag 41c, Einstellung tabShadow): Im hellen Theme hebt sich der aktive Tab kaum ab. drop-shadow folgt
+   der Form samt Obsidians Kurven (::before/::after), box-shadow bliebe eckig. Kein y-Versatz: Die Kopfzeile schneidet unten ab,
+   der Schatten läuft deshalb weich zu den Nachbartabs aus. Beim Wechsel blendet er über. */
+body.theme-light.cockpit-tab-shadow .workspace-split.mod-root .workspace-tab-header-container .workspace-tab-header {
+  transition: filter 180ms ease-out;
+}
+
+body.theme-light.cockpit-tab-shadow .workspace-split.mod-root .workspace-tab-header-container .workspace-tab-header.is-active {
+  z-index: 1;
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.45)) drop-shadow(0 0 14px rgba(0, 0, 0, 0.42));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body.theme-light.cockpit-tab-shadow .workspace-split.mod-root .workspace-tab-header-container .workspace-tab-header {
+    transition: none;
+  }
+}
+
 /* Einstellungsseite: Grund bei ungültiger Eingabe. */
 .cockpit-setting-error {
   color: var(--text-error);
@@ -451,7 +469,7 @@
   width: 100%;
   aspect-ratio: 1536 / 1942;
   container-type: inline-size;
-  font-family: Monaco, Menlo, var(--font-monospace), monospace;
+  font-family: Monaco, Menlo, "Cascadia Mono", Consolas, var(--font-monospace), monospace;
   color: #dff3ff;
   user-select: none;
 }
@@ -996,7 +1014,7 @@
    von etwa 1 cqw ist (am 06.10.2026 in der Vorschau gemessen; Monaco bräuchte 0,9 cqw, 1,5 cqw ließe pro Punkt nur drei Zeilen). */
 .cockpit-stage .cockpit-focus-line {
   flex: none;
-  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-family: "Helvetica Neue", Helvetica, "Segoe UI", Arial, sans-serif;
   font-size: 1cqw;
   line-height: 1.2;
   hyphens: auto;
@@ -1291,7 +1309,7 @@
 }
 
 .cockpit-stage .cockpit-field-newSession .cockpit-newsession-plus {
-  font-family: "SF Mono", Menlo, var(--font-monospace), monospace;
+  font-family: "SF Mono", Menlo, "Cascadia Mono", Consolas, var(--font-monospace), monospace;
   /* Höhe des Textrechtecks (Höhe von newSession, rund 3,45 cqw); größer schnitte overflow das Zeichen ab (18f). */
   font-size: 3.4cqw;
   font-weight: 700;
@@ -1544,8 +1562,49 @@
 /* Radar-Feld ohne Radare (Abend 21.3): kurzes „aus“ in der Größe der Radar-Kürzel, der volle Hinweis steht im title. */
 .cockpit-stage .cockpit-radars-unset { font-size: 1.3cqw; line-height: 1; font-style: normal; text-align: center; }
 /* Datei-Viewer (Abend 27): Fenster über Obsidian mit Rohtext-Editor. Die Farben des Editors setzt das Editor-Theme im Code. */
-.cockpit-file-viewer { width: min(1100px, 92vw); height: min(85vh, 1000px); max-width: none; display: flex; flex-direction: column; }
+/* Nachtrag 41d: Lage und Größe setzt der Code als Inline-Stil (left/top/width/height aus startRect, Verschieben, Größe ändern); das Fenster liegt absolut im Container, Obsidians Zentrierung, Rand und Höchstmaße gelten nicht mehr. */
+.cockpit-file-viewer {
+  display: flex;
+  flex-direction: column;
+  /* Markdown-Farben (Nachtrag 43b), helles Theme; die Einstellung überschreibt je Teil als Inline-Variable am Fenster. */
+  --cockpit-md-text: #2e7d32;
+  --cockpit-md-code: #b35400;
+  --cockpit-md-command: #c62828;
+  --cockpit-md-heading: #000000;
+  --cockpit-md-link: #1565c0;
+  --cockpit-md-marker: #6b6b6b;
+  --cockpit-md-frontmatter: #6b6b6b;
+}
+body.theme-dark .cockpit-file-viewer {
+  --cockpit-md-text: #8fd18f;
+  --cockpit-md-code: #f0a35e;
+  --cockpit-md-command: #ff6b6b;
+  --cockpit-md-heading: #ffffff;
+  --cockpit-md-link: #6cb6ff;
+  --cockpit-md-marker: #9a9a9a;
+  --cockpit-md-frontmatter: #9a9a9a;
+}
+/* Der Containerselektor ist nötig: Obsidians eigene Regel für das Modal im Modal-Container setzt position: relative mit Spezifität 0,2,0 und schlägt ein einzelnes `.cockpit-file-viewer` (0,1,0) (die Präfix-Wächter lesen auch Kommentare, daher ohne ihre Klassennamen); gemessen am 22.10.2026, left/top addierten sich zur Flex-Zentrierung. Das Plugin-CSS lädt später, bei gleicher Spezifität gewinnt diese Regel. */
+.cockpit-file-viewer-container .cockpit-file-viewer { position: absolute; margin: 0; box-sizing: border-box; max-width: none; max-height: none; }
+.cockpit-file-viewer.cockpit-file-viewer-dragging { user-select: none; }
 .cockpit-file-viewer-title { font-family: var(--font-monospace); font-size: var(--font-ui-medium); overflow-wrap: anywhere; }
 .cockpit-file-viewer-content { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .cockpit-file-viewer-editor { flex: 1 1 auto; min-height: 0; border: 1px solid var(--background-modifier-border); border-radius: var(--radius-s); overflow: hidden; }
+/* Zoom-Anzeige (Nachtrag 41d): hängt neben dem Titel in der Kopfzeile, blendet nach rund 1,5 s aus und fängt keine Mausereignisse ab (die Kopfzeile bleibt Ziehfläche). */
+.cockpit-file-viewer-header { position: relative; cursor: move; touch-action: none; }
+.cockpit-file-viewer-zoom { position: absolute; right: var(--size-4-12); top: 50%; transform: translateY(-50%); padding: 0 var(--size-4-2); border-radius: var(--radius-s); background: var(--background-secondary); color: var(--text-muted); font-size: var(--font-ui-small); font-variant-numeric: tabular-nums; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+.cockpit-file-viewer-zoom.cockpit-file-viewer-zoom-on { opacity: 1; transition: none; }
+/* Ziehfläche ist die ganze Kopfzeile; acht unsichtbare Griffe an Kanten (6 px) und Ecken (12 px), der Schließen-Knopf liegt darüber. */
+.cockpit-file-viewer-handle { position: absolute; z-index: 2; touch-action: none; }
+.cockpit-file-viewer-handle[data-edge="n"] { top: 0; left: 12px; right: 12px; height: 6px; cursor: ns-resize; }
+.cockpit-file-viewer-handle[data-edge="s"] { bottom: 0; left: 12px; right: 12px; height: 6px; cursor: ns-resize; }
+.cockpit-file-viewer-handle[data-edge="e"] { right: 0; top: 12px; bottom: 12px; width: 6px; cursor: ew-resize; }
+.cockpit-file-viewer-handle[data-edge="w"] { left: 0; top: 12px; bottom: 12px; width: 6px; cursor: ew-resize; }
+.cockpit-file-viewer-handle[data-edge="ne"] { top: 0; right: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+.cockpit-file-viewer-handle[data-edge="sw"] { bottom: 0; left: 0; width: 12px; height: 12px; cursor: nesw-resize; }
+.cockpit-file-viewer-handle[data-edge="nw"] { top: 0; left: 0; width: 12px; height: 12px; cursor: nwse-resize; }
+.cockpit-file-viewer-handle[data-edge="se"] { bottom: 0; right: 0; width: 12px; height: 12px; cursor: nwse-resize; }
+.cockpit-file-viewer-image { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; }
+.cockpit-file-viewer-img { margin: auto; flex: none; width: var(--cockpit-image-width, auto); height: var(--cockpit-image-height, auto); max-width: none; image-rendering: auto; }
 .cockpit-file-viewer-hint { color: var(--text-muted); padding: var(--size-4-4) 0; }
+.cockpit-file-viewer-actions { display: flex; gap: var(--size-4-2); padding-top: var(--size-4-2); }

@@ -2,9 +2,10 @@
 import * as autocomplete from "@codemirror/autocomplete";
 import * as language from "@codemirror/language";
 import { EditorState, type Extension } from "@codemirror/state";
-import { EditorView, ViewPlugin } from "@codemirror/view";
+import { Decoration, type DecorationSet, EditorView, ViewPlugin } from "@codemirror/view";
 import * as highlight from "@lezer/highlight";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MD_TOKEN } from "../src/core/markdown-mode";
 import { type CodeModules, EscGuard, codeExtensions, loadCodeModules } from "../src/host/code-editor";
 
 // Abend 32: Farben, Vorschläge und Esc im Datei-Viewer mit echtem CodeMirror. Die Module kommen per Import, wie zur Laufzeit
@@ -32,7 +33,7 @@ function editor(extensions: Extension[], doc: string): { view: EditorView; root:
   return { view, root };
 }
 const code = (path: string, doc: string, autocompleteOn = true, extra: Extension[] = []): EditorView =>
-  editor([...extra, ...codeExtensions(path, { autocomplete: autocompleteOn }, MODS)], doc).view;
+  editor([...extra, ...codeExtensions(path, { autocomplete: autocompleteOn, markdown: false, mdCommands: "" }, MODS)], doc).view;
 
 /** Wartet, bis die Liste offen ist, dazu 100 ms (CodeMirrors interactionDelay von 75 ms sperrt Übernehmen direkt nach dem Öffnen). */
 async function offen(view: EditorView, timeout = 1000): Promise<string[]> {
@@ -78,19 +79,19 @@ describe("Farben", () => {
   });
 
   it("Sprache und Farben werden je Sprach-Paket nur einmal angelegt, sonst wächst jedes Fenster um Stilregeln und NodeTypes", () => {
-    const a = codeExtensions("/r/a.swift", { autocomplete: true }, MODS);
-    const b = codeExtensions("/r/b.swift", { autocomplete: false }, MODS);
+    const a = codeExtensions("/r/a.swift", { autocomplete: true, markdown: false, mdCommands: "" }, MODS);
+    const b = codeExtensions("/r/b.swift", { autocomplete: false, markdown: false, mdCommands: "" }, MODS);
     expect(b[0]).toBe(a[0]); // StreamLanguage
     expect(b[1]).toBe(a[1]); // Farben
-    const py = codeExtensions("/r/t.py", { autocomplete: true }, MODS);
+    const py = codeExtensions("/r/t.py", { autocomplete: true, markdown: false, mdCommands: "" }, MODS);
     expect(py[0]).not.toBe(a[0]); // andere Sprache, eigene Definition
     expect(py[1]).toBe(a[1]); // dieselben Farben
     // Schlüssel ist mods.language, nicht das CodeModules-Objekt (defaultLoad baut je Fenster ein neues).
-    const c = codeExtensions("/r/c.swift", { autocomplete: true }, { ...MODS });
+    const c = codeExtensions("/r/c.swift", { autocomplete: true, markdown: false, mdCommands: "" }, { ...MODS });
     expect(c[0]).toBe(a[0]);
     expect(c[1]).toBe(a[1]);
     // Ein anderes Sprach-Paket bekommt keine fremden Objekte.
-    const d = codeExtensions("/r/d.swift", { autocomplete: true }, { ...MODS, language: { ...language } });
+    const d = codeExtensions("/r/d.swift", { autocomplete: true, markdown: false, mdCommands: "" }, { ...MODS, language: { ...language } });
     expect(d[0]).not.toBe(a[0]);
     expect(d[1]).not.toBe(a[1]);
   });
@@ -110,20 +111,20 @@ describe("Farben", () => {
 
     it("mit Fork-Export: das Plugin läuft wirklich im Editor, nicht nur im Array", () => {
       made.length = 0;
-      editor(codeExtensions("/r/a.swift", { autocomplete: true }, FORK), "func main() {}\n");
+      editor(codeExtensions("/r/a.swift", { autocomplete: true, markdown: false, mdCommands: "" }, FORK), "func main() {}\n");
       expect(made.length).toBe(1);
     });
 
     it("Fork: beides zugleich, HighlightStyle und lineHighlighter", () => {
       made.length = 0;
-      const view = editor(codeExtensions("/r/a.swift", { autocomplete: true }, FORK), "func main() {}\n").view;
+      const view = editor(codeExtensions("/r/a.swift", { autocomplete: true, markdown: false, mdCommands: "" }, FORK), "func main() {}\n").view;
       expect(gefaerbt(view.state, "func", [highlight.tags.keyword])).toBe(true);
       expect(made.length).toBe(1);
     });
 
     it("Cache: zwei Aufrufe mit demselben Fork-Paket liefern dieselben Farben (Stelle 1)", () => {
-      const a = codeExtensions("/r/a.swift", { autocomplete: true }, FORK);
-      const b = codeExtensions("/r/b.py", { autocomplete: false }, { ...FORK });
+      const a = codeExtensions("/r/a.swift", { autocomplete: true, markdown: false, mdCommands: "" }, FORK);
+      const b = codeExtensions("/r/b.py", { autocomplete: false, markdown: false, mdCommands: "" }, { ...FORK });
       expect(b[1]).toBe(a[1]);
     });
   });
@@ -223,7 +224,7 @@ describe("Laden", () => {
       expect(loadCodeModules(() => { throw new Error("@codemirror/autocomplete"); })).toBeNull();
       expect(warn).toHaveBeenCalledTimes(1);
       expect(String(warn.mock.calls[0][0])).toContain("@codemirror/autocomplete");
-      expect(codeExtensions("/r/a.swift", { autocomplete: true }, null)).toEqual([]);
+      expect(codeExtensions("/r/a.swift", { autocomplete: true, markdown: false, mdCommands: "" }, null)).toEqual([]);
     } finally {
       warn.mockRestore();
     }
@@ -299,7 +300,7 @@ describe("Esc im Fenster (EscGuard)", () => {
       const esc = (view: EditorView): void => taste(view.contentDOM, "Escape", "Escape", 27);
 
       it("offene Liste: erstes Esc schließt nur die Liste, zweites das Fenster", async () => {
-        const f = fenster(codeExtensions("/r/a.swift", { autocomplete: true }, MODS), "let alpha = 1\nal");
+        const f = fenster(codeExtensions("/r/a.swift", { autocomplete: true, markdown: false, mdCommands: "" }, MODS), "let alpha = 1\nal");
         startCompletion(f.view);
         await offen(f.view);
         esc(f.view);
@@ -311,7 +312,7 @@ describe("Esc im Fenster (EscGuard)", () => {
       });
 
       it("ohne Liste schließt Esc das Fenster", () => {
-        const f = fenster(codeExtensions("/r/a.swift", { autocomplete: true }, MODS), "let alpha = 1\n");
+        const f = fenster(codeExtensions("/r/a.swift", { autocomplete: true, markdown: false, mdCommands: "" }, MODS), "let alpha = 1\n");
         esc(f.view);
         expect(f.geschlossen()).toBe(1);
       });
@@ -333,7 +334,7 @@ describe("Esc im Fenster (EscGuard)", () => {
   }
 
   it("Stand hält über einen Microtask-Checkpoint (wie zwischen zwei Listenern bei echten Tasten)", async () => {
-    const { view, root } = editor(codeExtensions("/r/a.swift", { autocomplete: true }, MODS), "let alpha = 1\nal");
+    const { view, root } = editor(codeExtensions("/r/a.swift", { autocomplete: true, markdown: false, mdCommands: "" }, MODS), "let alpha = 1\nal");
     const guard = new EscGuard(root, view, MODS);
     cleanups.push(() => guard.detach());
     startCompletion(view);
@@ -346,7 +347,7 @@ describe("Esc im Fenster (EscGuard)", () => {
 
   it("der gemerkte Stand gilt nur für dieses eine Esc: nach dem Tick ist er weg", async () => {
     // Sonst schluckte ein späteres Esc ohne Liste (zweites Esc, anderes Ereignis) das Schließen des Fensters.
-    const { view, root } = editor(codeExtensions("/r/a.swift", { autocomplete: true }, MODS), "let alpha = 1\nal");
+    const { view, root } = editor(codeExtensions("/r/a.swift", { autocomplete: true, markdown: false, mdCommands: "" }, MODS), "let alpha = 1\nal");
     const guard = new EscGuard(root, view, MODS);
     cleanups.push(() => guard.detach());
     startCompletion(view);
@@ -358,7 +359,7 @@ describe("Esc im Fenster (EscGuard)", () => {
   });
 
   it("detach nimmt den Listener ab", async () => {
-    const { view, root } = editor(codeExtensions("/r/a.swift", { autocomplete: true }, MODS), "let alpha = 1\nal");
+    const { view, root } = editor(codeExtensions("/r/a.swift", { autocomplete: true, markdown: false, mdCommands: "" }, MODS), "let alpha = 1\nal");
     const guard = new EscGuard(root, view, MODS);
     guard.detach();
     startCompletion(view);
@@ -366,5 +367,76 @@ describe("Esc im Fenster (EscGuard)", () => {
     // CodeMirror schließt die Liste selbst; ohne Listener hat der Wächter den Stand vorher nicht gesehen.
     taste(view.contentDOM, "Escape", "Escape", 27);
     expect(guard.consume()).toBe(false);
+  });
+});
+
+// Nachtrag 43b: Markdown-Modus im Datei-Viewer. Der Fork-lineHighlighter macht aus jedem Token-Namen die Klasse "cm-" + Name
+// (gemessen in Obsidian 1.14.5); der Ersatz hier tut dasselbe über die Knotennamen des Syntaxbaums.
+describe("Markdown-Modus (Nachtrag 43b)", () => {
+  const MD = (commands: string, on = true) => ({ autocomplete: true, markdown: on, mdCommands: commands });
+
+  /** Ersatz für Obsidians lineHighlighter: Mark "cm-<Knotenname>" für jeden benannten Blattknoten des Baums. */
+  const klassenMarker = ViewPlugin.define((view) => {
+    const build = (): DecorationSet => {
+      const marks: Array<ReturnType<ReturnType<typeof Decoration.mark>["range"]>> = [];
+      const tree = language.ensureSyntaxTree(view.state, view.state.doc.length, 5000);
+      tree?.iterate({
+        enter: (n) => {
+          if (n.from < n.to && n.type.name && !n.node.firstChild && n.type.name !== "Document") {
+            for (const part of n.type.name.split(" ")) marks.push(Decoration.mark({ class: `cm-${part}` }).range(n.from, n.to));
+          }
+        },
+      });
+      return Decoration.set(marks, true);
+    };
+    return { decorations: build() };
+  }, { decorations: (v) => v.decorations });
+  const forkLanguage: typeof language = { ...MODS.language, ...{ lineHighlighter: klassenMarker } };
+  const FORK: CodeModules = { ...MODS, language: forkLanguage };
+
+  it("a.md mit markdown an: drei Einträge (Sprache, Farben, Vorschläge), aus: einer", () => {
+    expect(codeExtensions("/r/a.md", MD("npm"), MODS)).toHaveLength(3);
+    expect(codeExtensions("/r/a.md", MD("npm", false), MODS)).toHaveLength(1);
+  });
+
+  it("gleiche Befehlsliste: dieselbe Sprach-Instanz, andere Liste: andere; Farben bleiben dieselben", () => {
+    const a = codeExtensions("/r/a.md", MD("npm git"), MODS);
+    const b = codeExtensions("/r/b.markdown", MD("npm git"), MODS);
+    const c = codeExtensions("/r/c.md", MD("npm"), MODS);
+    expect(b[0]).toBe(a[0]);
+    expect(c[0]).not.toBe(a[0]);
+    expect(c[1]).toBe(a[1]);
+  });
+
+  it("Befehl in Backticks trägt die Klasse cm-cockpit-md-command, Code die Klasse cm-cockpit-md-code", () => {
+    const view = editor(codeExtensions("/r/a.md", MD("npm"), FORK), "`npm x` und `src/main.ts`").view;
+    const klassen = (cls: string): string[] => {
+      const out: string[] = [];
+      for (const set of view.plugin(klassenMarker) ? [view.plugin(klassenMarker)!.decorations] : []) {
+        set.between(0, view.state.doc.length, (from, to, deco) => {
+          if ((deco.spec as { class: string }).class === cls) out.push(view.state.sliceDoc(from, to));
+        });
+      }
+      return out;
+    };
+    expect(klassen(`cm-${MD_TOKEN.command}`)).toEqual(["`npm x`"]);
+    expect(klassen(`cm-${MD_TOKEN.code}`)).toEqual(["`src/main.ts`"]);
+  });
+
+  it("Upstream warnt bei keinem Token-Namen (tokenTable kennt alle neun)", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    cleanups.push(() => warn.mockRestore());
+    const doc = "---\nt: 1\n---\n# Titel\n- [ ] `npm x` `a.ts` **fett** *schief* [[Link]] https://x.de\n```bash\nls\n```\n| a | b |\n";
+    const view = editor(codeExtensions("/r/warn.md", MD("npm"), { ...MODS, language: { ...language } }), doc).view;
+    expect(language.ensureSyntaxTree(view.state, view.state.doc.length, 5000)?.length).toBe(view.state.doc.length);
+    expect(warn.mock.calls.filter((c) => String(c[0]).includes("Unknown highlighting tag"))).toEqual([]);
+  });
+
+  it("a.ts liefert unverändert dieselben Einträge, mit markdown an wie aus", () => {
+    const an = codeExtensions("/r/a.ts", MD("npm"), MODS);
+    const aus = codeExtensions("/r/a.ts", MD("npm", false), MODS);
+    expect(an).toHaveLength(3);
+    expect(an[0]).toBe(aus[0]);
+    expect(an[1]).toBe(aus[1]);
   });
 });

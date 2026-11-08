@@ -1,31 +1,36 @@
+import { expandHomePath, type Platform } from "./platform-path";
 import {
   DEFAULT_ALERT_BANNER, DEFAULT_ALERT_GAP_MS, DEFAULT_BANNER_SECONDS, DEFAULT_HANDOFF_PREFIX, DEFAULT_BRIEFINGS_DIR, DEFAULT_CONTINUE_PROMPT, DEFAULT_PULL_INTERVAL_MIN, DEFAULT_ALERT_SOUND, DEFAULT_MARK_TAB, DEFAULT_MAX_SESSIONS,
   DEFAULT_NOTIFY_ON_DONE, DEFAULT_NOTIFY_ON_QUESTION, DEFAULT_PROJECTS_ROOT, DEFAULT_SOUND_FILE, DEFAULT_QUIET_WHILE_AGENTS, DEFAULT_QUIET_MAX_AGE_MIN, DEFAULT_SHOW_OPEN_TASKS,
-  DEFAULT_SKILL_BUTTONS, DEFAULT_TASKS_FILE, DEFAULT_RESUME_CONVERSATIONS, DEFAULT_REOPEN_AFTER_DISABLE, DEFAULT_FONT_SIZE, DEFAULT_SCROLLBACK, DEFAULT_MIN_CONTRAST,
+  DEFAULT_SKILL_BUTTONS, DEFAULT_TASKS_FILE, DEFAULT_RESUME_CONVERSATIONS, DEFAULT_REOPEN_AFTER_DISABLE, DEFAULT_FONT_SIZE, DEFAULT_SCROLLBACK, DEFAULT_MIN_CONTRAST, DEFAULT_TAB_SHADOW,
   DEFAULT_TELEGRAM_CHAT_ID, DEFAULT_TELEGRAM_ENV_FILE, DEFAULT_TELEGRAM_IDLE_MIN, DEFAULT_TELEGRAM_ON_DONE, DEFAULT_TELEGRAM_ON_QUESTION,
-  DEFAULT_USAGE_POLL_SEC, DEFAULT_WRITE_TOKENS_FILE, DEFAULT_RESEARCH_SEARCHES, DEFAULT_RESEARCH_MAX_AGE_MIN, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF, DEFAULT_FILE_LINKS, DEFAULT_FILE_LINKS_CLAUDE_DIRS, DEFAULT_FILE_LINKS_SPACES, DEFAULT_CLEAR_LINK, DEFAULT_FILE_VIEWER_MAX_MB, DEFAULT_FILE_VIEWER_AUTOCOMPLETE, DEFAULT_FIXED_PROMPT, DEFAULT_SKIP_PERMISSIONS,
+  DEFAULT_USAGE_POLL_SEC, DEFAULT_WRITE_TOKENS_FILE, DEFAULT_RESEARCH_SEARCHES, DEFAULT_RESEARCH_MAX_AGE_MIN, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF, DEFAULT_FILE_LINKS, DEFAULT_FILE_LINKS_CLAUDE_DIRS, DEFAULT_FILE_LINKS_SPACES, DEFAULT_CLEAR_LINK, DEFAULT_FILE_VIEWER_MAX_MB, DEFAULT_FILE_VIEWER_WIDTH_PCT, DEFAULT_FILE_VIEWER_HEIGHT_PCT, DEFAULT_FILE_VIEWER_FONT_SIZE, DEFAULT_FILE_VIEWER_AUTOCOMPLETE, DEFAULT_FILE_VIEWER_MARKDOWN, DEFAULT_FILE_VIEWER_IMAGES, DEFAULT_FILE_VIEWER_IMAGE_MAX_MB, DEFAULT_FILE_VIEWER_MD_COMMANDS, DEFAULT_FIXED_PROMPT, DEFAULT_SKIP_PERMISSIONS,
   DEFAULT_CLAUDE_EXCLUSION, DEFAULT_CLAUDE_EXCLUSION_SANDBOX,
-  DASHBOARD_LAYOUTS, DEFAULT_DASHBOARD_LAYOUT, COCKPIT_CROPS, DEFAULT_COCKPIT_CROP,
+  DASHBOARD_LAYOUTS, DEFAULT_DASHBOARD_LAYOUT, COCKPIT_CROPS, DEFAULT_COCKPIT_CROP, NEW_SESSION_ORDERS, DEFAULT_NEW_SESSION_ORDER, DEFAULT_HIDDEN_PROJECT_DIRS,
   DEFAULT_CONTEXT_WARN, DEFAULT_CONTEXT_HANDOFF, DEFAULT_CLEARABLE_MIN_CONTEXT_PCT, DEFAULT_CLEARABLE_MIN_PROMPTS, DEFAULT_TOKENS_DAY_MEDIAN, DEFAULT_TOKENS_DAY_P90, DEFAULT_FOCUS_HEADING, DEFAULT_INBOX_DIR,
   DEFAULT_HUBS_DIR, DEFAULT_HANDOFFS_DIR, DEFAULT_HUB_SUFFIX, DEFAULT_HANDOFF_PROMPT,
   DEFAULT_INDEX_FILE, DEFAULT_LINT_AFTER_DAYS, DEFAULT_DAILY_DIR, DEFAULT_NEXT_EFFORT, DEFAULT_LINT_COMMAND, RADAR_SLOTS, EFFORT_STEPS,
+  windowsSoundFile,
 } from "./constants";
 
 export type DashboardLayout = (typeof DASHBOARD_LAYOUTS)[number];
 export type CockpitCrop = (typeof COCKPIT_CROPS)[number];
+export type NewSessionOrder = (typeof NEW_SESSION_ORDERS)[number];
 
 /** Ein Radar: Anzeigename und Pfad seiner state.json (leerer Pfad = nicht eingerichtet). */
 export interface RadarEntry { name: string; stateFile: string }
 
 export interface CockpitSettings {
-  projectsRoot: string; maxSessions: number; reopenAfterDisable: boolean; notifyOnDone: boolean; notifyOnQuestion: boolean;
+  projectsRoot: string; newSessionOrder: NewSessionOrder; hiddenProjectDirs: string; maxSessions: number; reopenAfterDisable: boolean; notifyOnDone: boolean; notifyOnQuestion: boolean;
   quietWhileAgents: boolean; quietMaxAgeMin: number; showOpenTasks: boolean;
   markTab: boolean; alertSound: boolean; alertBanner: boolean; soundFile: string; alertGapMs: number; bannerSeconds: number;
   briefingsDir: string; pullIntervalMin: number; continuePrompt: string;
   tasksFile: string; skillButtons: number; usagePollSec: number; writeTokensFile: boolean;
-  resumeConversations: boolean; fixedPrompt: boolean; skipPermissions: boolean; claudeExclusion: boolean; claudeExclusionSandbox: boolean; fontSize: number; scrollback: number; minimumContrast: number;
+  resumeConversations: boolean; fixedPrompt: boolean; skipPermissions: boolean; claudeExclusion: boolean; claudeExclusionSandbox: boolean; fontSize: number; scrollback: number; minimumContrast: number; tabShadow: boolean;
   ideBridge: boolean; ideDiff: boolean; handoffPrefix: string;
-  fileLinks: boolean; fileLinksClaudeDirs: boolean; fileLinksSpaces: boolean; clearLink: boolean; fileViewerMaxMb: number; fileViewerAutocomplete: boolean;
+  fileLinks: boolean; fileLinksClaudeDirs: boolean; fileLinksSpaces: boolean; clearLink: boolean; fileViewerMaxMb: number; fileViewerWidthPct: number; fileViewerHeightPct: number; fileViewerFontSize: number; fileViewerAutocomplete: boolean;
+  fileViewerImages: boolean; fileViewerImageMaxMb: number; fileViewerMarkdown: boolean; fileViewerMdText: string; fileViewerMdCode: string; fileViewerMdCommand: string; fileViewerMdHeading: string;
+  fileViewerMdLink: string; fileViewerMdMarker: string; fileViewerMdFrontmatter: string; fileViewerMdCommands: string;
   telegramOnDone: boolean; telegramOnQuestion: boolean; telegramEnvFile: string; telegramChatId: string; telegramIdleMin: number;
   researchSearches: string; researchMaxAgeMin: number;
   dashboardLayout: DashboardLayout;
@@ -35,10 +40,14 @@ export interface CockpitSettings {
   focusHeading: string; inboxDir: string; indexFile: string; lintAfterDays: number; dailyDir: string;
   nextEffort: (typeof EFFORT_STEPS)[number]; radars: RadarEntry[]; lintCommand: string;
   hubsDir: string; handoffsDir: string; hubSuffix: string; handoffPrompt: string;
+  /** Abend 41: Shell für Shell-Tabs unter Windows; leer = pwsh.exe, sonst Windows PowerShell. */
+  windowsShell: string;
 }
 
 export const DEFAULT_SETTINGS: CockpitSettings = {
   projectsRoot: DEFAULT_PROJECTS_ROOT,
+  newSessionOrder: DEFAULT_NEW_SESSION_ORDER,
+  hiddenProjectDirs: DEFAULT_HIDDEN_PROJECT_DIRS,
   maxSessions: DEFAULT_MAX_SESSIONS,
   reopenAfterDisable: DEFAULT_REOPEN_AFTER_DISABLE,
   notifyOnDone: DEFAULT_NOTIFY_ON_DONE,
@@ -67,6 +76,7 @@ export const DEFAULT_SETTINGS: CockpitSettings = {
   fontSize: DEFAULT_FONT_SIZE,
   scrollback: DEFAULT_SCROLLBACK,
   minimumContrast: DEFAULT_MIN_CONTRAST,
+  tabShadow: DEFAULT_TAB_SHADOW,
   ideBridge: DEFAULT_IDE_BRIDGE,
   ideDiff: DEFAULT_IDE_DIFF,
   fileLinks: DEFAULT_FILE_LINKS,
@@ -74,7 +84,21 @@ export const DEFAULT_SETTINGS: CockpitSettings = {
   fileLinksSpaces: DEFAULT_FILE_LINKS_SPACES,
   clearLink: DEFAULT_CLEAR_LINK,
   fileViewerMaxMb: DEFAULT_FILE_VIEWER_MAX_MB,
+  fileViewerWidthPct: DEFAULT_FILE_VIEWER_WIDTH_PCT,
+  fileViewerHeightPct: DEFAULT_FILE_VIEWER_HEIGHT_PCT,
+  fileViewerFontSize: DEFAULT_FILE_VIEWER_FONT_SIZE,
   fileViewerAutocomplete: DEFAULT_FILE_VIEWER_AUTOCOMPLETE,
+  fileViewerImages: DEFAULT_FILE_VIEWER_IMAGES,
+  fileViewerImageMaxMb: DEFAULT_FILE_VIEWER_IMAGE_MAX_MB,
+  fileViewerMarkdown: DEFAULT_FILE_VIEWER_MARKDOWN,
+  fileViewerMdText: "",
+  fileViewerMdCode: "",
+  fileViewerMdCommand: "",
+  fileViewerMdHeading: "",
+  fileViewerMdLink: "",
+  fileViewerMdMarker: "",
+  fileViewerMdFrontmatter: "",
+  fileViewerMdCommands: DEFAULT_FILE_VIEWER_MD_COMMANDS,
   handoffPrefix: DEFAULT_HANDOFF_PREFIX,
   telegramOnDone: DEFAULT_TELEGRAM_ON_DONE,
   telegramOnQuestion: DEFAULT_TELEGRAM_ON_QUESTION,
@@ -103,6 +127,7 @@ export const DEFAULT_SETTINGS: CockpitSettings = {
   handoffsDir: DEFAULT_HANDOFFS_DIR,
   hubSuffix: DEFAULT_HUB_SUFFIX,
   handoffPrompt: DEFAULT_HANDOFF_PROMPT,
+  windowsShell: "",
 };
 
 export interface SettingsParse { settings: CockpitSettings; invalid: string[] }
@@ -131,6 +156,10 @@ const RANGES = {
   tokensDayP90: [1000, 100000000],
   lintAfterDays: [1, 365],
   fileViewerMaxMb: [1, 50],
+  fileViewerImageMaxMb: [1, 200],
+  fileViewerWidthPct: [40, 100],
+  fileViewerHeightPct: [40, 100],
+  fileViewerFontSize: [8, 32],
 } as const satisfies Partial<Record<keyof CockpitSettings, readonly [number, number]>>;
 
 type RangedKey = keyof typeof RANGES;
@@ -147,6 +176,9 @@ const flag: Check = (v) => (typeof v === "boolean" ? null : "muss an oder aus se
 
 /** Vault-relativer Ordner: getrimmt, ohne führende und abschließende Schrägstriche. */
 const stripSlashes = (v: string): string => v.trim().replace(/^\/+|\/+$/g, "").trim();
+
+/** Leer (Vorgabe des Themes) oder eine Farbe wie #ff6b6b. */
+const hexColor: Check = (v) => (typeof v === "string" && /^(#[0-9a-fA-F]{6})?$/.test(v) ? null : "leer oder Farbe wie #ff6b6b");
 
 const text: Check = (v) => (typeof v === "string" ? null : "muss Text sein");
 
@@ -182,6 +214,7 @@ const trimRadar = (e: RadarEntry): RadarEntry => ({ name: e.name.trim(), stateFi
 
 const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   projectsRoot: text,
+  newSessionOrder: (v) => ((NEW_SESSION_ORDERS as readonly unknown[]).includes(v) ? null : "recent oder alpha"),
   maxSessions: intIn(...RANGES.maxSessions),
   notifyOnDone: flag,
   notifyOnQuestion: flag,
@@ -214,6 +247,7 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   fontSize: intIn(...RANGES.fontSize),
   scrollback: intIn(...RANGES.scrollback),
   minimumContrast: numIn(...RANGES.minimumContrast),
+  tabShadow: flag,
   ideBridge: flag,
   ideDiff: flag,
   fileLinks: flag,
@@ -221,7 +255,21 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   fileLinksSpaces: flag,
   clearLink: flag,
   fileViewerMaxMb: intIn(...RANGES.fileViewerMaxMb),
+  fileViewerWidthPct: intIn(...RANGES.fileViewerWidthPct),
+  fileViewerHeightPct: intIn(...RANGES.fileViewerHeightPct),
+  fileViewerFontSize: intIn(...RANGES.fileViewerFontSize),
   fileViewerAutocomplete: flag,
+  fileViewerImages: flag,
+  fileViewerImageMaxMb: intIn(...RANGES.fileViewerImageMaxMb),
+  fileViewerMarkdown: flag,
+  fileViewerMdText: hexColor,
+  fileViewerMdCode: hexColor,
+  fileViewerMdCommand: hexColor,
+  fileViewerMdHeading: hexColor,
+  fileViewerMdLink: hexColor,
+  fileViewerMdMarker: hexColor,
+  fileViewerMdFrontmatter: hexColor,
+  fileViewerMdCommands: text,
   // Leer erlaubt (Knopf aus); sonst jeder Text. Das Präfix wird nur am Anfang der ersten nichtleeren Zeile eines Blocks verglichen.
   handoffPrefix: (v) => (typeof v === "string" ? null : "muss Text sein"),
   telegramOnDone: flag,
@@ -258,11 +306,13 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   handoffsDir: (v) => (typeof v !== "string" ? "muss Text sein" : v.trim() === "" ? null : /[\\/]/.test(v) || v.trim() === "." || v.trim() === ".." ? "ein Ordnername ohne Schrägstrich" : null),
   hubSuffix: (v) => (typeof v === "string" && v.endsWith(".md") ? null : "muss auf .md enden"),
   handoffPrompt: (v) => (typeof v !== "string" || v.trim() === "" ? "darf nicht leer sein" : v.trimStart().startsWith("-") ? "darf nicht mit - beginnen" : null),
+  windowsShell: text,
+  hiddenProjectDirs: text,
 };
 
 const KEYS = Object.keys(CHECKS) as Array<keyof CockpitSettings>;
 
-const TEXT_KEYS: ReadonlyArray<keyof CockpitSettings> = ["projectsRoot", "soundFile", "briefingsDir", "continuePrompt", "tasksFile", "telegramEnvFile", "telegramChatId", "focusHeading", "handoffPrefix", "lintCommand", "hubsDir", "handoffsDir", "handoffPrompt"];
+const TEXT_KEYS: ReadonlyArray<keyof CockpitSettings> = ["projectsRoot", "soundFile", "briefingsDir", "continuePrompt", "tasksFile", "telegramEnvFile", "telegramChatId", "focusHeading", "handoffPrefix", "lintCommand", "hubsDir", "handoffsDir", "handoffPrompt", "windowsShell", "hiddenProjectDirs"];
 
 /** Textwerte getrimmt, alles andere unverändert (nach bestandener Prüfung). */
 export function normalizeSetting<K extends keyof CockpitSettings>(key: K, value: CockpitSettings[K]): CockpitSettings[K] {
@@ -341,11 +391,24 @@ function parseRadars(value: unknown): { radars: RadarEntry[]; dropped: boolean }
   return { radars: valid.slice(0, RADAR_SLOTS), dropped: valid.length !== value.length || valid.length > RADAR_SLOTS };
 }
 
-/** "~" und "~/x" werden zu absoluten Pfaden; alles andere bleibt unverändert. */
-export function expandHome(path: string, home: string): string {
-  if (path === "~") return home;
-  if (path.startsWith("~/")) return home + path.slice(1);
-  return path;
+/**
+ * Klangdatei, die wirklich gespielt wird: unter win32 gilt für leer, die Mac-Vorgabe und jeden Wert mit "/" oder "~/" am
+ * Anfang (Mac-Pfad, ein Windows-Nutzer trägt keinen POSIX-Pfad ein) der Windows-Ton (Abend 43).
+ */
+export function effectiveSoundFile(platform: Platform, stored: string, systemRoot: string): string {
+  if (platform !== "win32") return stored;
+  const mac = stored === DEFAULT_SOUND_FILE || stored.startsWith("/") || stored.startsWith("~/");
+  return stored === "" || mac ? windowsSoundFile(systemRoot) : stored;
+}
+
+/** Ob die Summen-Datei für die Statuszeile wirklich geschrieben wird: unter win32 nie (die Statuszeile gibt es dort nicht), der gespeicherte Wert bleibt (Abend 43). */
+export function effectiveWriteStatusFile(platform: Platform, stored: boolean): boolean {
+  return platform !== "win32" && stored;
+}
+
+/** "~" und "~/x" werden zu absoluten Pfaden (win32 auch "~\\x", mit Backslash); alles andere bleibt unverändert. Die einzige Kopie (Abend 42). */
+export function expandHome(path: string, home: string, platform: Platform = "darwin"): string {
+  return expandHomePath(platform, path, home);
 }
 
 /** Zahl aus einem Textfeld: leer (auch nur Leerzeichen) ergibt NaN, nicht 0; die Prüfung nennt dann den Grund. */

@@ -8,6 +8,7 @@ import {
 } from "../core/research";
 import { type CockpitSettings, expandHome } from "../core/settings";
 import { formatAge } from "../core/usage";
+import { hostPlatform } from "./host-platform";
 import { fetchSearch } from "./research-fetch";
 import { readResearchCache, updateResearchCache } from "./research-fs";
 
@@ -54,7 +55,7 @@ export class ResearchCard {
     this.owner = owner;
     this.el = el;
     this.deps = deps;
-    this.path = expandHome(RESEARCH_CACHE_FILE, homedir());
+    this.path = expandHome(RESEARCH_CACHE_FILE, homedir(), hostPlatform());
   }
 
   start(): void {

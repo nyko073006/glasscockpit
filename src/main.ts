@@ -1,4 +1,4 @@
-import { FileSystemAdapter, Notice, Plugin, type WorkspaceLeaf, parseYaml } from "obsidian";
+import { Notice, Plugin, type WorkspaceLeaf, parseYaml } from "obsidian";
 import { existsSync } from "fs";
 import { homedir } from "os";
 import { RecentSessions } from "./core/active-session";
@@ -6,7 +6,7 @@ import { alertDue } from "./core/attention";
 import { type StartKind } from "./core/claude-start";
 import { planCockpitSplit, planNewSessionPlacement } from "./core/cockpit-split";
 import type { CockpitFeedActions } from "./core/cockpit-feed";
-import { HANDOFF_RELOAD_DEBOUNCE_MS, HANDOFF_START_TIMEOUT_MS, PULL_TICK_MS, SESSION_FILES_DIR, THRESHOLDS_FILE, TOKENS_TODAY_FILE, TRANSCRIPTS_DIR, USAGE_TICK_MS, VIEW_TYPE_DASHBOARD, VIEW_TYPE_TERMINAL } from "./core/constants";
+import { HANDOFF_RELOAD_DEBOUNCE_MS, HANDOFF_START_TIMEOUT_MS, PULL_TICK_MS, SESSION_FILES_DIR, TAB_SHADOW_CLASS, THRESHOLDS_FILE, TOKENS_TODAY_FILE, TRANSCRIPTS_DIR, USAGE_TICK_MS, VIEW_TYPE_DASHBOARD, VIEW_TYPE_TERMINAL } from "./core/constants";
 import { discover, type LaunchEntry, type LaunchKind } from "./core/discovery";
 import { isExcluded, type ExclusionPlan, type IgnoreFilter } from "./core/exclusion";
 import { formatDiagnosis, formatLaunchInfo } from "./core/diagnose";
@@ -48,12 +48,20 @@ import { CockpitSettingTab } from "./host/settings-tab";
 import { type SessionChoice, handoffChoices } from "./core/new-session";
 import { awaitRunning, isoDay, markTakenUp, touchesHandoffs } from "./core/handoffs";
 import { NewSessionModal } from "./host/new-session-modal";
+import { createLastUsed } from "./host/last-used";
+import { withPathDirs } from "./core/platform-path";
+import { cleanupStaleDownloads } from "./host/native-download";
+import { pluginDirOf } from "./host/native-download-fetch";
+import { SettingsFiles } from "./host/settings-files";
+import { forceKillTree } from "./host/win-kill";
+import type { KillSignal } from "./core/kill-escalation";
 import { NativeLoader } from "./host/native-loader";
 import { NodePtyFactory } from "./host/pty-factory";
 import { TelegramNotifier } from "./host/telegram-notify";
 import { TerminalView } from "./host/terminal-view";
 import { openTerminalPath } from "./host/file-links";
 import { FileViewerModal } from "./host/file-viewer-modal";
+import { hostPlatform, vaultBasePath } from "./host/host-platform";
 import { openVaultFile } from "./host/vault-open";
 import { transcriptFs, writeFileAtomic } from "./host/usage-fs";
 
@@ -61,9 +69,13 @@ import { transcriptFs, writeFileAtomic } from "./host/usage-fs";
 
 // Nur Verkabelung: Logik gehört nach src/core, Zugriffe auf Obsidian und Node nach src/host.
 export default class GlasscockpitPlugin extends Plugin {
+  /** Abend 40: der Lader von node-pty, gesetzt in onload vor der NodePtyFactory. Der Download liest ihn (isLoaded). */
+  nativeLoader!: NativeLoader;
   private manager: SessionManager | null = null;
   private tracker: ViewTracker | null = null;
   private launcher: Launcher | null = null;
+  /** Abend 41: Settings-Datei je Claude-Sitzung (nur Windows; auf dem Mac ohne Ordner, tut nichts). */
+  private settingsFiles: SettingsFiles | null = null;
   private ide: IdeBridge | null = null;
   /** Abend 33: zuletzt berechnete Ausschluss-Filter (für die IDE-Brücke); bei jedem Claude-Start erneuert. */
   private exclusionFilters: IgnoreFilter[] = [];
@@ -131,18 +143,44 @@ export default class GlasscockpitPlugin extends Plugin {
     // Schwellen eine Quelle (Abend 18, Festlegung 1): contextWarn und contextHandoff gehen atomar an das Statuszeilen-Skript,
     // beim Laden und bei jeder Änderung; Schreibfehler nur in die Konsole.
     const thresholds = new ThresholdsSync({
-      write: (text) => writeFileAtomic(expandHome(THRESHOLDS_FILE, home), text),
+      write: (text) => writeFileAtomic(expandHome(THRESHOLDS_FILE, home, hostPlatform()), text),
       log: (m) => console.warn(m),
     });
     void thresholds.sync(store.settings());
     this.register(store.onSettingsChange((s) => void thresholds.sync(s)));
 
-    const ptyFactory = new NodePtyFactory(new NativeLoader(this.app, this.manifest));
+    // Tab-Schatten im hellen Theme (Nachtrag 41c): Body-Klasse nach der Einstellung, das CSS prüft selbst auf theme-light.
+    // Nur das Hauptfenster; ein ausgelagertes Fenster hat einen eigenen body.
+    const applyTabShadow = (s: { tabShadow: boolean }): void => { document.body.toggleClass(TAB_SHADOW_CLASS, s.tabShadow); };
+    applyTabShadow(store.settings());
+    this.register(store.onSettingsChange(applyTabShadow));
+    this.register(() => document.body.removeClass(TAB_SHADOW_CLASS));
+
+    this.nativeLoader = new NativeLoader(this.app, this.manifest);
+    // Abend 40: Reste früherer Downloads (.native-download-*) wegräumen. Ein Ordner, dessen .node noch geladen ist, bleibt liegen
+    // und kommt beim nächsten Laden wieder dran; wirft nie.
+    const pluginDir = pluginDirOf(this.app, this.manifest);
+    if (pluginDir) {
+      void cleanupStaleDownloads(pluginDir).then((r) => {
+        if (r.inBenutzung > 0) console.debug(`Glasscockpit: ${r.inBenutzung} alter Binärordner noch in Benutzung, Aufräumen beim nächsten Start`);
+      });
+    }
+    const platform = hostPlatform();
+    // Abend 43: Unter Windows gewinnt die Schreibweise der Datei aus Obsidians Liste (IDE-Brücke und Terminal-Links); auf dem Mac bleibt alles beim Alten.
+    const vaultPaths = platform === "win32" ? () => this.app.vault.getFiles().map((f) => f.path) : undefined;
+    // Abend 41: Unter Windows liegt die Settings-Datei je Sitzung im Plugin-Ordner; auf dem Mac gibt es keinen Ordner, also nichts zu tun.
+    const settingsFiles = new SettingsFiles(platform === "win32" ? pluginDir : null);
+    settingsFiles.clear();
+    this.settingsFiles = settingsFiles;
+    const ptyFactory = new NodePtyFactory(this.nativeLoader, platform);
     // Eskalation SIGHUP, nach KILL_ESCALATION_MS SIGKILL. Der Timer gehört dem Fenster, nicht dem Plugin
     // (registerInterval): Er muss auch nach dem Entladen noch feuern. SIGKILL geht an die Prozessgruppe.
+    // Unter Windows keine Signale: pty.kill() ohne Argument, nach der Frist taskkill /T /F auf den Baum.
     const manager = new SessionManager((spec) => ptyFactory.create(spec), undefined, {
       timers: { set: (callback, ms) => window.setTimeout(callback, ms), clear: (handle) => window.clearTimeout(handle as number) },
-      signalGroup: (pid, signal) => process.kill(-pid, signal),
+      ...(platform === "win32"
+        ? { platform, forceKillTree: (pid: number) => forceKillTree(pid, process.env.SystemRoot) }
+        : { signalGroup: (pid: number, signal: KillSignal) => process.kill(-pid, signal) }),
     });
     const tracker = new ViewTracker((id) => {
       this.activity.forget(id);
@@ -158,6 +196,8 @@ export default class GlasscockpitPlugin extends Plugin {
         await this.ide?.ready();
         return this.ide?.env() ?? null;
       },
+      undefined,
+      { platform, env: () => process.env, settingsFiles, systemRoot: process.env.SystemRoot },
     );
     this.manager = manager;
     this.tracker = tracker;
@@ -168,10 +208,11 @@ export default class GlasscockpitPlugin extends Plugin {
     // IDE-Brücke (Abend 16): Server und Editor-Anbindung nach der Einstellung ideBridge; Fehler nur in der Konsole.
     const ide = new IdeBridge(this, this.app, {
       settings: () => store.settings(),
+      platform,
       vaultBase: () => {
-        const adapter = this.app.vault.adapter;
-        return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
+        return vaultBasePath(this.app);
       },
+      vaultPaths,
       // Abend 33: ausgeschlossene Notizen sieht Claude über die Brücke nicht; Einstellung und Filter werden bei jeder Meldung frisch gelesen.
       excluded: (p) => store.settings().claudeExclusion && isExcluded(this.exclusionFilters, p),
       ptyPid: (id) => manager.pidOf(id),
@@ -188,7 +229,7 @@ export default class GlasscockpitPlugin extends Plugin {
     void this.exclusionFor(store.settings());
     this.register(store.onSettingsChange(() => void this.exclusionFor(store.settings())));
 
-    const telegram = new TelegramNotifier({ settings: () => store.settings(), record: (id) => store.get(id), home: homedir() });
+    const telegram = new TelegramNotifier({ settings: () => store.settings(), record: (id) => store.get(id), home: homedir(), platform });
 
     this.registerView(
       VIEW_TYPE_TERMINAL,
@@ -199,8 +240,7 @@ export default class GlasscockpitPlugin extends Plugin {
           ptyFactory,
           plan: (id) => this.planFor(id),
           vaultBase: () => {
-            const adapter = this.app.vault.adapter;
-            return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
+            return vaultBasePath(this.app);
           },
           record: (id) => store.get(id),
           rename: (id, name) => store.rename(id, name),
@@ -220,12 +260,13 @@ export default class GlasscockpitPlugin extends Plugin {
           adoptClaudeId: (sessionId, claudeId) => store.setClaudeSessionId(sessionId, claudeId),
           handoffs: this.handoffs,
           openPath: (target, refocus) => void openTerminalPath(target, {
+            platform,
             vaultBase: () => {
-              const adapter = this.app.vault.adapter;
-              return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
+              return vaultBasePath(this.app);
             },
+            vaultPaths,
             openInVault: async (rel, t) => (await openVaultFile(this.app, rel, t.line === null ? null : { line: t.line, col: t.col })) !== null,
-            openInModal: (t) => new FileViewerModal(this.app, t, { maxMb: store.settings().fileViewerMaxMb, autocomplete: store.settings().fileViewerAutocomplete, home: homedir(), onClosed: refocus }).open(),
+            openInModal: (t) => new FileViewerModal(this.app, t, { maxMb: store.settings().fileViewerMaxMb, autocomplete: store.settings().fileViewerAutocomplete, fontSize: store.settings().fileViewerFontSize, widthPct: store.settings().fileViewerWidthPct, heightPct: store.settings().fileViewerHeightPct, markdown: store.settings().fileViewerMarkdown, images: store.settings().fileViewerImages, imageMaxMb: store.settings().fileViewerImageMaxMb, mdCommands: store.settings().fileViewerMdCommands, mdColors: { text: store.settings().fileViewerMdText, code: store.settings().fileViewerMdCode, command: store.settings().fileViewerMdCommand, heading: store.settings().fileViewerMdHeading, link: store.settings().fileViewerMdLink, marker: store.settings().fileViewerMdMarker, frontmatter: store.settings().fileViewerMdFrontmatter }, home: homedir(), onClosed: refocus }).open(),
           }),
           alertGate: (sessionId) => {
             const now = Date.now();
@@ -238,21 +279,22 @@ export default class GlasscockpitPlugin extends Plugin {
     // Dashboard (Abend 9): Pull-Zustand und Takt gehören dem Plugin, eine Instanz für alle Dashboards.
     const pull = new PullController({
       vaultBase: () => {
-        const adapter = this.app.vault.adapter;
-        return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null;
+        return vaultBasePath(this.app);
       },
       settings: () => store.settings(),
       pathDirs: () => launcher.pathDirs(),
+      platform,
       now: () => Date.now(),
       // Repo-Ampel (Abend 18) im Takt des Pulls, kein zweiter Takt; der Pull läuft nur bei offenem Dashboard.
       afterPull: () => { void repoScan.run(); void dayScan.run(); void feedSource.refresh(); },
     });
     // Ein Zähler für das ganze Plugin, ab dem Laden, unabhängig vom Dashboard. Schreibt die Tagessumme für die
     // Statuszeile (writeTokensFile, bei jedem Lauf frisch aus dem Store); Schreibfehler gehen nur in die Konsole.
-    const scanner = new TranscriptScanner(transcriptFs(expandHome(TRANSCRIPTS_DIR, home)));
-    const tokensPath = expandHome(TOKENS_TODAY_FILE, home);
+    const scanner = new TranscriptScanner(transcriptFs(expandHome(TRANSCRIPTS_DIR, home, platform)));
+    const tokensPath = expandHome(TOKENS_TODAY_FILE, home, platform);
     const counter = new TokenCounter({
       settings: () => store.settings(),
+      platform,
       scan: (now) => scanner.scan(now),
       write: (content) => writeFileAtomic(tokensPath, content),
       now: () => new Date(),
@@ -263,16 +305,18 @@ export default class GlasscockpitPlugin extends Plugin {
 
     // Cockpit füllen (Abend 18): Repo-Ampel (git status je Repo unter projectsRoot, ohne Netz, mit Zeitlimit) und die
     // Quelle des Feeds. Gelesen wird beim Öffnen, im Pull-Takt und im Zähler-Takt, nur bei offenem Dashboard.
+    // Ein Projekte-Ordner für Repo-Ampel und Tageszählung (das Menü „Neue Sitzung“ löst ihn über loadProjectDirs mit derselben expandHome auf).
+    const projectsRoot = (): string => expandHome(store.settings().projectsRoot, home, platform);
     const repoScan = new RepoScan({
-      list: () => listGitRepos(expandHome(store.settings().projectsRoot, home)),
-      status: async (dir) => runGitStatus(dir, { ...(process.env as Record<string, string>), PATH: (await launcher.pathDirs()).join(":") }),
+      list: () => listGitRepos(projectsRoot()),
+      status: async (dir) => runGitStatus(dir, withPathDirs(process.env, await launcher.pathDirs(), platform)),
       log: (m) => console.warn(m),
     });
     // LOC und Commits heute (Abend 19): eigener Scanner neben der Repo-Ampel, gleiche Repo-Liste, gleiches Zeitlimit, gleicher Takt.
     const dayScan = new DayScan({
-      list: () => listGitRepos(expandHome(store.settings().projectsRoot, home)),
-      identity: async (dir) => runGitIdentity(dir, { ...(process.env as Record<string, string>), PATH: (await launcher.pathDirs()).join(":") }),
-      dayLog: async (dir, since) => runGitDayLog(dir, since, { ...(process.env as Record<string, string>), PATH: (await launcher.pathDirs()).join(":") }),
+      list: () => listGitRepos(projectsRoot()),
+      identity: async (dir) => runGitIdentity(dir, withPathDirs(process.env, await launcher.pathDirs(), platform)),
+      dayLog: async (dir, since) => runGitDayLog(dir, since, withPathDirs(process.env, await launcher.pathDirs(), platform)),
       now: () => new Date(),
       log: (m) => console.warn(m),
     });
@@ -285,16 +329,17 @@ export default class GlasscockpitPlugin extends Plugin {
       tokens: () => tokensToday(counter.state(), counter.asOf()),
       repos: () => repoScan.snapshot(),
       day: () => dayScan.snapshot(),
-      readSessionFiles: (ids, now) => readOwnSessionFiles(expandHome(SESSION_FILES_DIR, home), ids, now),
+      readSessionFiles: (ids, now) => readOwnSessionFiles(expandHome(SESSION_FILES_DIR, home, platform), ids, now),
       readVault: (s, now) => readVaultState(this.app.vault, s, now),
       readFocus: (s, now) => readFocus(this.app.vault, s, now),
       readHandoffs: async (s) => {
-        const r = await readOpenHandoffs(this.app.vault, s, parseYaml, homedir());
+        const r = await readOpenHandoffs(this.app.vault, s, parseYaml, homedir(), hostPlatform());
         for (const e of r.errors) console.warn(`Glasscockpit: ${e}`);
         return r.items;
       },
       readRadar: (path, now) => readRadarFile(path, now),
       home,
+      platform,
       log: (m) => console.warn(m),
     });
     // Radar-Liste geändert (Einstellungsseite): sofort neu lesen, sonst bleiben die Lampen bis zum nächsten Takt alt.
@@ -349,7 +394,7 @@ export default class GlasscockpitPlugin extends Plugin {
     // Der Takt läuft immer, pull.tick() tut nur etwas, solange ein Dashboard offen ist.
     this.registerInterval(window.setInterval(() => pull.tick(), PULL_TICK_MS));
 
-    this.addSettingTab(new CockpitSettingTab(this.app, this, store));
+    this.addSettingTab(new CockpitSettingTab(this.app, this, store, hostPlatform()));
 
     this.addRibbonIcon("layout-dashboard", "Glasscockpit: Dashboard öffnen", () => {
       void this.openDashboard();
@@ -601,6 +646,7 @@ export default class GlasscockpitPlugin extends Plugin {
     void this.store?.flush();
     // Eskalation läuft über Fenster-Timer weiter, auch wenn das Plugin schon entladen ist.
     void this.manager?.killAll();
+    this.settingsFiles?.clear();
   }
 
   /** Das aktive Terminal, sonst das erste offene. */
@@ -666,16 +712,22 @@ export default class GlasscockpitPlugin extends Plugin {
     const s = store.settings();
     let handoffs: SessionChoice[] = [];
     try {
-      const r = await readOpenHandoffs(this.app.vault, s, parseYaml, homedir());
+      const r = await readOpenHandoffs(this.app.vault, s, parseYaml, homedir(), hostPlatform());
       for (const e of r.errors) console.warn(`Glasscockpit: ${e}`);
-      handoffs = handoffChoices(r.items, this.vaultPath(), s.handoffPrompt, (d) => existsSync(d), this.handoffsInFlight);
+      handoffs = handoffChoices(r.items, this.vaultPath(), s.handoffPrompt, (d) => existsSync(d), this.handoffsInFlight, hostPlatform());
     } catch (e) {
       console.warn("Glasscockpit: Handoffs nicht lesbar, Menü ohne Weiter-Einträge", e);
     }
     new NewSessionModal(this.app, {
       vaultPath: () => this.vaultPath(),
       projectsRoot: () => store.settings().projectsRoot,
+      hiddenDirs: () => store.settings().hiddenProjectDirs,
       handoffs,
+      // Eine Lesefunktion je geöffnetem Dialog (der Zwischenspeicher gilt nur für ihn), die Einstellung wird bei jedem Aufruf frisch gelesen.
+      lastUsed: (() => {
+        let f: ((cwd: string) => number) | undefined;
+        return () => store.settings().newSessionOrder === "recent" ? (f ??= createLastUsed()) : undefined;
+      })(),
       choose: (choice) => {
         if (choice.handoff) { void this.takeUpHandoff(choice, choice.handoff); return; }
         void this.createSession({ cwd: choice.cwd, baseName: choice.baseName, kind: "claude" });
@@ -810,6 +862,8 @@ export default class GlasscockpitPlugin extends Plugin {
     for (const view of this.viewsOf(id)) view.detach(stoppedLine());
     this.activity.forget(id);
     void this.manager?.kill(id);
+    const record = this.store?.get(id);
+    if (record && record.kind !== "shell") this.settingsFiles?.remove(claudeIdOf(record));
   }
 
   /**
@@ -952,7 +1006,7 @@ export default class GlasscockpitPlugin extends Plugin {
     }
     let plan: SpawnPlan;
     try {
-      plan = await launcher.plan(record, { ...start, resumeConversations: store.settings().resumeConversations, fullscreen: store.settings().fixedPrompt, effort: store.settings().nextEffort, skipPermissions: store.settings().skipPermissions, exclusion: await this.exclusionFor(store.settings()) });
+      plan = await launcher.plan(record, { ...start, resumeConversations: store.settings().resumeConversations, fullscreen: store.settings().fixedPrompt, effort: store.settings().nextEffort, skipPermissions: store.settings().skipPermissions, windowsShell: store.settings().windowsShell, exclusion: await this.exclusionFor(store.settings()) });
     } catch (fehler) {
       reservation.release();
       throw fehler;
@@ -1105,15 +1159,14 @@ export default class GlasscockpitPlugin extends Plugin {
   }
 
   private vaultPath(): string {
-    const adapter = this.app.vault.adapter;
-    return adapter instanceof FileSystemAdapter ? adapter.getBasePath() : homedir();
+    return vaultBasePath(this.app) ?? homedir();
   }
 
   /** Abend 33: Ausschluss für einen Sitzungsstart; merkt die Filter für die IDE-Brücke. Fehler halten keinen Start auf. */
   private async exclusionFor(s: { claudeExclusion: boolean; claudeExclusionSandbox: boolean }): Promise<ExclusionPlan> {
     let plan: ExclusionPlan;
     try {
-      plan = await readExclusion(this.app.vault, this.vaultPath(), s);
+      plan = await readExclusion(this.app.vault, this.vaultPath(), s, hostPlatform());
     } catch (fehler) {
       plan = { settings: {}, notice: `Ausschluss NICHT aktiv: ${fehler instanceof Error ? fehler.message : String(fehler)}.`, filters: [] };
     }

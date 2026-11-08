@@ -24,7 +24,7 @@ function make(): IdeLifecycle {
     enabled: () => enabled,
     create: () => {
       const server = new IdeServer({
-        lockDir: dir, workspaceFolders: () => ["/v"], vaultBase: () => "/v",
+        platform: "darwin", lockDir: dir, workspaceFolders: () => ["/v"], vaultBase: () => "/v",
         handlers: {} as never, pid: process.pid, isPidAlive: pidAlive, newToken: () => "ab".repeat(16), warn: () => undefined,
       });
       created.push(server);

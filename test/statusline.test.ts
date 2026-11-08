@@ -3,13 +3,12 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSyn
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { ON_WINDOWS } from "./helpers/platform";
 
 // Statuszeile (Abend 13, Teil B): das Skript statusline/statusline-command.sh wird als Prozess
 // mit fester Eingabe per stdin aufgerufen. Uhr, Ordner und HOME sind überschrieben.
 
 const SKRIPT = resolve(__dirname, "..", "statusline", "statusline-command.sh");
-// Fassung vor Abend 13 (Kopie aus ~/.claude/_archiv/2026-10-05-abend-13/), damit der Test ohne diesen Mac läuft.
-const ARCHIV = resolve(__dirname, "fixtures", "statusline-vor-abend-13.sh");
 
 // Berlin, 05.10.2026 12:00 (MESZ = UTC+2).
 const NOW = Date.UTC(2026, 9, 5, 10, 0, 0) / 1000;
@@ -39,7 +38,7 @@ interface Limits {
 
 const UUID = "90ef2efe-1234-4abc-8def-0123456789ab";
 
-function eingabe(opts: { kontext?: number; limits?: Limits | null; sessionId?: unknown } = {}): string {
+function eingabe(opts: { kontext?: number; limits?: Limits | null; sessionId?: unknown; api?: number } = {}): string {
   const kontext = opts.kontext ?? 82_000;
   const o: Record<string, unknown> = {
     model: { display_name: "Opus 5.5" },
@@ -53,6 +52,8 @@ function eingabe(opts: { kontext?: number; limits?: Limits | null; sessionId?: u
     },
   };
   if (opts.sessionId !== undefined) o.session_id = opts.sessionId;
+  // Merker (Nachtrag 43e): aufsummierte Wartezeit auf API-Antworten in ms
+  if (opts.api !== undefined) o.cost = { total_api_duration_ms: opts.api };
   const l = opts.limits;
   if (l) {
     const rl: Record<string, unknown> = {};
@@ -80,11 +81,28 @@ interface Lauf {
 
 function lauf(
   stdin: string,
-  opts: { now?: number; tokens?: string | object | null; homeBlockiert?: boolean; thresholds?: string | object | null } = {},
+  opts: {
+    now?: number;
+    tokens?: string | object | null;
+    homeBlockiert?: boolean;
+    thresholds?: string | object | null;
+    usage?: string | object | null;
+    /** Dateien in <COCKPIT_DIR>/sessions vor dem Lauf (Name → Inhalt; String roh, Objekt als JSON). */
+    sitzungen?: Record<string, string | object>;
+    /** <COCKPIT_DIR>/sessions während des Laufs schreibgeschützt (0o555), danach wieder 0o755. */
+    sitzungenGesperrt?: boolean;
+    /** Ordner, der vor PATH steht (Attrappen wie ein scheiterndes mv). */
+    pfadVorn?: string;
+  } = {},
 ): Lauf {
   const dir = temp();
   const home = temp();
   if (opts.homeBlockiert) writeFileSync(join(home, ".claude"), "ich bin eine Datei");
+  const u = opts.usage;
+  if (u !== undefined && u !== null) {
+    mkdirSync(join(home, ".claude", "cockpit"), { recursive: true });
+    writeFileSync(join(home, ".claude", "cockpit", "usage.json"), typeof u === "string" ? u : JSON.stringify(u));
+  }
   const t = opts.tokens;
   if (t !== undefined && t !== null) {
     writeFileSync(join(dir, "tokens-today.json"), typeof t === "string" ? t : JSON.stringify(t));
@@ -93,11 +111,22 @@ function lauf(
   if (th !== undefined && th !== null) {
     writeFileSync(join(dir, "thresholds.json"), typeof th === "string" ? th : JSON.stringify(th));
   }
+  const sessions = join(dir, "sessions");
+  if (opts.sitzungen) {
+    mkdirSync(sessions, { recursive: true });
+    for (const [name, inhalt] of Object.entries(opts.sitzungen)) {
+      writeFileSync(join(sessions, name), typeof inhalt === "string" ? inhalt : JSON.stringify(inhalt));
+    }
+  }
+  if (opts.sitzungenGesperrt) {
+    mkdirSync(sessions, { recursive: true });
+    chmodSync(sessions, 0o555);
+  }
   const r = spawnSync("bash", [SKRIPT], {
     input: stdin,
     encoding: "utf8",
     env: {
-      PATH: process.env.PATH,
+      PATH: opts.pfadVorn ? `${opts.pfadVorn}:${process.env.PATH}` : process.env.PATH,
       HOME: home,
       TZ: "Europe/Berlin",
       LANG: "de_DE.UTF-8",
@@ -105,11 +134,29 @@ function lauf(
       COCKPIT_DIR: dir,
     },
   });
+  if (opts.sitzungenGesperrt) chmodSync(sessions, 0o755);
   const out = r.stdout;
   // eslint-disable-next-line no-control-regex
   const plain = out.replace(/\u001b\[[0-9;]*m/g, "");
   return { out, plain, zeilen: plain.split("\n"), dir, home };
 }
+
+/** usage.json nach dem Lauf (HOME/.claude/cockpit/usage.json), geparst. */
+const datei = (r: Lauf) => JSON.parse(readFileSync(join(r.home, ".claude", "cockpit", "usage.json"), "utf8"));
+
+/** Sitzungsdatei von UUID nach dem Lauf (<COCKPIT_DIR>/sessions/<UUID>.json), geparst. */
+const sitzung = (r: Lauf) => JSON.parse(readFileSync(join(r.dir, "sessions", `${UUID}.json`), "utf8"));
+
+/** Vorige Sitzungsdatei von UUID mit Merker api_ms und Beobachtungszeit api_at (Nachtrag 43e). */
+const vorher = (api_ms: unknown, api_at: unknown) => ({
+  session_id: UUID,
+  written_at: NOW - 30,
+  context_tokens: 82_000,
+  used_percentage: 41,
+  model: "Opus 5.5",
+  api_ms,
+  api_at,
+});
 
 const heute = (n: number, alterSek = 30, day = "2026-10-05") => ({
   written_at: NOW - alterSek,
@@ -119,7 +166,8 @@ const heute = (n: number, alterSek = 30, day = "2026-10-05") => ({
   lines: 100,
 });
 
-describe("Statuszeile: Zeile 1 und 2", () => {
+// Windows: Skript läuft in bash und braucht jq (Inventur H13)
+describe.skipIf(ON_WINDOWS)("Statuszeile: Zeile 1 und 2", () => {
   it("ohne rate_limits: nur Zeile 1, kein 5h-Teil, keine Wochenzeile, kein Zeilenumbruch am Ende", () => {
     const r = lauf(eingabe());
     expect(r.plain).toBe("Opus 5.5 │ 82k (41%)");
@@ -177,7 +225,8 @@ describe("Statuszeile: Zeile 1 und 2", () => {
   });
 });
 
-describe("Statuszeile: Empfehlung", () => {
+// Windows: Skript läuft in bash und braucht jq (Inventur H13)
+describe.skipIf(ON_WINDOWS)("Statuszeile: Empfehlung", () => {
   it("Tempo vorn (Verbrauch 60 %, Zeit 43 %): nennt die Hebel", () => {
     const r = lauf(eingabe({ limits: { five: fuenf(10), week: woche(60, 43) } }));
     expect(r.zeilen[1]).toBe("Woche ▓▓▓▓▓▓░░░░ 60% · Zeit 43% · zu schnell: kein xhigh, Sonnet-Agents, früher übergeben");
@@ -210,7 +259,8 @@ describe("Statuszeile: Empfehlung", () => {
   });
 });
 
-describe("Statuszeile: Farben", () => {
+// Windows: Skript läuft in bash und braucht jq (Inventur H13)
+describe.skipIf(ON_WINDOWS)("Statuszeile: Farben", () => {
   const farbeVon5h = (pct: number) => {
     const r = lauf(eingabe({ limits: { five: fuenf(pct) } }));
     for (const f of [GRUEN, GELB, ROT]) if (r.out.includes(`${f}${pct}%`)) return f;
@@ -230,7 +280,8 @@ describe("Statuszeile: Farben", () => {
   });
 });
 
-describe("Statuszeile: Kontextmarken", () => {
+// Windows: Skript läuft in bash und braucht jq (Inventur H13)
+describe.skipIf(ON_WINDOWS)("Statuszeile: Kontextmarken", () => {
   it("149.999 Token: gedimmt, kein Gelb, kein HANDOFF", () => {
     const r = lauf(eingabe({ kontext: 149_999 }));
     expect(r.plain).toContain("149k");
@@ -275,7 +326,8 @@ describe("Statuszeile: Kontextmarken", () => {
   });
 });
 
-describe("Statuszeile: Output-Tokens heute (tokens-today.json)", () => {
+// Windows: Skript läuft in bash und braucht jq (Inventur H13)
+describe.skipIf(ON_WINDOWS)("Statuszeile: Output-Tokens heute (tokens-today.json)", () => {
   const ohne = "Opus 5.5 │ 82k (41%)";
 
   it("frisch: „heute 340k“ ohne Alter", () => {
@@ -364,27 +416,18 @@ describe("Statuszeile: Output-Tokens heute (tokens-today.json)", () => {
 });
 
 describe("Statuszeile: Schnappschuss-Block und Laufzeit", () => {
-  const block = (text: string) => {
-    const z = text.split("\n");
+  // Der Block ändert sich mit 43d bewusst (er führt mit usage.json zusammen); sein Verhalten sichern die
+  // Tests unten und im Abschnitt „Limits zusammenführen“. Hier nur die Stelle: direkt nach input=$(cat).
+  it("Schnappschuss-Block steht direkt nach input=$(cat)", () => {
+    const z = readFileSync(SKRIPT, "utf8").split("\n");
     const i = z.findIndex((l) => l.trim() === "input=$(cat)");
-    return { i, vor: z.slice(0, i), nach: z.slice(i + 1, i + 1 + 16) };
-  };
-
-  it("Schnappschuss-Block steht bytegleich zum Archiv direkt nach input=$(cat)", () => {
-    expect(existsSync(ARCHIV), `Archiv fehlt: ${ARCHIV}`).toBe(true);
-    const alt = block(readFileSync(ARCHIV, "utf8"));
-    const neu = block(readFileSync(SKRIPT, "utf8"));
-    expect(alt.i).toBeGreaterThan(0);
-    // Blockzeilen des Archivs: Zeilen 5 bis 19 (Leerzeile, Kommentar, if ... fi)
-    const altZeilen = readFileSync(ARCHIV, "utf8").split("\n").slice(4, 19);
-    expect(altZeilen[0]).toContain("Schnappschuss der Limits");
-    expect(altZeilen[altZeilen.length - 1]).toBe("fi");
-    expect(neu.i).toBeGreaterThanOrEqual(0);
-    const nachInput = readFileSync(SKRIPT, "utf8").split("\n").slice(neu.i + 2, neu.i + 2 + altZeilen.length);
-    expect(nachInput).toEqual(altZeilen);
+    expect(i).toBeGreaterThan(0);
+    expect(z[i + 1]).toBe("");
+    expect(z[i + 2].startsWith("# Schnappschuss der Limits")).toBe(true);
   });
 
-  it("Schnappschuss wird mit rate_limits geschrieben, ohne rate_limits nicht", () => {
+  // Windows: Skript läuft in bash und braucht jq (Inventur H13)
+  it.skipIf(ON_WINDOWS)("Schnappschuss wird mit rate_limits geschrieben, ohne rate_limits nicht", () => {
     const mit = lauf(eingabe({ limits: { five: fuenf(42), week: woche(38, 43) } }));
     const datei = join(mit.home, ".claude", "cockpit", "usage.json");
     expect(existsSync(datei)).toBe(true);
@@ -393,7 +436,8 @@ describe("Statuszeile: Schnappschuss-Block und Laufzeit", () => {
     expect(existsSync(join(ohne.home, ".claude", "cockpit", "usage.json"))).toBe(false);
   });
 
-  it("Ausgabe ist gleich, ob der Schnappschuss geschrieben werden konnte oder nicht", () => {
+  // Windows: Skript läuft in bash und braucht jq (Inventur H13)
+  it.skipIf(ON_WINDOWS)("Ausgabe ist gleich, ob der Schnappschuss geschrieben werden konnte oder nicht", () => {
     const e = eingabe({ limits: { five: fuenf(42), week: woche(38, 43) } });
     const gut = lauf(e, { tokens: heute(340_000) });
     const blockiert = lauf(e, { tokens: heute(340_000), homeBlockiert: true });
@@ -402,7 +446,8 @@ describe("Statuszeile: Schnappschuss-Block und Laufzeit", () => {
     expect(existsSync(join(blockiert.home, ".claude", "cockpit"))).toBe(false);
   });
 
-  it("Schnappschuss-Ordner schreibgeschützt: Ausgabe unverändert", () => {
+  // Windows: Skript läuft in bash, Ordner mit chmod 0o555 gesperrt (Inventur H13)
+  it.skipIf(ON_WINDOWS)("Schnappschuss-Ordner schreibgeschützt: Ausgabe unverändert", () => {
     const e = eingabe({ limits: { five: fuenf(42), week: woche(38, 43) } });
     const gut = lauf(e);
     const home = temp();
@@ -419,16 +464,21 @@ describe("Statuszeile: Schnappschuss-Block und Laufzeit", () => {
     expect(r.stdout).toBe(gut.out);
   });
 
-  it("ein jq-Aufruf für die Statuszeile (Schnappschuss-Block und Sitzungsdatei zählen nicht mit; Schwellen werden im selben Aufruf gelesen)", () => {
+  // Windows: Skript läuft in bash, jq-Attrappe ist ein bash-Skript mit chmod (Inventur H13)
+  it.skipIf(ON_WINDOWS)("ein jq-Aufruf für die Statuszeile (Schnappschuss-Block und Sitzungsdatei zählen nicht mit; Schwellen werden im selben Aufruf gelesen)", () => {
     const bin = temp();
     const log = join(bin, "aufrufe.log");
     const echtes = spawnSync("bash", ["-c", "command -v jq"], { encoding: "utf8" }).stdout.trim();
     writeFileSync(join(bin, "jq"), `#!/bin/bash\necho x >> "${log}"\nexec "${echtes}" "$@"\n`);
     chmodSync(join(bin, "jq"), 0o755);
-    const zaehle = (stdin: string) => {
+    const zaehle = (stdin: string, vorige?: object) => {
       rmSync(log, { force: true });
       const dir = temp();
       const home = temp();
+      if (vorige) {
+        mkdirSync(join(dir, "sessions"));
+        writeFileSync(join(dir, "sessions", `${UUID}.json`), JSON.stringify(vorige));
+      }
       spawnSync("bash", [SKRIPT], {
         input: stdin,
         encoding: "utf8",
@@ -436,15 +486,19 @@ describe("Statuszeile: Schnappschuss-Block und Laufzeit", () => {
       });
       return readFileSync(log, "utf8").trim().split("\n").length;
     };
-    // ohne rate_limits: 1 (Prüfung im Block) + 1 (Sitzungsdatei) + 1 (Statuszeile)
+    // ohne rate_limits: Kopf, Sitzungsdatei, Statuszeile
     expect(zaehle(eingabe())).toBe(3);
-    // mit rate_limits: 2 (Block) + 1 (Sitzungsdatei) + 1 (Statuszeile)
+    // mit rate_limits: Kopf, Sitzungsdatei, Zusammenführen, Statuszeile
     expect(zaehle(eingabe({ limits: { five: fuenf(42), week: woche(38, 43) } }))).toBe(4);
+    // mit gültiger session_id, voriger Sitzungsdatei und rate_limits: Kopf, Sitzungsdatei, Zusammenführen, Statuszeile
+    const mitVoriger = eingabe({ sessionId: UUID, api: 5000, limits: { five: fuenf(42), week: woche(38, 43) } });
+    expect(zaehle(mitVoriger, vorher(1000, NOW - 60))).toBe(4);
   });
 });
 
 describe("Statuszeile: Vorgaben", () => {
-  it("ohne COCKPIT_NOW und COCKPIT_DIR läuft das Skript mit echter Uhr und liest HOME/.claude/cockpit", () => {
+  // Windows: Skript läuft in bash und braucht jq (Inventur H13)
+  it.skipIf(ON_WINDOWS)("ohne COCKPIT_NOW und COCKPIT_DIR läuft das Skript mit echter Uhr und liest HOME/.claude/cockpit", () => {
     const home = temp();
     const cockpit = join(home, ".claude", "cockpit");
     mkdirSync(cockpit, { recursive: true });
@@ -462,7 +516,7 @@ describe("Statuszeile: Vorgaben", () => {
 
   it("Schwellen stehen als Variablen oben im Skript", () => {
     const s = readFileSync(SKRIPT, "utf8");
-    for (const v of ["TEMPO_MARGIN=10", "FIVE_HOUR_WARN=90", "CTX_WARN=150000", "CTX_HANDOFF=175000", "PCT_YELLOW=70", "PCT_RED=90"]) {
+    for (const v of ["TEMPO_MARGIN=10", "FIVE_HOUR_WARN=90", "CTX_WARN=150000", "CTX_HANDOFF=175000", "PCT_YELLOW=70", "PCT_RED=90", "WINDOW_SLACK=600", "WINDOW_LEN_5H=18000", "WINDOW_LEN_MAX=604800", "DROP_MIN=2", "OBS_SLACK=60"]) {
       expect(s).toContain(v);
     }
   });
@@ -474,7 +528,8 @@ describe("deploy:statusline", () => {
     expect(pkg.scripts["deploy:statusline"]).toBe("node scripts/deploy-statusline.mjs");
   });
 
-  it("kopiert atomar mit Modus 755, ohne temporäre Reste, und ersetzt eine bestehende Datei", async () => {
+  // Windows: prüft den POSIX-Modus 0o755 der Kopie (Inventur H13)
+  it.skipIf(ON_WINDOWS)("kopiert atomar mit Modus 755, ohne temporäre Reste, und ersetzt eine bestehende Datei", async () => {
     const { statSync, readdirSync } = await import("node:fs");
     const ziel = join(temp(), "neu", "statusline-command.sh");
     mkdirSync(join(ziel, ".."), { recursive: true });
@@ -509,7 +564,8 @@ function stilAn(out: string, text: string): { fg: number | null; dim: boolean } 
   return { fg: zeichen[i].fg, dim: zeichen[i].dim };
 }
 
-describe("Statuszeile: Farbe endet mit dem Wert", () => {
+// Windows: Skript läuft in bash und braucht jq (Inventur H13)
+describe.skipIf(ON_WINDOWS)("Statuszeile: Farbe endet mit dem Wert", () => {
   it("nach dem farbigen 5h-Wert ist der Rest wieder gedimmt ohne Farbe", () => {
     const r = lauf(eingabe({ limits: { five: fuenf(42), week: woche(38, 43) } }));
     expect(stilAn(r.out, "42%")).toEqual({ fg: 32, dim: false });
@@ -524,10 +580,11 @@ describe("Statuszeile: Farbe endet mit dem Wert", () => {
   });
 });
 
-describe("Statuszeile: Sitzungsdatei (Abend 18)", () => {
+// Windows: Skript läuft in bash und braucht jq (Inventur H13)
+describe.skipIf(ON_WINDOWS)("Statuszeile: Sitzungsdatei (Abend 18)", () => {
   const sdir = (r: Lauf) => join(r.dir, "sessions");
   const datei = (r: Lauf) => join(sdir(r), `${UUID}.json`);
-  const E = (extra: { kontext?: number; limits?: Limits | null } = {}) => eingabe({ ...extra, sessionId: UUID });
+  const E = (extra: { kontext?: number; limits?: Limits | null; api?: number } = {}) => eingabe({ ...extra, sessionId: UUID });
 
   it("schreibt <COCKPIT_DIR>/sessions/<id>.json mit allen Feldern (written_at in Unix-Sekunden wie usage.json)", () => {
     const r = lauf(E({ kontext: 82_000 }));
@@ -538,6 +595,19 @@ describe("Statuszeile: Sitzungsdatei (Abend 18)", () => {
       context_tokens: 82_000,
       used_percentage: 41,
       model: "Opus 5.5",
+      api_ms: null,
+      api_at: null,
+    });
+    // mit Merker, ohne vorige Datei: api_ms ist der Merker, die Beobachtungszeit ist unbekannt (Nachtrag 43e)
+    const mitMerker = lauf(E({ kontext: 82_000, api: 5000 }));
+    expect(JSON.parse(readFileSync(datei(mitMerker), "utf8"))).toEqual({
+      session_id: UUID,
+      written_at: NOW,
+      context_tokens: 82_000,
+      used_percentage: 41,
+      model: "Opus 5.5",
+      api_ms: 5000,
+      api_at: null,
     });
   });
 
@@ -631,7 +701,8 @@ describe("Statuszeile: Sitzungsdatei (Abend 18)", () => {
   });
 });
 
-describe("Statuszeile: thresholds.json (Festlegung 1)", () => {
+// Windows: Skript läuft in bash und braucht jq (Inventur H13)
+describe.skipIf(ON_WINDOWS)("Statuszeile: thresholds.json (Festlegung 1)", () => {
   const ohneFarbe = (r: Lauf) => !r.out.includes(GELB) && !r.out.includes(ROT);
 
   it("gültig und niedriger: 100k ist gelb, 120k rot mit HANDOFF", () => {
@@ -684,5 +755,486 @@ describe("Statuszeile: thresholds.json (Festlegung 1)", () => {
     const mit = lauf(e, { thresholds: { context_warn: 90_000, context_handoff: 110_000 } });
     expect(mit.zeilen[1]).toBe("Woche ▓▓▓▓░░░░░░ 38% · Zeit 43% · im Plan");
     expect(mit.out).toContain(GELB);
+  });
+});
+
+// Nachtrag 43d: Jeder Tab schrieb bisher seinen eigenen Stand nach usage.json, der letzte Schreiber gewann,
+// und ruhige Tabs setzten frischere Werte zurück. Das Skript führt jetzt je Fenster mit der Datei zusammen.
+// Seit 43e der Fall „beide Beobachtungszeiten unbekannt“ (keine Sitzungsdatei, kein observed_at): Es gilt der höhere Wert.
+describe.skipIf(ON_WINDOWS)("Statuszeile: Limits zusammenführen (Nachtrag 43d)", () => {
+  const R5 = NOW + 3600;
+  const RW = NOW + WOCHE / 2;
+  const fenster = (pct: number, resets: number) => ({ used_percentage: pct, resets_at: resets });
+  const usageDatei = (f: { five?: [number, number]; week?: [number, number] }) => ({
+    written_at: NOW - 30,
+    rate_limits: {
+      ...(f.five ? { five_hour: fenster(...f.five) } : {}),
+      ...(f.week ? { seven_day: fenster(...f.week) } : {}),
+    },
+  });
+  const fuenfPct = (r: Lauf) => datei(r).rate_limits.five_hour.used_percentage;
+  const wochePct = (r: Lauf) => datei(r).rate_limits.seven_day.used_percentage;
+
+  it("ruhender Tab setzt nichts zurück (gemessen 27.10.: 0 % gegen 15 %)", () => {
+    const r = lauf(eingabe({ limits: { five: { pct: 0, resets: R5 }, week: { pct: 92, resets: RW } } }), {
+      usage: usageDatei({ five: [15, R5], week: [94, RW] }),
+    });
+    expect(r.plain).toContain("5h 15%");
+    expect(r.zeilen[1]).toContain("94%");
+    expect(fuenfPct(r)).toBe(15);
+    expect(wochePct(r)).toBe(94);
+  });
+
+  it("eigener höherer Wert gewinnt", () => {
+    const r = lauf(eingabe({ limits: { five: { pct: 16, resets: R5 } } }), { usage: usageDatei({ five: [15, R5] }) });
+    expect(r.plain).toContain("5h 16%");
+    expect(fuenfPct(r)).toBe(16);
+  });
+
+  it("neues Fenster schlägt altes mit höherem Wert", () => {
+    const r = lauf(eingabe({ limits: { five: { pct: 2, resets: NOW + 5 * 3600 - 120 } } }), {
+      usage: usageDatei({ five: [80, NOW - 60] }),
+    });
+    expect(r.plain).toContain("5h 2%");
+    expect(fuenfPct(r)).toBe(2);
+  });
+
+  it("altes Fenster verliert gegen neueres aus der Datei", () => {
+    const r = lauf(eingabe({ limits: { five: { pct: 80, resets: NOW - 60 } } }), {
+      usage: usageDatei({ five: [3, NOW + 4 * 3600] }),
+    });
+    expect(r.plain).toContain("5h 3% · noch 4:00");
+    expect(fuenfPct(r)).toBe(3);
+  });
+
+  it("Toleranz 600 s", () => {
+    const usage = usageDatei({ five: [20, R5] });
+    const gleich = lauf(eingabe({ limits: { five: { pct: 10, resets: R5 + 600 } } }), { usage });
+    expect(gleich.plain).toContain("5h 20%");
+    expect(fuenfPct(gleich)).toBe(20);
+    const neuer = lauf(eingabe({ limits: { five: { pct: 10, resets: R5 + 601 } } }), { usage });
+    expect(neuer.plain).toContain("5h 10%");
+    expect(fuenfPct(neuer)).toBe(10);
+    // Dateiseite: Datei 20 / R5 + 600 ist dasselbe Fenster wie eigen 30 / R5 (eigener höherer Wert), + 601 das neuere
+    const eigen = eingabe({ limits: { five: { pct: 30, resets: R5 } } });
+    const dateiGleich = lauf(eigen, { usage: usageDatei({ five: [20, R5 + 600] }) });
+    expect(dateiGleich.plain).toContain("5h 30%");
+    expect(fuenfPct(dateiGleich)).toBe(30);
+    const dateiNeuer = lauf(eigen, { usage: usageDatei({ five: [20, R5 + 601] }) });
+    expect(dateiNeuer.plain).toContain("5h 20%");
+    expect(fuenfPct(dateiNeuer)).toBe(20);
+  });
+
+  it("Fenster nur in der Datei bleibt", () => {
+    const r = lauf(eingabe({ limits: { five: { pct: 10, resets: R5 } } }), { usage: usageDatei({ week: [94, RW] }) });
+    expect(r.zeilen).toHaveLength(2);
+    expect(r.zeilen[1]).toContain("94%");
+    expect(wochePct(r)).toBe(94);
+    expect(fuenfPct(r)).toBe(10);
+  });
+
+  it("kaputte Datei: eigener Stand", () => {
+    const e = eingabe({ limits: { five: { pct: 30, resets: R5 }, week: { pct: 38, resets: RW } } });
+    const ohne = lauf(e);
+    const kaputt: Array<string | object> = [
+      "kein json",
+      { rate_limits: "x" },
+      { rate_limits: { five_hour: { used_percentage: 99 } } },
+      "42",
+      "[]",
+      { rate_limits: { five_hour: { used_percentage: 99, resets_at: "x" } } },
+    ];
+    for (const usage of kaputt) {
+      const r = lauf(e, { usage });
+      expect(r.out, JSON.stringify(usage)).toBe(ohne.out);
+      expect(fuenfPct(r), JSON.stringify(usage)).toBe(30);
+    }
+  });
+
+  it("ohne eigenes rate_limits bleibt die Datei unberührt", () => {
+    const usage = usageDatei({ five: [15, R5], week: [94, RW] });
+    const r = lauf(eingabe(), { usage });
+    expect(r.zeilen).toHaveLength(1);
+    expect(r.plain).not.toContain("5h");
+    expect(readFileSync(join(r.home, ".claude", "cockpit", "usage.json"), "utf8")).toBe(JSON.stringify(usage));
+  });
+
+  it("Unsinnig spätes Fenster in der Datei hält nicht", () => {
+    const r = lauf(eingabe({ limits: { five: { pct: 41, resets: R5 } } }), { usage: usageDatei({ five: [0, 9_999_999_999] }) });
+    expect(r.plain).toContain("5h 41%");
+    expect(fuenfPct(r)).toBe(41);
+  });
+
+  it("Obergrenze des 5h-Fensters: Fensterlänge plus 600 s", () => {
+    // Datei 5h 3 / NOW + 18000 + 600 gilt und ist gegen eigen 50 / R5 das neuere Fenster
+    const e = eingabe({ limits: { five: { pct: 50, resets: R5 } } });
+    const gilt = lauf(e, { usage: usageDatei({ five: [3, NOW + 18_000 + 600] }) });
+    expect(gilt.plain).toContain("5h 3%");
+    expect(fuenfPct(gilt)).toBe(3);
+    const zuSpaet = lauf(e, { usage: usageDatei({ five: [3, NOW + 18_000 + 601] }) });
+    expect(zuSpaet.plain).toContain("5h 50%");
+    expect(fuenfPct(zuSpaet)).toBe(50);
+  });
+
+  it("Obergrenze der Woche: Fensterlänge plus 600 s", () => {
+    const e = eingabe({ limits: { week: { pct: 40, resets: RW } } });
+    const gilt = lauf(e, { usage: usageDatei({ week: [3, NOW + WOCHE + 600] }) });
+    expect(gilt.zeilen[1]).toContain(" 3% ");
+    expect(wochePct(gilt)).toBe(3);
+    const zuSpaet = lauf(e, { usage: usageDatei({ week: [3, NOW + WOCHE + 601] }) });
+    expect(zuSpaet.zeilen[1]).toContain(" 40% ");
+    expect(wochePct(zuSpaet)).toBe(40);
+  });
+
+  it("Zu große Datei: eigener Stand wird geschrieben", () => {
+    // Eine Datei von rund 2 MB sprengt die Argumentgrenze des Zusammenführens; ohne Rückfall bliebe nichts geschrieben
+    const r = lauf(eingabe({ limits: { five: { pct: 41, resets: R5 } } }), { usage: "x".repeat(2_000_000) });
+    expect(r.plain).toContain("5h 41%");
+    expect(fuenfPct(r)).toBe(41);
+  });
+});
+
+// Nachtrag 43e: Nach einem Planwechsel hielt Regel 4 aus 43d („im selben Fenster der höhere Wert“) den alten
+// hohen Wert fest. Jede Sitzung schätzt jetzt aus dem Merker cost.total_api_duration_ms, wann ihr Stand entstand
+// (api_at in der Sitzungsdatei, observed_at je Fenster in usage.json). Merker in ms; der Stempel ist jetzt minus
+// der Zuwachs in ganzen Sekunden. Im selben Fenster gilt der höhere Wert, außer die jüngere Beobachtung liegt
+// mindestens DROP_MIN (2) Punkte darunter.
+describe.skipIf(ON_WINDOWS)("Statuszeile: jüngere Beobachtung (Nachtrag 43e)", () => {
+  const R5 = NOW + 3600;
+  const RW = NOW + WOCHE / 2;
+  /** Fenster für usage.json; observed_at nur, wenn angegeben. */
+  const fenster = (pct: number | null, resets: number, observed?: number) => ({
+    used_percentage: pct,
+    resets_at: resets,
+    ...(observed === undefined ? {} : { observed_at: observed }),
+  });
+  const usage = (rate_limits: Record<string, object>) => ({ written_at: NOW - 30, rate_limits });
+  /** Vorige Sitzungsdatei von UUID. */
+  const vorige = (inhalt: string | object) => ({ [`${UUID}.json`]: inhalt });
+  /** Eingabe von UUID mit Merker (undefined: ohne) und einem 5h-Fenster. */
+  const E5 = (api: number | undefined, pct: number, resets = R5) =>
+    eingabe({ sessionId: UUID, api, limits: { five: { pct, resets } } });
+  const fuenfDatei = (r: Lauf) => datei(r).rate_limits.five_hour;
+  const wocheDatei = (r: Lauf) => datei(r).rate_limits.seven_day;
+  /** Eingabe von UUID, einzelne Felder roh gesetzt (etwa cost ohne Objekt oder ein Prozent ohne Zahl). */
+  const roh = (felder: Record<string, unknown>) => JSON.stringify({ ...JSON.parse(eingabe({ sessionId: UUID })), ...felder });
+
+  it("Planwechsel: jüngere Beobachtung mit niedrigerem Wert gewinnt (gemessen 27.10.: Woche 0 % gegen 99 %)", () => {
+    const r = lauf(eingabe({ sessionId: UUID, api: 1_060_000, limits: { week: { pct: 0, resets: RW } } }), {
+      usage: usage({ seven_day: fenster(99, RW, NOW - 600) }),
+      sitzungen: vorige(vorher(1_000_000, NOW - 900)),
+    });
+    expect(r.zeilen[1]).toContain(" 0% ");
+    expect(wocheDatei(r)).toEqual({ used_percentage: 0, resets_at: RW, observed_at: NOW - 60 });
+    expect(sitzung(r).api_ms).toBe(1_060_000);
+    expect(sitzung(r).api_at).toBe(NOW - 60);
+    expect(sitzung(r).written_at).toBe(NOW);
+  });
+
+  it("ruhiger Tab mit älterer Beobachtung setzt nichts zurück (gemessen 27.10.: 0 % gegen 15 %)", () => {
+    const r = lauf(E5(5000, 0), {
+      usage: usage({ five_hour: fenster(15, R5, NOW - 30) }),
+      sitzungen: vorige(vorher(5000, NOW - 1320)),
+    });
+    expect(r.plain).toContain("5h 15%");
+    expect(fuenfDatei(r)).toEqual(fenster(15, R5, NOW - 30));
+    // neu geschrieben (vorher NOW - 30), der gleiche Merker behält seinen Stempel
+    expect(sitzung(r).written_at).toBe(NOW);
+    expect(sitzung(r).api_at).toBe(NOW - 1320);
+  });
+
+  it("jüngere Datei, 5 Punkte tiefer, löst den höheren eigenen Wert ab", () => {
+    const r = lauf(E5(5000, 35), {
+      usage: usage({ five_hour: fenster(30, R5, NOW - 10) }),
+      sitzungen: vorige(vorher(5000, NOW - 20)),
+    });
+    expect(r.plain).toContain("5h 30%");
+  });
+
+  it("gleiche Beobachtungszeit: der höhere Wert, kein Pendeln", () => {
+    const opts = { usage: usage({ five_hour: fenster(30, R5, NOW - 60) }), sitzungen: vorige(vorher(1_000_000, NOW - 600)) };
+    const tiefer = lauf(E5(1_060_000, 20), opts);
+    expect(tiefer.plain).toContain("5h 30%");
+    expect(fuenfDatei(tiefer).observed_at).toBe(NOW - 60);
+    const hoeher = lauf(E5(1_060_000, 35), opts);
+    expect(hoeher.plain).toContain("5h 35%");
+    // beide Seiten NOW - 60: das geschriebene Fenster trägt diese Zeit auch mit dem eigenen Wert
+    expect(fuenfDatei(hoeher)).toEqual(fenster(35, R5, NOW - 60));
+  });
+
+  it("neue Sitzung: unbekannt verliert gegen bekannt, nach der nächsten Antwort gewinnt sie", () => {
+    const lauf1 = lauf(E5(7000, 40), { usage: usage({ five_hour: fenster(15, R5, NOW - 3000) }) });
+    expect(lauf1.plain).toContain("5h 15%");
+    expect(sitzung(lauf1).api_ms).toBe(7000);
+    expect(sitzung(lauf1).api_at).toBeNull();
+    const lauf2 = lauf(E5(8000, 41), { usage: datei(lauf1), sitzungen: vorige(sitzung(lauf1)) });
+    expect(lauf2.plain).toContain("5h 41%");
+    expect(fuenfDatei(lauf2).observed_at).toBe(NOW - 1);
+  });
+
+  it("Merker ohne rate_limits wird fortgeschrieben", () => {
+    const r = lauf(eingabe({ sessionId: UUID, api: 5000 }), { sitzungen: vorige(vorher(1000, NOW - 50)) });
+    expect(sitzung(r).api_ms).toBe(5000);
+    expect(sitzung(r).api_at).toBe(NOW - 4);
+    expect(existsSync(join(r.home, ".claude", "cockpit", "usage.json"))).toBe(false);
+  });
+
+  it("Merker wächst schneller als die Uhr (etwa parallele Sub-Agents): Stempel nicht früher als der vorige", () => {
+    // Zuwachs 4 s ergäbe NOW - 4, der vorige Stempel NOW - 2 ist später und gilt
+    const r = lauf(eingabe({ sessionId: UUID, api: 5000 }), { sitzungen: vorige(vorher(1000, NOW - 2)) });
+    expect(sitzung(r).api_at).toBe(NOW - 2);
+  });
+
+  it("observed_at der Datei bis OBS_SLACK in der Zukunft gilt, darüber nicht", () => {
+    const sitzungen = vorige(vorher(1_000_000, NOW - 600));
+    const grenze = lauf(E5(1_060_000, 20), { usage: usage({ five_hour: fenster(30, R5, NOW + 60) }), sitzungen });
+    expect(grenze.plain).toContain("5h 30%");
+    const darueber = lauf(E5(1_060_000, 20), { usage: usage({ five_hour: fenster(30, R5, NOW + 61) }), sitzungen });
+    expect(darueber.plain).toContain("5h 20%");
+    // ohne vorige Datei sind beide unbekannt: der höhere Wert, das geschriebene Fenster ohne observed_at
+    const ohne = lauf(E5(1_060_000, 20), { usage: usage({ five_hour: fenster(30, R5, NOW + 61) }) });
+    expect(ohne.plain).toContain("5h 30%");
+    expect(fuenfDatei(ohne)).toEqual(fenster(30, R5));
+  });
+
+  it("kaputte, fremde oder zu große Sitzungsdatei: unbekannt, Datei wird neu geschrieben", () => {
+    const e = E5(5000, 10);
+    const u = usage({ five_hour: fenster(40, R5) });
+    const ohne = lauf(e, { usage: u });
+    const kaputt: Array<string | object> = [
+      "kein json",
+      "[]",
+      "x".repeat(2_000_000),
+      vorher("5000", NOW - 10),
+      { ...vorher(5000, NOW - 10), session_id: "11111111-2222-4333-8444-555555555555" },
+      vorher(5000, NOW + 61),
+      vorher(5000, 0),
+      vorher(5000, "x"),
+      // Datei aus 43d ohne api_ms und api_at (Verteiltag): ohne Zahl api_ms würde sie sonst nie mehr erneuert
+      { session_id: UUID, written_at: NOW - 30, context_tokens: 82_000, used_percentage: 41, model: "Opus 5.5" },
+    ];
+    for (const v of kaputt) {
+      const name = typeof v === "string" ? `${v.slice(0, 20)} (${v.length} Zeichen)` : JSON.stringify(v);
+      const r = lauf(e, { usage: u, sitzungen: vorige(v) });
+      // beide unbekannt: der höhere Wert; ein fälschlich bekannter Stempel ließe die 10 als jüngere Seite gewinnen
+      expect(r.plain, name).toContain("5h 40%");
+      expect(r.out, name).toBe(ohne.out);
+      expect(sitzung(r).written_at, name).toBe(NOW);
+      expect(sitzung(r).api_ms, name).toBe(5000);
+      expect(sitzung(r).api_at, name).toBeNull();
+    }
+  });
+
+  it("ohne total_api_duration_ms: unbekannt", () => {
+    const r = lauf(E5(undefined, 10), {
+      usage: usage({ five_hour: fenster(40, R5) }),
+      sitzungen: vorige(vorher(5000, NOW - 10)),
+    });
+    expect(r.plain).toContain("5h 40%");
+    expect(sitzung(r).api_ms).toBeNull();
+    expect(sitzung(r).api_at).toBeNull();
+  });
+
+  it("ungültige session_id: keine vorige Datei gelesen", () => {
+    const r = lauf(eingabe({ sessionId: "keine-uuid", api: 2, limits: { five: { pct: 10, resets: R5 } } }), {
+      usage: usage({ five_hour: fenster(40, R5) }),
+      sitzungen: { "keine-uuid.json": { session_id: "keine-uuid", api_ms: 1, api_at: NOW - 5 } },
+    });
+    expect(r.plain).toContain("5h 40%");
+  });
+
+  it("Rauschen: jüngere Beobachtung 1 Punkt tiefer lässt den höheren Wert stehen und bringt ihre Zeit mit, 2 Punkte tiefer löst ihn ab (gemessen 27.10.: ohne Mischregel 14 Rückschritte um je 1 Punkt in 25 Minuten)", () => {
+    const opts = { usage: usage({ five_hour: fenster(16, R5, NOW - 20) }), sitzungen: vorige(vorher(1, NOW - 60)) };
+    const einPunkt = lauf(E5(2, 15), opts);
+    expect(einPunkt.plain).toContain("5h 16%");
+    expect(fuenfDatei(einPunkt)).toEqual(fenster(16, R5, NOW));
+    const zweiPunkte = lauf(E5(2, 14), opts);
+    expect(zweiPunkte.plain).toContain("5h 14%");
+    expect(fuenfDatei(zweiPunkte)).toEqual(fenster(14, R5, NOW));
+    // Gegenrichtung: die Datei ist jünger und 1 Punkt tiefer, der eigene höhere Wert bleibt
+    const gegen = lauf(E5(5000, 16), {
+      usage: usage({ five_hour: fenster(15, R5, NOW) }),
+      sitzungen: vorige(vorher(5000, NOW - 60)),
+    });
+    expect(gegen.plain).toContain("5h 16%");
+    expect(fuenfDatei(gegen)).toEqual(fenster(16, R5, NOW));
+  });
+
+  it("Merker sinkt (neuer Prozess unter derselben ID): unbekannt", () => {
+    const r = lauf(E5(100, 10), {
+      usage: usage({ five_hour: fenster(40, R5) }),
+      sitzungen: vorige(vorher(5000, NOW - 10)),
+    });
+    expect(r.plain).toContain("5h 40%");
+    expect(sitzung(r).api_ms).toBe(100);
+    expect(sitzung(r).api_at).toBeNull();
+  });
+
+  it("langer Merkersprung: Wert vom Anfang der Anfrage löst die jüngere tiefere Beobachtung nicht ab (gemessen: bis 193 s)", () => {
+    const r = lauf(E5(1_240_000, 95), {
+      usage: usage({ five_hour: fenster(2, R5, NOW - 100) }),
+      sitzungen: vorige(vorher(1_000_000, NOW - 900)),
+    });
+    expect(r.plain).toContain("5h 2%");
+    expect(fuenfDatei(r).observed_at).toBe(NOW - 100);
+    expect(sitzung(r).api_at).toBe(NOW - 240);
+  });
+
+  it("Fensterwechsel trägt die Beobachtungszeit", () => {
+    const neu = lauf(E5(2000, 2, NOW + 5 * 3600 - 120), {
+      usage: usage({ five_hour: fenster(80, NOW - 60, NOW - 100) }),
+      sitzungen: vorige(vorher(1000, NOW - 200)),
+    });
+    expect(neu.plain).toContain("5h 2%");
+    expect(fuenfDatei(neu).observed_at).toBe(NOW - 1);
+    // Gegenrichtung ohne vorige Datei: das neuere Fenster der Datei, sein observed_at liegt zu weit in der Zukunft
+    const alt = lauf(E5(2000, 80, NOW - 60), { usage: usage({ five_hour: fenster(3, NOW + 4 * 3600, NOW + 61) }) });
+    expect(alt.plain).toContain("5h 3%");
+    expect(fuenfDatei(alt)).toEqual(fenster(3, NOW + 4 * 3600));
+  });
+
+  it("used_percentage ohne Zahl: wie 43d, kein Absturz", () => {
+    const r = lauf(E5(5000, 30), {
+      usage: usage({ five_hour: fenster(null, R5, NOW - 10) }),
+      sitzungen: vorige(vorher(5000, NOW - 20)),
+    });
+    expect(r.plain).toContain("5h 30%");
+    // Datei 5h 30; die Datei ist jünger (NOW - 10 gegen NOW - 20), ihre Zeit kommt mit
+    expect(fuenfDatei(r)).toEqual(fenster(30, R5, NOW - 10));
+  });
+
+  it("schreibgeschützter Sitzungsordner mit alter Datei: unbekannt", () => {
+    const r = lauf(E5(2000, 10), {
+      usage: usage({ five_hour: fenster(40, R5) }),
+      sitzungen: vorige(vorher(1000, NOW - 600)),
+      sitzungenGesperrt: true,
+    });
+    // ganze Zeile: kein Absturz; ein bekannter Stempel aus der alten Datei ließe die 10 gewinnen
+    expect(r.plain).toBe("Opus 5.5 │ 82k (41%) │ 5h 40% · noch 1:00");
+  });
+
+  it("Verteiltag: Datei aus 43d ohne observed_at, bekannte tiefere Beobachtung löst den hängenden Wert ab", () => {
+    const r = lauf(eingabe({ sessionId: UUID, api: 1_060_000, limits: { week: { pct: 2, resets: RW } } }), {
+      usage: usage({ seven_day: fenster(99, RW) }),
+      sitzungen: vorige(vorher(1_000_000, NOW - 900)),
+    });
+    expect(r.zeilen[1]).toContain(" 2% ");
+    expect(wocheDatei(r).observed_at).toBe(NOW - 60);
+  });
+
+  // Gegenrichtungen und Schutzzweige: Fällt eine dieser Prüfungen im Skript weg, wird hier ein Test rot.
+  it("Regel 1 (keine usage.json): das eigene Fenster trägt api_at als observed_at", () => {
+    // fehlt die Datei nach einem Planwechsel, hält erst der Stempel den neuen Wert gegen ruhige Tabs
+    const r = lauf(E5(2000, 10), { sitzungen: vorige(vorher(1000, NOW - 200)) });
+    expect(fuenfDatei(r)).toEqual(fenster(10, R5, NOW - 1));
+  });
+
+  it("Regel 2 (eigenes Fenster fehlt): das Fenster der Datei behält sein observed_at", () => {
+    const r = lauf(E5(2000, 30), {
+      usage: usage({ seven_day: fenster(50, RW, NOW - 40) }),
+      sitzungen: vorige(vorher(1000, NOW - 200)),
+    });
+    expect(wocheDatei(r)).toEqual(fenster(50, RW, NOW - 40));
+  });
+
+  it("eigenes used_percentage ohne Zahl, eigene Seite jünger: der Wert der Datei, kein Rückfall", () => {
+    const r = lauf(roh({ cost: { total_api_duration_ms: 2000 }, rate_limits: { five_hour: fenster(null, R5) } }), {
+      usage: usage({ five_hour: fenster(30, R5, NOW - 100) }),
+      sitzungen: vorige(vorher(1000, NOW - 200)),
+    });
+    expect(r.plain).toContain("5h 30%");
+    expect(fuenfDatei(r)).toEqual(fenster(30, R5, NOW - 1));
+  });
+
+  it("Gegenrichtung: jüngere Datei genau DROP_MIN (2) Punkte tiefer löst den höheren eigenen Wert ab", () => {
+    const r = lauf(E5(5000, 16), {
+      usage: usage({ five_hour: fenster(14, R5, NOW - 10) }),
+      sitzungen: vorige(vorher(5000, NOW - 60)),
+    });
+    expect(r.plain).toContain("5h 14%");
+    expect(fuenfDatei(r)).toEqual(fenster(14, R5, NOW - 10));
+  });
+
+  it("observed_at 0 in der Datei gilt als unbekannt (Zahl größer 0)", () => {
+    // ohne vorige Sitzungsdatei sind dann beide unbekannt: der höhere Wert, ohne observed_at
+    const r = lauf(E5(5000, 40), { usage: usage({ five_hour: fenster(15, R5, 0) }) });
+    expect(r.plain).toContain("5h 40%");
+    expect(fuenfDatei(r)).toEqual(fenster(40, R5));
+  });
+
+  it("Merker als String: unbekannt, die Sitzungsdatei wird trotzdem geschrieben", () => {
+    // ohne Typprüfung bräche "5000" - 1000 den Sitzungs-jq, und die vorige Datei bliebe stehen
+    const r = lauf(roh({ cost: { total_api_duration_ms: "5000" } }), { sitzungen: vorige(vorher(1000, NOW - 50)) });
+    expect(sitzung(r).written_at).toBe(NOW);
+    expect(sitzung(r).api_ms).toBeNull();
+    expect(sitzung(r).api_at).toBeNull();
+  });
+
+  it("cost ist kein Objekt: kein Merker, die Sitzungsdatei wird trotzdem geschrieben", () => {
+    const r = lauf(roh({ cost: 5 }), { sitzungen: vorige(vorher(1000, NOW - 50)) });
+    expect(sitzung(r).written_at).toBe(NOW);
+    expect(sitzung(r).api_ms).toBeNull();
+    expect(sitzung(r).api_at).toBeNull();
+  });
+
+  it("mv der Sitzungsdatei scheitert: unbekannt, kein temporärer Rest", () => {
+    // mv-Attrappe wie die jq-Attrappe im jq-Zähler; sie scheitert nur für Ziele */sessions/*.json
+    const bin = temp();
+    const echtes = spawnSync("bash", ["-c", "command -v mv"], { encoding: "utf8" }).stdout.trim();
+    writeFileSync(join(bin, "mv"), `#!/bin/bash\nfor a in "$@"; do case "$a" in */sessions/*.json) exit 1 ;; esac; done\nexec "${echtes}" "$@"\n`);
+    chmodSync(join(bin, "mv"), 0o755);
+    const r = lauf(E5(2000, 10), {
+      usage: usage({ five_hour: fenster(40, R5) }),
+      sitzungen: vorige(vorher(1000, NOW - 600)),
+      pfadVorn: bin,
+    });
+    // ein bekannter Stempel (NOW - 1) ließe die 10 als jüngere Seite gewinnen
+    expect(r.plain).toContain("5h 40%");
+    // die vorige Datei bleibt unverändert, die temporäre ist entfernt
+    expect(readdirSync(join(r.dir, "sessions"))).toEqual([`${UUID}.json`]);
+    expect(sitzung(r).api_ms).toBe(1000);
+  });
+
+  it("Merker +1600 ms ohne vorigen Stempel: der Zuwachs zählt in ganzen Sekunden, abgerundet (NOW - 1)", () => {
+    // 1,6 s Zuwachs: abgerundet 1 s, gerundet wären es 2 s; ohne gültiges voriges api_at greift die Klemme nicht
+    const r = lauf(eingabe({ sessionId: UUID, api: 2600 }), { sitzungen: vorige(vorher(1000, null)) });
+    expect(sitzung(r).api_at).toBe(NOW - 1);
+  });
+
+  it("vorige Sitzungsdatei über 4096 Byte, sonst gültig (etwa ein langer Modellname): unbekannt, die Datei wird neu geschrieben", () => {
+    // session_id bleibt das erste Feld, die Datei hat über 5000 Byte; ganz gelesen gälte sie, und api_at wäre NOW - 4
+    const r = lauf(eingabe({ sessionId: UUID, api: 5000 }), {
+      sitzungen: vorige({ ...vorher(1000, NOW - 50), model: "x".repeat(5000) }),
+    });
+    expect(sitzung(r).written_at).toBe(NOW);
+    expect(sitzung(r).model).toBe("Opus 5.5");
+    expect(sitzung(r).api_ms).toBe(5000);
+    expect(sitzung(r).api_at).toBeNull();
+  });
+
+  it("Regel 3 (Fenster der Datei neuer): es behält sein observed_at, auch gegen eine jüngere eigene Zeit", () => {
+    // eigene Seite NOW - 1 (Merker +1000 ms), ihr Fenster ist aber abgelaufen; nach Regel 3 trägt das gewählte
+    // Fenster seine eigene Zeit, nicht die späteste beider Seiten
+    const r = lauf(E5(2000, 80, NOW - 60), {
+      usage: usage({ five_hour: fenster(3, NOW + 4 * 3600, NOW - 40) }),
+      sitzungen: vorige(vorher(1000, NOW - 200)),
+    });
+    expect(r.plain).toContain("5h 3% · noch 4:00");
+    expect(fuenfDatei(r)).toEqual(fenster(3, NOW + 4 * 3600, NOW - 40));
+  });
+
+  it("Gleichstand im selben Fenster ohne jüngere Seite: das eigene Fenster gilt, auch für die Restzeit", () => {
+    // gleicher Merker: die eigene Seite behält ihren Stempel NOW - 10, die Datei trägt dieselbe Zeit;
+    // resets_at liegen 100 s auseinander (unter WINDOW_SLACK)
+    const r = lauf(E5(5000, 30), {
+      usage: usage({ five_hour: fenster(30, R5 - 100, NOW - 10) }),
+      sitzungen: vorige(vorher(5000, NOW - 10)),
+    });
+    expect(r.plain).toContain("5h 30% · noch 1:00");
+    expect(fuenfDatei(r)).toEqual(fenster(30, R5, NOW - 10));
+    // beide unbekannt (keine vorige Sitzungsdatei, kein observed_at): ebenso das eigene Fenster
+    const unbekannt = lauf(E5(5000, 30), { usage: usage({ five_hour: fenster(30, R5 - 100) }) });
+    expect(unbekannt.plain).toContain("5h 30% · noch 1:00");
+    expect(fuenfDatei(unbekannt)).toEqual(fenster(30, R5));
   });
 });

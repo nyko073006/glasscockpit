@@ -59,11 +59,12 @@ export function renderChecksumsModule(c: NativeChecksums): string {
       const zeilen = Object.entries(c[ziel]).map(([p, h]) => `    ${JSON.stringify(p)}: ${JSON.stringify(h)},`);
       return `  ${JSON.stringify(ziel)}: {\n${zeilen.join("\n")}\n  },`;
     });
+  const typ = PTY_TARGETS.map((ziel) => JSON.stringify(ziel)).join(" | ");
   return `// ERZEUGT mit npm run native-checksums aus node_modules/node-pty (1.1.0), nicht von Hand ändern.
 // Pfad relativ zu native/<ziel>/ -> SHA256 jeder Datei, exakt so, wie copyNodePty sie anlegt (scripts/lib/native-copy.ts).
 // Fest im Plugin und keine Einstellung: Diese Summen entscheiden, ob ein Download als node-pty gilt (src/core/native-verify.ts).
 // Der Wächter-Test test/native-checksums.test.ts wird rot, wenn node-pty oder copyNodePty sich ändern.
-export const NATIVE_CHECKSUMS: Readonly<Record<"darwin-arm64" | "darwin-x64", Readonly<Record<string, string>>>> = {
+export const NATIVE_CHECKSUMS: Readonly<Record<${typ}, Readonly<Record<string, string>>>> = {
 ${ziele.join("\n")}
 };
 `;

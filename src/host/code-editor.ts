@@ -12,7 +12,8 @@ import { yaml } from "@codemirror/legacy-modes/mode/yaml";
 import type { Extension } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import type * as HighlightModule from "@lezer/highlight";
-import { KEYWORDS, type LanguageId, languageForPath } from "../core/code-languages";
+import { KEYWORDS, type LanguageId, isMarkdownPath, languageForPath } from "../core/code-languages";
+import { MD_TOKEN, markdownParser, parseCommands } from "../core/markdown-mode";
 
 // Datei-Viewer als kleiner Code-Editor (Abend 32): Sprachmodi aus den mitgepackten legacy-modes, Farben und Vorschläge über
 // Obsidians Laufzeit-Pakete (@codemirror/language, @codemirror/autocomplete, @lezer/highlight; im Build extern).
@@ -120,7 +121,8 @@ function highlighting(m: CodeModules): Extension {
  */
 interface Made {
   colors?: Extension;
-  languages: Map<LanguageId, Extension>;
+  /** Sprachen: Schlüssel die Sprach-ID, für Markdown "md:" + Befehlsliste (die Liste steckt im Parser). */
+  languages: Map<string, Extension>;
 }
 const madeFor = new WeakMap<object, Made>();
 
@@ -133,6 +135,23 @@ function cached(m: CodeModules): Made {
 export interface CodeEditorOptions {
   /** Liste öffnet beim Tippen von selbst (Einstellung fileViewerAutocomplete); Ctrl+Leertaste öffnet sie immer. */
   autocomplete: boolean;
+  /** .md-Dateien färben (Einstellung fileViewerMarkdown, Nachtrag 43b). */
+  markdown: boolean;
+  /** Leerraum-getrennte Befehlsliste für Text in Backticks (Einstellung fileViewerMdCommands). */
+  mdCommands: string;
+}
+
+/**
+ * Token-Namen des Markdown-Modus auf lezer-Tags. Obsidians Fork macht aus jedem Namen die Klasse "cm-" + Name (gemessen in
+ * Obsidian 1.14.5), Upstream-CodeMirror warnt bei Namen ohne Eintrag hier ("Unknown highlighting tag"). Beide brauchen die Tabelle.
+ */
+function markdownTokenTable(m: CodeModules): Record<string, HighlightModule.Tag> {
+  const t = m.highlight.tags;
+  return {
+    [MD_TOKEN.text]: t.content, [MD_TOKEN.code]: t.monospace, [MD_TOKEN.command]: t.monospace, [MD_TOKEN.heading]: t.heading,
+    [MD_TOKEN.link]: t.link, [MD_TOKEN.marker]: t.processingInstruction, [MD_TOKEN.frontmatter]: t.meta,
+    [MD_TOKEN.strong]: t.strong, [MD_TOKEN.em]: t.emphasis,
+  };
 }
 
 /** Sprachmodus, Farben und Vorschläge für den Pfad; ohne bekannte Sprache nur Wortvorschläge, ohne Module nichts. */
@@ -140,7 +159,8 @@ export function codeExtensions(path: string, opts: CodeEditorOptions, mods: Code
   if (!mods) return [];
   const id = languageForPath(path);
   const { autocompletion, completeAnyWord, completeFromList } = mods.autocomplete;
-  const keywords = id ? KEYWORDS[id] : [];
+  const markdown = opts.markdown && isMarkdownPath(path);
+  const keywords = id ? KEYWORDS[id] : []; // Markdown hat keine Sprach-ID, also keine Schlüsselwörter
   const known = new Set(keywords);
   // CodeMirror entdoppelt nur bei gleichem type (Datei-Wörter "text", Schlüsselwörter "keyword"): Die Wortquelle lässt die
   // Schlüsselwörter der Sprache weg, das Schlüsselwort bleibt. Synchron, damit sich am Zustand "pending" nichts ändert.
@@ -152,8 +172,16 @@ export function codeExtensions(path: string, opts: CodeEditorOptions, mods: Code
   if (id) sources.push(completeFromList(keywords.map((label) => ({ label, type: "keyword" }))));
   // autocompletion bringt die Tasten selbst mit (Ctrl+Leertaste, Enter, Pfeile, Esc; defaultKeymap: true).
   const completion = autocompletion({ override: sources, activateOnTyping: opts.autocomplete });
-  if (!id) return [completion];
   const c = cached(mods);
+  if (markdown) {
+    const key = `md:${opts.mdCommands}`;
+    let lang = c.languages.get(key);
+    if (!lang) {
+      c.languages.set(key, lang = mods.language.StreamLanguage.define({ ...markdownParser(parseCommands(opts.mdCommands)), tokenTable: markdownTokenTable(mods) }));
+    }
+    return [lang, c.colors ??= highlighting(mods), completion];
+  }
+  if (!id) return [completion];
   let lang = c.languages.get(id);
   if (!lang) c.languages.set(id, lang = mods.language.StreamLanguage.define(MODES[id]));
   return [lang, c.colors ??= highlighting(mods), completion];

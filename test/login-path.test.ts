@@ -10,7 +10,9 @@ import {
   mergePath,
   parseMarked,
   parseMarkedPath,
+  windowsFixedPaths,
 } from "../src/core/login-path";
+import { ON_WINDOWS } from "./helpers/platform";
 
 const marked = (path: string) => `${PATH_MARK_START}${path}${PATH_MARK_END}`;
 
@@ -86,7 +88,8 @@ describe("loginShellScript", () => {
     expect(parseMarkedPath(script)).toBeNull();
   });
 
-  it("von sh ausgeführt, liefert es PATH und LANG zwischen den Markern", () => {
+  // Windows: führt loginShellScript in /bin/sh aus (Inventur H15)
+  it.skipIf(ON_WINDOWS)("von sh ausgeführt, liefert es PATH und LANG zwischen den Markern", () => {
     const stdout = execFileSync("/bin/sh", ["-c", loginShellScript()], {
       env: { PATH: "/p/eins:/usr/bin:/bin", LANG: "de_DE.UTF-8" },
       encoding: "utf8",
@@ -95,8 +98,34 @@ describe("loginShellScript", () => {
     expect(parseMarked(stdout, LANG_MARK_START, LANG_MARK_END)).toBe("de_DE.UTF-8");
   });
 
-  it("ohne LANG: leerer Wert zwischen den LANG-Markern", () => {
+  // Windows: führt loginShellScript in /bin/sh aus (Inventur H15)
+  it.skipIf(ON_WINDOWS)("ohne LANG: leerer Wert zwischen den LANG-Markern", () => {
     const stdout = execFileSync("/bin/sh", ["-c", loginShellScript()], { env: { PATH: "/usr/bin:/bin" }, encoding: "utf8" });
     expect(parseMarked(stdout, LANG_MARK_START, LANG_MARK_END)).toBe("");
+  });
+});
+
+describe("Abend 41 (1): windowsFixedPaths", () => {
+  const ENV = {
+    USERPROFILE: "C:\\Users\\x",
+    LOCALAPPDATA: "C:\\Users\\x\\AppData\\Local",
+    APPDATA: "C:\\Users\\x\\AppData\\Roaming",
+  };
+
+  it("drei Ordner in der Reihenfolge der Spec", () => {
+    expect(windowsFixedPaths(ENV)).toEqual([
+      "C:\\Users\\x\\.local\\bin",
+      "C:\\Users\\x\\AppData\\Local\\Microsoft\\WinGet\\Links",
+      "C:\\Users\\x\\AppData\\Roaming\\npm",
+    ]);
+  });
+
+  it("fehlende oder leere Variable: Eintrag entfällt", () => {
+    expect(windowsFixedPaths({ ...ENV, APPDATA: undefined })).toEqual([
+      "C:\\Users\\x\\.local\\bin",
+      "C:\\Users\\x\\AppData\\Local\\Microsoft\\WinGet\\Links",
+    ]);
+    expect(windowsFixedPaths({ ...ENV, USERPROFILE: "" })).toHaveLength(2);
+    expect(windowsFixedPaths({})).toEqual([]);
   });
 });

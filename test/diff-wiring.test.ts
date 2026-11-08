@@ -129,7 +129,7 @@ describe("Ansicht und Aufmerksamkeit", () => {
     expect(tabs).toMatch(/this\.existing\(req\) \?\? this\.app\.workspace\.getLeaf\("tab"\)/);
   });
   it("ein neuer Diff markiert die Sitzung als Frage (Zuordnung über die pid, wie bei at_mentioned)", () => {
-    expect(bridge).toMatch(/sessionForClient\(client, this\.deps\.sessions\(\), parentPid\)/);
+    expect(bridge).toMatch(/sessionForClient\(client, this\.deps\.sessions\(\), this\.parentOf\)/);
     expect(read("src/host/ide-diff.ts")).toMatch(/deps\.attention\(req\.clientId\)/);
     expect(read("src/main.ts")).toMatch(/attention: \(id\) => this\.viewsOf\(id\)\[0\]\?\.signalAttention\("question"\)/);
     expect(read("src/host/terminal-view.ts")).toMatch(/signalAttention\(signal: AttentionSignal\): void \{\s*this\.onAttention\(signal\);/);
@@ -159,5 +159,20 @@ describe("Ansicht und Aufmerksamkeit", () => {
     // Keine Klasse ohne Präfix: jede cls-Angabe läuft über c(...), außer Obsidians mod-cta.
     const cls = [...view.matchAll(/cls: ([^,}]+)/g)].map((m) => m[1]);
     for (const wert of cls) expect(wert).toMatch(/c\(|mod-cta/);
+  });
+});
+
+describe("Plattform in der IDE-Brücke (Abend 42)", () => {
+  const bridge = read("src/host/ide-bridge.ts");
+  it("main.ts reicht die Plattform an die Brücke", () => {
+    expect(read("src/main.ts")).toMatch(/new IdeBridge\(this, this\.app, \{\s+settings: [^\n]*\n\s+platform,/);
+  });
+  it("die Brücke reicht sie an Editor, Server und Diff-Ansicht", () => {
+    expect(bridge).toMatch(/new IdeEditor\([^;]*deps\.platform\)/);
+    expect(bridge).toMatch(/new IdeServer\(\{[\s\S]*?\bplatform: deps\.platform,/);
+    expect(bridge).toMatch(/new DiffView\(leaf, \{[\s\S]*?\bplatform: this\.deps\.platform/);
+  });
+  it("der Server legt die Plattform in den DispatchContext", () => {
+    expect(read("src/host/ide-server.ts")).toMatch(/dispatchRequest\(msg, \{[^}]*platform: this\.deps\.platform/);
   });
 });

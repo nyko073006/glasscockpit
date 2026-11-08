@@ -24,7 +24,7 @@ describe("Abend 18 Signale: Verdrahtung (Host nur per Textprüfung, echte Wirkun
     expect(view).toMatch(/this\.deps\.adoptClaudeId\(id, next\)/);
     expect(view).toMatch(/this\.refreshTitle\(\);\s*this\.syncReader\(\);/);
     // Abend 19b: statt bar.clear() zeichnet renderBar([]) die Leiste ohne die alten Blöcke, der feste Handoff-Knopf bleibt.
-    expect(view).toMatch(/this\.reader = new TranscriptReader\(next\);\s*this\.readerId = next;\s*(this\.resetOpenTasks\(\);\s*)?this\.renderBar\(\[\]\);/);
+    expect(view).toMatch(/this\.reader = new TranscriptReader\(next, undefined, undefined, hostPlatform\(\)\);\s*this\.readerId = next;\s*(this\.resetOpenTasks\(\);\s*)?this\.renderBar\(\[\]\);/);
     expect(main).toMatch(/adoptClaudeId: \(sessionId, claudeId\) => store\.setClaudeSessionId\(sessionId, claudeId\)/);
   });
   it("angesehen: überall, wo die Markierung fällt", () => {

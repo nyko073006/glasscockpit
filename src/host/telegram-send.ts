@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { requestUrl } from "obsidian";
 import { TELEGRAM_TIMEOUT_MS } from "../core/constants";
+import type { Platform } from "../core/platform-path";
 import { type CockpitSettings, expandHome } from "../core/settings";
 import { type SendResult, describeResponse, redactToken, resolveCredentials } from "../core/telegram";
 
@@ -14,8 +15,8 @@ async function readOrNull(path: string): Promise<string | null> {
  * Sendet einen Text per sendMessage. Token und Chat-ID werden bei jedem Aufruf frisch aus den Dateien gelesen,
  * nie zwischengespeichert, nie in Einstellungen oder data.json. Jede Ausgabe läuft durch redactToken.
  */
-export async function sendTelegram(text: string, s: CockpitSettings, home: string): Promise<SendResult> {
-  const envPath = expandHome(s.telegramEnvFile, home);
+export async function sendTelegram(text: string, s: CockpitSettings, home: string, platform: Platform): Promise<SendResult> {
+  const envPath = expandHome(s.telegramEnvFile, home, platform);
   const [envText, accessText] = await Promise.all([readOrNull(envPath), readOrNull(join(dirname(envPath), "access.json"))]);
   const cred = resolveCredentials(envText, accessText, s.telegramChatId);
   if (!cred.ok) return cred;

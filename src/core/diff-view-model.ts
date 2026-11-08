@@ -1,5 +1,6 @@
 // Diff-Ansicht (Abend 17): Was die Ansicht zeigt, rein gerechnet: Zusammenfassung, Hinweise, Hunks (begrenzt), Pfade.
 import { type Hunk, diffLines, hunks } from "./line-diff";
+import { type Platform, lastSegment, relativeInside } from "./platform-path";
 
 /** Feste Technik-Grenze: Mehr Zeilen malt die Ansicht nicht (das DOM wird sonst zäh); Annehmen übernimmt trotzdem alles. */
 export const MAX_RENDER_ROWS = 2000;
@@ -50,15 +51,16 @@ export function buildDiffView(oldText: string | null, newText: string, context =
   return { summary, notes, hunks: shown, hiddenRows, binary: false };
 }
 
-/** Im Vault relativ zum Vault, sonst der absolute Pfad. */
-export function displayPath(path: string, vaultBase: string | null): string {
+/** Im Vault relativ zum Vault (mit "/"), sonst der absolute Pfad. Unter win32 ohne Rücksicht auf Schreibweise und Trenner. */
+export function displayPath(path: string, vaultBase: string | null, platform: Platform = "darwin"): string {
+  if (platform === "win32") return (vaultBase ? relativeInside(platform, vaultBase, path) : null) || path;
   const base = vaultBase?.replace(/\/+$/, "") ?? "";
   return base !== "" && path.startsWith(`${base}/`) ? path.slice(base.length + 1) : path;
 }
 
 /** Tab-Titel in Obsidian: Der Name von Claude (mit Sitzungs-Kürzel und Symbolen) ist zu lang, der Dateiname genügt. */
-export function diffTabTitle(newFilePath: string): string {
-  return `Diff: ${newFilePath.slice(newFilePath.lastIndexOf("/") + 1)}`;
+export function diffTabTitle(newFilePath: string, platform: Platform = "darwin"): string {
+  return `Diff: ${platform === "win32" ? lastSegment(platform, newFilePath) : newFilePath.slice(newFilePath.lastIndexOf("/") + 1)}`;
 }
 
 export const hunkHeader = (h: Hunk): string => `@@ −${h.oldStart},${h.oldCount} +${h.newStart},${h.newCount} @@`;

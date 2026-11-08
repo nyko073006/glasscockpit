@@ -45,7 +45,7 @@ describe("Abend 38: Pfade mit Leerzeichen verkabelt", () => {
 
   it("ohne Einstellung gibt es weder Anführungs-Kandidaten noch Verlängerung noch Ordnerprüfung", () => {
     const collect = code(method(source, "private collect("));
-    expect(collect).toMatch(/const candidates = mode \? candidatesWithQuotes\(line\.text\) : pathCandidates\(line\.text\)\.slice\(0, MAX_CANDIDATES\);/);
+    expect(collect).toMatch(/const candidates = mode \? candidatesWithQuotes\(line\.text, platform\) : pathCandidates\(line\.text, platform\)\.slice\(0, MAX_CANDIDATES\);/);
     expect(collect).toMatch(/if \(mode\) this\.extend\(line, links, mode\);/);
     expect(source.split("this.deps.isDir").length - 1).toBe(1); // nur in extend
   });

@@ -1,3 +1,5 @@
+import type { Platform } from "./platform-path";
+
 // Eigener Namensraum, damit das Original-Plugin parallel laufen kann (Festlegung vom 04.10.2026).
 export const PLUGIN_ID = "glasscockpit";
 export const VIEW_TYPE_TERMINAL = `${PLUGIN_ID}-terminal`;
@@ -10,6 +12,10 @@ export const TERMINAL_LINE_HEIGHT = 1.25;
 export const TERMINAL_FONT_FAMILY = "Monaco, Menlo, monospace";
 // Option bleibt Option: Option+L tippt auf der deutschen Mac-Tastatur das @.
 export const TERMINAL_MAC_OPTION_IS_META = false;
+// Unter Windows Cascadia Mono (Windows Terminal), Rückfall Consolas.
+export function terminalFontFamily(platform: Platform): string {
+  return platform === "win32" ? '"Cascadia Mono", Consolas, monospace' : TERMINAL_FONT_FAMILY;
+}
 
 // Shell (Abend 3).
 export const SHELL_FALLBACK = "/bin/zsh";
@@ -63,6 +69,11 @@ export const DEFAULT_MARK_TAB = true;
 export const DEFAULT_ALERT_SOUND = true;
 export const DEFAULT_ALERT_BANNER = true;
 export const DEFAULT_SOUND_FILE = "/System/Library/Sounds/Glass.aiff";
+/** Windows-Ton (Abend 43): Systemton unter <SystemRoot>\Media. Ohne SystemRoot gilt C:\Windows. */
+export function windowsSoundFile(systemRoot: string): string {
+  const root = systemRoot.replace(/[\\/]+$/, "") || "C:\\Windows";
+  return `${root}\\Media\\Windows Notify System Generic.wav`;
+}
 export const DEFAULT_ALERT_GAP_MS = 3000;
 // Stille Zwischenstände (Abend 28): Solange Agents, Workflows oder Hintergrund-Befehle laufen, meldet ein Antwortende nichts (Fragen
 // immer). Ein Start ohne Fertig-Meldung zählt nach DEFAULT_QUIET_MAX_AGE_MIN Minuten nicht mehr als laufend, damit eine verlorene
@@ -79,11 +90,16 @@ export const DEFAULT_FONT_SIZE = 13;
 export const DEFAULT_SCROLLBACK = 5000;
 /** Mindestkontrast (WCAG-Verhältnis) im Terminal; 1 = aus. Claude Code schickt Text fest weiß, im hellen Theme unsichtbar. */
 export const DEFAULT_MIN_CONTRAST = 4.5;
+/** Schatten am aktiven Tab im hellen Theme (Nachtrag 41c): dort heben sich die Tabs sonst kaum ab. */
+export const DEFAULT_TAB_SHADOW = true;
+/** Body-Klasse, an der das CSS des Tab-Schattens hängt. */
+export const TAB_SHADOW_CLASS = `${CSS_PREFIX}tab-shadow`;
 /** Sekunden, nach denen ein macOS-Banner sich selbst schließt (sonst stapeln sie sich in der Mitteilungszentrale). */
 export const DEFAULT_BANNER_SECONDS = 6;
 // Beenden mit Eskalation: SIGHUP sofort, lebt der Prozess nach dieser Zeit noch, folgt SIGKILL. Technik-Invariante,
 // keine Einstellung: Gemessen am 05.10.2026 endet claude auf SIGHUP in unter 1 s; die Frist deckt nur Prozesse ab,
 // die SIGHUP ignorieren oder gerade beschäftigt sind. Eine längere Frist hält Neu starten nur unnötig auf.
+// Unter Windows (Abend 41) gilt dieselbe Frist: pty.kill() ohne Signal sofort, danach taskkill /T /F.
 export const KILL_ESCALATION_MS = 2000;
 
 // Launcher (Abend 8).
@@ -126,6 +142,14 @@ export const DASHBOARD_LAYOUTS = ["cockpit", "list"] as const;
 // (`VIEW_CROP` in core/cockpit-panels), full = das ganze Bild.
 export const DEFAULT_COCKPIT_CROP = "crop";
 export const COCKPIT_CROPS = ["crop", "full"] as const;
+// Reihenfolge der Projektordner in „Neue Sitzung“ (Nachtrag Abend 40a), Einstellung „Reihenfolge in „Neue Sitzung““ (Abschnitt „Sitzungen“):
+// recent = jüngste Claude-Unterhaltung zuerst, nie benutzte alphabetisch darunter; alpha = alphabetisch wie bisher.
+export const DEFAULT_NEW_SESSION_ORDER = "recent";
+export const NEW_SESSION_ORDERS = ["recent", "alpha"] as const;
+// Ausgeblendete Ordner in „Neue Sitzung“ (Nachtrag Abend 41), Einstellung „Ausgeblendete Ordner“ (Abschnitt „Sitzungen“): Namen von
+// Unterordnern des Projektordners, mit Komma getrennt, ohne Rücksicht auf Groß- und Kleinschreibung; leer = alle zeigen.
+// Vorgabe: der Sammelordner der Worktrees (`~/Developer/worktrees`), der kein Projekt ist.
+export const DEFAULT_HIDDEN_PROJECT_DIRS = "worktrees";
 
 // Telegram (Abend 11). Nach außen gehende Nachrichten nur nach ausdrücklichem Einschalten.
 export const DEFAULT_TELEGRAM_ON_DONE = false;
@@ -141,6 +165,9 @@ export const TELEGRAM_TIMEOUT_MS = 10000;
 // fängt eine falsche oder bösartige Antwort ab, bevor sie auf die Platte geschrieben wird.
 export const NATIVE_DOWNLOAD_TIMEOUT_MS = 120000;
 export const NATIVE_DOWNLOAD_MAX_BYTES = 20 * 1024 * 1024;
+// Windows-Lader (Abend 40): ab diesem Build nimmt node-pty ConPTY, darunter fiele es auf winpty zurück, das nicht mitkommt
+// (windowsPtyAgent.js:38). Technik-Invariante des Pakets, keine Einstellung. 18309 ist Windows 10 Version 1903.
+export const WINDOWS_MIN_BUILD = 18309;
 
 // Usage-Karte (Abend 12). Abstand zwischen zwei Lesevorgängen (Schnappschuss und Transkripte), nur bei sichtbarem Dashboard.
 export const DEFAULT_USAGE_POLL_SEC = 60;
@@ -164,6 +191,11 @@ export const DEFAULT_IDE_DIFF = false;
 // Datei-Viewer (Abend 27): Pfade im Terminal per Cmd+Klick öffnen; Höchstgröße in MB, darüber ein Hinweis statt Inhalt.
 export const DEFAULT_FILE_LINKS = true;
 export const DEFAULT_FILE_VIEWER_MAX_MB = 2;
+// Datei-Viewer lesbar (Nachtrag 41d): Startgröße des Fensters in Prozent des Obsidian-Fensters (mittig) und Startschrift in px;
+// gelesen beim Öffnen. Zoom, Ziehen und Größe ändern nur das offene Fenster, nicht diese Werte.
+export const DEFAULT_FILE_VIEWER_WIDTH_PCT = 90;
+export const DEFAULT_FILE_VIEWER_HEIGHT_PCT = 90;
+export const DEFAULT_FILE_VIEWER_FONT_SIZE = 14;
 // Relative Pfade über Claudes Ordner (Abend 27b): an heißt, ein relativer Pfad, der im Startordner keine Datei ist, wird auch in den
 // Ordnern aus Claudes Werkzeugaufrufen dieser Sitzung gesucht (bei mehreren Treffern der Ordner, in dem Claude zuletzt gearbeitet hat).
 export const DEFAULT_FILE_LINKS_CLAUDE_DIRS = true;
@@ -175,6 +207,16 @@ export const DEFAULT_FILE_LINKS_SPACES = true;
 export const DEFAULT_CLEAR_LINK = true;
 // Datei-Viewer als Code-Editor (Abend 32): Die Vorschlagsliste öffnet beim Tippen von selbst; aus heißt nur per Ctrl+Leertaste.
 export const DEFAULT_FILE_VIEWER_AUTOCOMPLETE = true;
+// Markdown-Farben im Datei-Viewer (Nachtrag 43b): .md-Dateien werden gefärbt (Text, Code, Befehle, Überschriften, Links, Marker,
+// Frontmatter); der Text bleibt Rohtext. Die Farben stehen im CSS (hell und dunkel), die Einstellung überschreibt sie je Teil.
+// Text in Backticks, der mit einem dieser Wörter beginnt (oder mit $ oder ./), gilt als Befehl, sonst als Code.
+export const DEFAULT_FILE_VIEWER_MARKDOWN = true;
+export const DEFAULT_FILE_VIEWER_MD_COMMANDS =
+  "npm npx node git gh cd ls cat grep rg find mkdir rm mv cp curl brew claude obsidian codex agy python python3 pip make sed awk open ssh chmod echo export source xcodebuild swift";
+// Bilder im Datei-Viewer (Nachtrag 43c): an heißt, png, jpg, gif, webp, svg, bmp und ico zeigt das Fenster als Bild (eingepasst, zoombar);
+// aus heißt Hinweis und Knopf „Mit Standardprogramm öffnen“. Größere Bilder als die Höchstgröße (MB) zeigt es nicht, nur Hinweis und Knopf.
+export const DEFAULT_FILE_VIEWER_IMAGES = true;
+export const DEFAULT_FILE_VIEWER_IMAGE_MAX_MB = 20;
 // So viele Pfade aus Werkzeugaufrufen merkt sich ein Transkript-Leser (die ältesten fallen zuerst raus) und so viele Basisordner
 // (die Pfade selbst und ihre Elternordner, neueste zuerst) gibt er heraus; jeder Basisordner kostet ein statSync je Kandidat.
 export const MAX_TOOL_PATHS = 32;
@@ -225,9 +267,9 @@ export const DEFAULT_CONTEXT_HANDOFF = 175000;
 // wirklich etwas passiert ist. Geht über thresholds.json an den Stop-Hook, der das clearable-Banner zeigt.
 export const DEFAULT_CLEARABLE_MIN_CONTEXT_PCT = 10;
 export const DEFAULT_CLEARABLE_MIN_PROMPTS = 2;
-// Output-Tokens je Tag: Median und p90 aus „Output-Kennzahlen.md“ (gemessen am 03.10.2026).
-export const DEFAULT_TOKENS_DAY_MEDIAN = 340000;
-export const DEFAULT_TOKENS_DAY_P90 = 870000;
+// Output-Tokens je Tag (Haupt- und Sub-Agents): Median und p90 aus „Output-Kennzahlen.md“ (76 aktive Tage, gemessen am 21.10.2026).
+export const DEFAULT_TOKENS_DAY_MEDIAN = 800000;
+export const DEFAULT_TOKENS_DAY_P90 = 4500000;
 export const DEFAULT_FOCUS_HEADING = "Heute dran";
 // Leer = nicht eingerichtet (Abend 21): inboxDir, indexFile, dailyDir.
 export const DEFAULT_INBOX_DIR = "";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyDependencies, DEFAULT_SETTINGS, dependencyReason, expandHome, invalidMessage, normalizeSetting, parseNumberInput, parseSettings, validateSetting } from "../src/core/settings";
-import { COCKPIT_CROPS, DEFAULT_COCKPIT_CROP, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF } from "../src/core/constants";
+import { COCKPIT_CROPS, DEFAULT_COCKPIT_CROP, DEFAULT_HIDDEN_PROJECT_DIRS, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF } from "../src/core/constants";
 
 describe("parseSettings", () => {
   it("trimmt Textwerte beim Laden", () => {
@@ -98,6 +98,16 @@ describe("expandHome", () => {
     expect(expandHome("~", "/h")).toBe("/h");
     expect(expandHome("/a", "/h")).toBe("/a");
     expect(expandHome("~x/y", "/h")).toBe("~x/y");
+  });
+  it("win32: ~\\x und ~/x werden zu Backslash-Pfaden unter Home", () => {
+    expect(expandHome("~\\Dev", "C:\\Users\\x", "win32")).toBe("C:\\Users\\x\\Dev");
+    expect(expandHome("~/Dev", "C:\\Users\\x", "win32")).toBe("C:\\Users\\x\\Dev");
+    expect(expandHome("~", "C:\\Users\\x", "win32")).toBe("C:\\Users\\x");
+    expect(expandHome("D:\\a", "C:\\Users\\x", "win32")).toBe("D:\\a");
+  });
+  it("darwin mit und ohne Angabe: Backslash nach ~ zählt nicht", () => {
+    expect(expandHome("~\\Dev", "/h")).toBe("~\\Dev");
+    expect(expandHome("~/Dev", "/h", "darwin")).toBe("/h/Dev");
   });
 });
 
@@ -432,7 +442,7 @@ describe("ideDiff braucht ideBridge (06.10.2026)", () => {
 describe("Einstellungen Cockpit füllen (Abend 18)", () => {
   it("Vorgaben", () => {
     expect(DEFAULT_SETTINGS).toMatchObject({
-      contextWarn: 150000, contextHandoff: 175000, tokensDayMedian: 340000, tokensDayP90: 870000,
+      contextWarn: 150000, contextHandoff: 175000, tokensDayMedian: 800000, tokensDayP90: 4500000,
       focusHeading: "Heute dran", inboxDir: "", indexFile: "", lintAfterDays: 7, dailyDir: "",
       nextEffort: "aus", radars: [], lintCommand: "",
     });
@@ -462,10 +472,10 @@ describe("Einstellungen Cockpit füllen (Abend 18)", () => {
     }
   });
   it("median >= p90 beim Laden: beide auf die Vorgabe", () => {
-    for (const [m, p] of [[900000, 870000], [870000, 870000]]) {
+    for (const [m, p] of [[5000000, 4500000], [4500000, 4500000]]) {
       const r = parseSettings({ tokensDayMedian: m, tokensDayP90: p });
-      expect(r.settings.tokensDayMedian).toBe(340000);
-      expect(r.settings.tokensDayP90).toBe(870000);
+      expect(r.settings.tokensDayMedian).toBe(800000);
+      expect(r.settings.tokensDayP90).toBe(4500000);
     }
   });
   it("gültige Paare bleiben, auch knapp darunter", () => {
@@ -493,10 +503,10 @@ describe("Einstellungen Cockpit füllen (Abend 18)", () => {
     expect(dependencyReason(s, "contextWarn", 174999)).toBeNull();
     expect(dependencyReason(s, "contextHandoff", 150000)).toBe("muss über der Warn-Schwelle liegen");
     expect(dependencyReason(s, "contextHandoff", 150001)).toBeNull();
-    expect(dependencyReason(s, "tokensDayMedian", 870000)).toBe("muss unter dem p90 liegen");
-    expect(dependencyReason(s, "tokensDayMedian", 869999)).toBeNull();
-    expect(dependencyReason(s, "tokensDayP90", 340000)).toBe("muss über dem Median liegen");
-    expect(dependencyReason(s, "tokensDayP90", 340001)).toBeNull();
+    expect(dependencyReason(s, "tokensDayMedian", 4500000)).toBe("muss unter dem p90 liegen");
+    expect(dependencyReason(s, "tokensDayMedian", 4499999)).toBeNull();
+    expect(dependencyReason(s, "tokensDayP90", 800000)).toBe("muss über dem Median liegen");
+    expect(dependencyReason(s, "tokensDayP90", 800001)).toBeNull();
   });
   it("Ordner und Datei wie briefingsDir und tasksFile", () => {
     expect(parseSettings({ inboxDir: " /Eingang/ ", dailyDir: "Tage/" }).settings).toMatchObject({ inboxDir: "Eingang", dailyDir: "Tage" });
@@ -628,5 +638,64 @@ describe("Stille Zwischenstände (Abend 28)", () => {
       expect(r.settings.quietMaxAgeMin, String(unsinn)).toBe(60);
       expect(r.invalid, String(unsinn)).toEqual(["quietMaxAgeMin"]);
     }
+  });
+});
+
+describe("newSessionOrder (Nachtrag 40a)", () => {
+  it("Vorgabe recent (zuletzt benutzt)", () => {
+    expect(DEFAULT_SETTINGS.newSessionOrder).toBe("recent");
+    expect(parseSettings(undefined).settings.newSessionOrder).toBe("recent");
+  });
+  it("recent und alpha sind gültig, alles andere nicht", () => {
+    expect(validateSetting("newSessionOrder", "recent")).toBeNull();
+    expect(validateSetting("newSessionOrder", "alpha")).toBeNull();
+    for (const v of ["zuletzt", "", true, undefined]) expect(validateSetting("newSessionOrder", v), String(v)).toBe("recent oder alpha");
+  });
+  it("beim Laden bleibt alpha erhalten, Ungültiges fällt auf die Vorgabe und wird gemeldet", () => {
+    expect(parseSettings({ newSessionOrder: "alpha" }).settings.newSessionOrder).toBe("alpha");
+    const r = parseSettings({ newSessionOrder: "x" });
+    expect(r.settings.newSessionOrder).toBe("recent");
+    expect(r.invalid).toEqual(["newSessionOrder"]);
+  });
+});
+
+describe("windowsShell (Abend 41)", () => {
+  it("Vorgabe leer (automatisch)", () => {
+    expect(DEFAULT_SETTINGS.windowsShell).toBe("");
+    expect(parseSettings(undefined).settings.windowsShell).toBe("");
+  });
+  it("Text ist gültig, alles andere nicht", () => {
+    expect(validateSetting("windowsShell", "")).toBeNull();
+    expect(validateSetting("windowsShell", "D:\\tools\\nu.exe")).toBeNull();
+    for (const v of [1, true, undefined, null]) expect(validateSetting("windowsShell", v), String(v)).toBe("muss Text sein");
+  });
+  it("beim Laden bleibt der Wert erhalten, getrimmt", () => {
+    expect(parseSettings({ windowsShell: "  D:\\tools\\nu.exe " }).settings.windowsShell).toBe("D:\\tools\\nu.exe");
+  });
+  it("normalizeSetting trimmt", () => {
+    expect(normalizeSetting("windowsShell", " pwsh.exe\t")).toBe("pwsh.exe");
+  });
+});
+
+describe("hiddenProjectDirs (Nachtrag Abend 41)", () => {
+  it("Vorgabe worktrees", () => {
+    expect(DEFAULT_HIDDEN_PROJECT_DIRS).toBe("worktrees");
+    expect(DEFAULT_SETTINGS.hiddenProjectDirs).toBe("worktrees");
+    expect(parseSettings(undefined).settings.hiddenProjectDirs).toBe("worktrees");
+  });
+  it("Text ist gültig (auch leer), alles andere nicht", () => {
+    expect(validateSetting("hiddenProjectDirs", "")).toBeNull();
+    expect(validateSetting("hiddenProjectDirs", "worktrees, tmp")).toBeNull();
+    for (const v of [1, true, undefined, null]) expect(validateSetting("hiddenProjectDirs", v), String(v)).toBe("muss Text sein");
+  });
+  it("beim Laden bleibt leer leer (nicht die Vorgabe), Wert getrimmt, Ungültiges fällt auf die Vorgabe", () => {
+    expect(parseSettings({ hiddenProjectDirs: "" }).settings.hiddenProjectDirs).toBe("");
+    expect(parseSettings({ hiddenProjectDirs: "  a, b " }).settings.hiddenProjectDirs).toBe("a, b");
+    const r = parseSettings({ hiddenProjectDirs: 5 });
+    expect(r.settings.hiddenProjectDirs).toBe("worktrees");
+    expect(r.invalid).toEqual(["hiddenProjectDirs"]);
+  });
+  it("normalizeSetting trimmt", () => {
+    expect(normalizeSetting("hiddenProjectDirs", " a,b\t")).toBe("a,b");
   });
 });

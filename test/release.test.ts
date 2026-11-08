@@ -7,7 +7,9 @@ import { hashTree } from "../scripts/lib/native-checksums";
 import { packRelease } from "../scripts/lib/release";
 import { NATIVE_CHECKSUMS } from "../src/core/native-checksums";
 import { nativeAssetName, verifyNative } from "../src/core/native-verify";
+import { nativeLayout } from "../src/core/shell";
 import { ROOT } from "./helpers/files";
+import { ON_WINDOWS } from "./helpers/platform";
 
 const PTY = join(ROOT, "node_modules", "node-pty");
 const aufraeumen: string[] = [];
@@ -49,7 +51,8 @@ afterEach(() => {
 });
 
 describe("Abend 25 (2): Release-ZIP", () => {
-  it("heißt <id>-<version>.zip in dist/ und enthält genau <id>/ mit den Pflichtdateien", () => {
+  // Windows: packRelease ruft xattr und zip, der Test unzip (Inventur H18)
+  it.skipIf(ON_WINDOWS)("heißt <id>-<version>.zip in dist/ und enthält genau <id>/ mit den Pflichtdateien", () => {
     const wurzel = fakeWurzel();
     const zip = packRelease({ root: wurzel, ptyQuelle: PTY });
     expect(zip).toBe(join(wurzel, "dist", "glasscockpit-9.9.9.zip"));
@@ -63,21 +66,43 @@ describe("Abend 25 (2): Release-ZIP", () => {
     expect(rest.sort()).toEqual(["LICENSE", "THIRD-PARTY-NOTICES.md", "main.js", "manifest.json", "styles.css"]);
   });
 
-  it("native/ hat genau darwin-arm64 und darwin-x64, ohne Windows, Tests, Maps oder Macken", () => {
+  // Windows: packRelease ruft xattr und zip, der Test unzip (Inventur H18)
+  it.skipIf(ON_WINDOWS)("native/ hat genau die vier Ziele, ohne Tests, Maps, .pdb, winpty oder Macken", () => {
     const zip = packRelease({ root: fakeWurzel(), ptyQuelle: PTY });
     const namen = zipListe(zip).map((e) => e.name);
     const native = namen.filter((n) => n.startsWith("glasscockpit/native/"));
     const ziele = new Set(native.map((n) => n.split("/")[2]).filter(Boolean));
-    expect([...ziele].sort()).toEqual(["darwin-arm64", "darwin-x64"]);
+    expect([...ziele].sort()).toEqual(["darwin-arm64", "darwin-x64", "win32-arm64", "win32-x64"]);
     for (const t of ["darwin-arm64", "darwin-x64"]) {
       for (const d of ["package.json", "lib/index.js", `prebuilds/${t}/pty.node`, `prebuilds/${t}/spawn-helper`]) {
         expect(namen, `${t}/${d}`).toContain(`glasscockpit/native/${t}/${d}`);
       }
     }
-    expect(namen.filter((n) => /win32|\.map$|\.test\.js$|\.DS_Store|__MACOSX|\.pdb$/.test(n))).toEqual([]);
+    for (const t of ["win32-arm64", "win32-x64"]) {
+      for (const d of nativeLayout("win32", t.split("-")[1]).required) {
+        expect(namen, `${t}/${d}`).toContain(`glasscockpit/native/${t}/${d}`);
+      }
+    }
+    expect(namen.filter((n) => /\.map$|\.test\.js$|\.DS_Store|__MACOSX|\.pdb$|winpty/.test(n))).toEqual([]);
+    // Jedes Ziel bringt nur die Prebuilds der eigenen Plattform mit
+    expect(native.filter((n) => /\/darwin-[a-z0-9]+\/prebuilds\/win32-/.test(n) || /\/win32-[a-z0-9]+\/prebuilds\/darwin-/.test(n))).toEqual([]);
   });
 
-  it("pty.node und spawn-helper tragen im ZIP das Ausführrecht (0755), die übrigen Dateien nicht", () => {
+  // Windows: packRelease ruft xattr und zip, der Test unzip (Inventur H18)
+  it.skipIf(ON_WINDOWS)("win32 bekommt im ZIP die Ersatzdatei, darwin das Original", () => {
+    const zip = packRelease({ root: fakeWurzel(), ptyQuelle: PTY });
+    const aus = mkdtempSync(join(tmpdir(), "glasscockpit-unzip-"));
+    aufraeumen.push(aus);
+    execFileSync("unzip", ["-q", zip, "-d", aus]);
+    const lib = (t: string) => readFileSync(join(aus, "glasscockpit", "native", t, "lib", "windowsConoutConnection.js"));
+    const ersatz = readFileSync(join(ROOT, "scripts", "lib", "node-pty-windows", "windowsConoutConnection.js"));
+    const original = readFileSync(join(PTY, "lib", "windowsConoutConnection.js"));
+    for (const t of ["win32-arm64", "win32-x64"]) expect(lib(t).equals(ersatz), t).toBe(true);
+    for (const t of ["darwin-arm64", "darwin-x64"]) expect(lib(t).equals(original), t).toBe(true);
+  });
+
+  // Windows: packRelease ruft xattr und zip, der Test unzip (Inventur H18)
+  it.skipIf(ON_WINDOWS)("pty.node und spawn-helper tragen im ZIP das Ausführrecht (0755), die übrigen Dateien nicht", () => {
     const zip = packRelease({ root: fakeWurzel(), ptyQuelle: PTY });
     const liste = zipListe(zip).filter((e) => !e.rechte.startsWith("d"));
     for (const t of ["darwin-arm64", "darwin-x64"]) {
@@ -91,7 +116,8 @@ describe("Abend 25 (2): Release-ZIP", () => {
     }
   });
 
-  it("entpackt gibt das ZIP dieselben Bytes wie die Quelle", () => {
+  // Windows: packRelease ruft xattr und zip, der Test unzip (Inventur H18)
+  it.skipIf(ON_WINDOWS)("entpackt gibt das ZIP dieselben Bytes wie die Quelle", () => {
     const wurzel = fakeWurzel();
     const zip = packRelease({ root: wurzel, ptyQuelle: PTY });
     const aus = mkdtempSync(join(tmpdir(), "glasscockpit-unzip-"));
@@ -117,7 +143,8 @@ describe("Abend 25 (2): Release-ZIP", () => {
     expect(() => packRelease({ root: wurzel, ptyQuelle: PTY })).toThrow("Version");
   });
 
-  it("ein altes ZIP gleichen Namens wird ersetzt, nicht ergänzt", () => {
+  // Windows: packRelease ruft xattr und zip, der Test unzip (Inventur H18)
+  it.skipIf(ON_WINDOWS)("ein altes ZIP gleichen Namens wird ersetzt, nicht ergänzt", () => {
     const wurzel = fakeWurzel();
     const zip = packRelease({ root: wurzel, ptyQuelle: PTY });
     // Ein Rest im alten Archiv, der im neuen nicht mehr vorkommen darf
@@ -130,8 +157,9 @@ describe("Abend 25 (2): Release-ZIP", () => {
   });
 });
 
-describe("Abend 26 (3): Release-Assets für Store, BRAT und Download", () => {
-  const ZIELE = ["darwin-arm64", "darwin-x64"] as const;
+// Windows: packRelease ruft xattr und zip, die Tests unzip und prüfen Modi (Inventur H18)
+describe.skipIf(ON_WINDOWS)("Abend 26 (3): Release-Assets für Store, BRAT und Download", () => {
+  const ZIELE = ["darwin-arm64", "darwin-x64", "win32-arm64", "win32-x64"] as const;
 
   it("die Dateinamen der Native-ZIPs sind die, die das Plugin herunterlädt", () => {
     const wurzel = fakeWurzel();
@@ -153,8 +181,8 @@ describe("Abend 26 (3): Release-Assets für Store, BRAT und Download", () => {
     const zip = join(wurzel, "dist", `glasscockpit-native-${t}.zip`);
     const dateien = zipListe(zip).filter((e) => !e.rechte.startsWith("d")).map((e) => e.name).sort();
     expect(dateien).toEqual(Object.keys(NATIVE_CHECKSUMS[t]).sort());
-    const fremd = ZIELE.find((z) => z !== t);
-    expect(dateien.filter((n) => n.startsWith("native/") || n.startsWith("/") || n.includes(`prebuilds/${fremd}/`))).toEqual([]);
+    const fremde = ZIELE.filter((z) => z !== t);
+    expect(dateien.filter((n) => n.startsWith("native/") || n.startsWith("/") || fremde.some((f) => n.includes(`prebuilds/${f}/`)))).toEqual([]);
   });
 
   it.each(ZIELE)("%s: pty.node und spawn-helper 0755, die übrigen 0644", (t) => {

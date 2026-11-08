@@ -5,6 +5,7 @@ import type { Duplex } from "node:stream";
 import { join } from "node:path";
 import WebSocket, { WebSocketServer } from "ws";
 import { type IdeClientInfo, parseIdeConnected } from "../core/ide-clients";
+import { type Platform } from "../core/platform-path";
 import { rawDataToString } from "../core/raw-data-text";
 import {
   IDE_AUTH_HEADER, IDE_NAME, IDE_SUBPROTOCOL, type IdeHandlers, authorized, dispatchRequest, lockContent, notification, parseLock,
@@ -20,6 +21,10 @@ export interface IdeServerDeps {
   lockDir: string;
   workspaceFolders: () => string[];
   vaultBase: () => string | null;
+  /** Plattform der Pfade (Abend 42, ab Abend 43 Pflicht). */
+  platform: Platform;
+  /** Vault-Pfade aller Dateien aus Obsidians Liste (Abend 43, nur win32): die Schreibweise einer Datei richtet sich danach. */
+  vaultPaths?: () => readonly string[];
   handlers: IdeHandlers;
   /** pid, die ins Lockfile kommt (die des Cockpits). */
   pid: number;
@@ -224,6 +229,8 @@ export class IdeServer {
         vaultBase: this.deps.vaultBase,
         diffEnabled: this.deps.diffEnabled,
         clientId: client.id,
+        platform: this.deps.platform,
+        vaultPaths: this.deps.vaultPaths,
       });
       if (answer) this.sendTo(client, answer);
     }

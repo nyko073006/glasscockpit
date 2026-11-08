@@ -1,4 +1,5 @@
 // PATH aus der Login-Shell (Abend 5). Ein aus dem Dock gestartetes Obsidian erbt nur einen Minimal-PATH.
+import { joinPath } from "./platform-path";
 
 export const PATH_MARK_START = "__COCKPIT_PATH_START__";
 export const PATH_MARK_END = "__COCKPIT_PATH_END__";
@@ -47,4 +48,16 @@ export function mergePath(login: readonly string[], fixed: readonly string[], cu
 export function loginShellScript(): string {
   return `printf '__COCKPIT_%s_%s__%s__COCKPIT_%s_%s__' PATH START "$PATH" PATH END; ` +
     `printf '__COCKPIT_%s_%s__%s__COCKPIT_%s_%s__' LANG START "$LANG" LANG END`;
+}
+
+/**
+ * Rückfall-Ordner unter Windows, wo Claude Code und npm-Shims liegen. Eine fehlende oder leere Variable
+ * lässt den Eintrag weg. Reihenfolge: Native Installer, WinGet, npm.
+ */
+export function windowsFixedPaths(env: Readonly<Record<string, string | undefined>>): string[] {
+  const dirs: string[] = [];
+  if (env.USERPROFILE) dirs.push(joinPath("win32", env.USERPROFILE, ".local", "bin"));
+  if (env.LOCALAPPDATA) dirs.push(joinPath("win32", env.LOCALAPPDATA, "Microsoft", "WinGet", "Links"));
+  if (env.APPDATA) dirs.push(joinPath("win32", env.APPDATA, "npm"));
+  return dirs;
 }

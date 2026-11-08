@@ -1,4 +1,6 @@
-export type LoadErrorKind = "quarantine" | "spawn-helper" | "abi" | "fehlt" | "unbekannt";
+import type { Platform } from "./platform-path";
+
+export type LoadErrorKind = "quarantine" | "spawn-helper" | "abi" | "blockiert" | "windows-alt" | "fehlt" | "unbekannt";
 
 export interface ClassifiedLoadError {
   kind: LoadErrorKind;
@@ -40,8 +42,22 @@ const KLASSEN: Klasse[] = [
       "die N-API-Prebuilds brauchen keinen Rebuild. Danach npm run deploy.",
   },
   {
+    kind: "blockiert",
+    muster: ["application control policy", "smart app control"],
+    titel: "Windows blockiert conpty.node (Smart App Control oder App-Steuerung)",
+    hinweis:
+      "Smart App Control lässt unsignierte Dateien wie conpty.node nicht zu. " +
+      "In „Windows-Sicherheit“ unter „App- und Browsersteuerung“ prüfen, ob es eingeschaltet ist.",
+  },
+  {
+    kind: "windows-alt",
+    muster: ["mindestens windows 10 version 1903"],
+    titel: "Windows ist zu alt für das Terminal",
+    hinweis: "Glasscockpit braucht Windows 10 ab Version 1903 oder Windows 11.",
+  },
+  {
     kind: "fehlt",
-    muster: ["cannot find module", "no such file"],
+    muster: ["cannot find module", "no such file", "the specified module could not be found"],
     titel: "node-pty fehlt im Plugin-Ordner",
     hinweis:
       "In den Einstellungen von Glasscockpit auf „Binärdateien laden“ klicken und danach die Sitzung neu starten. " +
@@ -49,16 +65,19 @@ const KLASSEN: Klasse[] = [
   },
 ];
 
-const UNBEKANNT = {
-  titel: "node-pty ließ sich nicht laden",
-  hinweis: "Unbekannte Ursache. Die Entwicklerkonsole (Cmd+Option+I) zeigt den vollständigen Fehler.",
-};
+const UNBEKANNT_TITEL = "node-pty ließ sich nicht laden";
+
+// Die Tastenkombination der Entwicklerkonsole hängt an der Plattform.
+const KONSOLE: Record<Platform, string> = { darwin: "Cmd+Option+I", win32: "Strg+Umschalt+I" };
 
 /** Ordnet einen Lade- oder Startfehler von node-pty einer Ursache zu. Reine Funktion. */
-export function classifyLoadError(message: string): ClassifiedLoadError {
+export function classifyLoadError(message: string, platform: Platform): ClassifiedLoadError {
   const klein = message.toLowerCase();
   const klasse = KLASSEN.find((k) => k.muster.some((m) => klein.includes(m)));
-  const { titel, hinweis } = klasse ?? UNBEKANNT;
+  const { titel, hinweis } = klasse ?? {
+    titel: UNBEKANNT_TITEL,
+    hinweis: `Unbekannte Ursache. Die Entwicklerkonsole (${KONSOLE[platform]}) zeigt den vollständigen Fehler.`,
+  };
   return {
     kind: klasse?.kind ?? "unbekannt",
     message: `${titel}.\n${message}\nHinweis: ${hinweis}`,

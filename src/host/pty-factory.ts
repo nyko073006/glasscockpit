@@ -1,4 +1,6 @@
+import type { Platform } from "../core/platform-path";
 import type { PtyLike, SessionSpec } from "../core/session-manager";
+import { ptyPlatformOptions } from "../core/shell";
 import type { LoadResult, NativeLoader, PtyModule } from "./native-loader";
 
 /**
@@ -7,10 +9,12 @@ import type { LoadResult, NativeLoader, PtyModule } from "./native-loader";
  */
 export class NodePtyFactory {
   private readonly loader: NativeLoader;
+  private readonly platform: Platform | null;
   private pty: PtyModule | null = null;
 
-  constructor(loader: NativeLoader) {
+  constructor(loader: NativeLoader, platform: Platform | null) {
     this.loader = loader;
+    this.platform = platform;
   }
 
   async prepare(): Promise<LoadResult> {
@@ -27,6 +31,7 @@ export class NodePtyFactory {
       rows: spec.rows,
       cwd: spec.cwd,
       env: spec.env,
+      ...ptyPlatformOptions(this.platform),
     });
   }
 }

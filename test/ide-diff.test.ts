@@ -68,3 +68,27 @@ describe("Antworten", () => {
     expect(openDiffResult("rejected", "geheim").content).toHaveLength(1);
   });
 });
+
+describe("parseOpenDiffArgs unter Windows (Abend 42)", () => {
+  const win = { ...ok, old_file_path: "C:\\x\\a.md", new_file_path: "C:\\x\\a.md" };
+  it("nimmt Laufwerks- und UNC-Pfade, auch mit Schrägstrichen", () => {
+    expect(parseOpenDiffArgs(win, "win32")).toMatchObject({ ok: true, args: { oldFilePath: "C:\\x\\a.md", newFilePath: "C:\\x\\a.md" } });
+    expect(parseOpenDiffArgs({ ...win, new_file_path: "c:/x/a.md" }, "win32").ok).toBe(true);
+    expect(parseOpenDiffArgs({ ...win, new_file_path: "\\\\srv\\share\\a.md" }, "win32").ok).toBe(true);
+  });
+  it("lehnt relative Pfade ab, mit dem Fehler des Macs", () => {
+    const r = parseOpenDiffArgs({ ...win, new_file_path: "a.md" }, "win32");
+    expect(r).toEqual({ ok: false, reason: "new_file_path muss ein absoluter Pfad sein" });
+    expect(parseOpenDiffArgs({ ...win, old_file_path: "x\\a.md" }, "win32").ok).toBe(false);
+    expect(parseOpenDiffArgs({ ...win, new_file_path: "C:a.md" }, "win32").ok).toBe(false);
+    expect(parseOpenDiffArgs({ ...win, new_file_path: "\\a.md" }, "win32").ok).toBe(false);
+  });
+  it("NUL im Pfad bleibt abgelehnt", () => {
+    expect(parseOpenDiffArgs({ ...win, new_file_path: "C:\\x\\a\0.md" }, "win32").ok).toBe(false);
+  });
+  it("darwin (Vorgabe): ein Windows-Pfad ist dort nicht absolut, ein POSIX-Pfad unter win32 auch nicht", () => {
+    expect(parseOpenDiffArgs(win).ok).toBe(false);
+    expect(parseOpenDiffArgs(ok, "win32").ok).toBe(false);
+    expect(parseOpenDiffArgs(ok, "darwin").ok).toBe(true);
+  });
+});

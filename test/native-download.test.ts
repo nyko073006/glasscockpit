@@ -1,14 +1,15 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { hashTree } from "../scripts/lib/native-checksums";
 import { copyNodePty } from "../scripts/lib/native-copy";
 import { packRelease } from "../scripts/lib/release";
-import { type DownloadDeps, defaultExtract, downloadNative, nativeInstalled } from "../src/host/native-download";
+import { type CleanupFs, type DownloadDeps, defaultExtract, downloadNative, nativeInstalled, windowsExtract } from "../src/host/native-download";
 import { nativeAssetUrl } from "../src/core/native-verify";
 import { ROOT } from "./helpers/files";
+import { ON_WINDOWS } from "./helpers/platform";
 
 const PTY = join(ROOT, "node_modules", "node-pty");
 const T = "darwin-arm64";
@@ -50,7 +51,7 @@ function deps(aendere?: Aenderung, extra: Partial<DownloadDeps> = {}) {
       const quelle = temp("quelle");
       copyNodePty(PTY, quelle);
       mkdirSync(ziel, { recursive: true });
-      execFileSync("cp", ["-Rp", `${join(quelle, T)}/.`, ziel]);
+      cpSync(join(quelle, T), ziel, { recursive: true });
       aufrufe.entpackt.push(ziel);
       aendere?.(ziel);
     },
@@ -65,7 +66,8 @@ const OPT = (plugin: string) => ({ pluginDir: plugin, platform: "darwin", arch: 
 const PTYNODE = `prebuilds/${T}/pty.node`;
 
 describe("Abend 26 (4): downloadNative, Erfolg", () => {
-  it("lädt die feste Adresse, ersetzt native/darwin-arm64 vollständig, setzt 0755, räumt auf", async () => {
+  // Windows: Test prüft den POSIX-Modus 0o755 (Inventur H19)
+  it.skipIf(ON_WINDOWS)("lädt die feste Adresse, ersetzt native/darwin-arm64 vollständig, setzt 0755, räumt auf", async () => {
     const plugin = pluginMitAltemNative();
     const { d, aufrufe } = deps();
     const r = await downloadNative(OPT(plugin), d);
@@ -118,7 +120,8 @@ describe("Abend 26 (4): downloadNative, Pflicht-Gegentests (native/ bleibt unver
     expect(grund).toContain("zusatz.js");
   });
 
-  it("(c) Symlink statt Datei", async () => {
+  // Windows: Symlink anlegen braucht Rechte (Inventur H19)
+  it.skipIf(ON_WINDOWS)("(c) Symlink statt Datei", async () => {
     const grund = await scheitert((z) => {
       rmSync(join(z, PTYNODE));
       symlinkSync("/usr/bin/true", join(z, PTYNODE));
@@ -126,7 +129,8 @@ describe("Abend 26 (4): downloadNative, Pflicht-Gegentests (native/ bleibt unver
     expect(grund).toContain("Symlink");
   });
 
-  it("(c) Symlink auf einen Ordner außerhalb", async () => {
+  // Windows: Symlink anlegen braucht Rechte (Inventur H19)
+  it.skipIf(ON_WINDOWS)("(c) Symlink auf einen Ordner außerhalb", async () => {
     await scheitert((z) => symlinkSync(tmpdir(), join(z, "raus")));
   });
 
@@ -189,7 +193,8 @@ describe("Abend 26 (4): downloadNative, Pflicht-Gegentests (native/ bleibt unver
   });
 });
 
-describe("Abend 26 (4): echtes Entpacken mit ditto", () => {
+// Windows: echtes defaultExtract (ditto, unzip), packRelease (zip), python3, POSIX-Modus (Inventur H19)
+describe.skipIf(ON_WINDOWS)("Abend 26 (4): echtes Entpacken mit ditto", () => {
   function echtesZip(): string {
     const wurzel = temp("wurzel");
     mkdirSync(join(wurzel, "build"));
@@ -230,6 +235,124 @@ describe("Abend 26 (4): echtes Entpacken mit ditto", () => {
     const dir = temp("kaputt");
     writeFileSync(join(dir, "x.zip"), "kein zip");
     await expect(defaultExtract(join(dir, "x.zip"), join(dir, "ziel"))).rejects.toThrow();
+  });
+});
+
+describe("Abend 40 (3): windowsExtract", () => {
+  const TAR = "C:\\W\\System32\\tar.exe";
+  type Aufruf = [string, string[]];
+  function fakeRun(listing: string) {
+    const aufrufe: Aufruf[] = [];
+    const run = async (datei: string, args: string[]): Promise<string> => {
+      aufrufe.push([datei, args]);
+      return args[0] === "-t" ? listing : "";
+    };
+    return { run, aufrufe };
+  }
+
+  it("listet zuerst (tar.exe unter System32), legt den Zielordner an und entpackt dann", async () => {
+    const dir = temp("win");
+    const zip = join(dir, "native.zip");
+    const dest = join(dir, "entpackt");
+    const { run, aufrufe } = fakeRun("lib/\r\nlib/index.js\r\nprebuilds/win32-x64/conpty.node\r\n");
+    await windowsExtract(zip, dest, "C:\\W", run);
+    expect(aufrufe).toEqual([
+      [TAR, ["-t", "-f", zip]],
+      [TAR, ["-x", "-f", zip, "-C", dest]],
+    ]);
+    expect(existsSync(dest)).toBe(true); // mkdir lief vor dem Entpacken
+  });
+
+  it("ein Pfad nach außen im Listing wirft vor jedem Schreiben: nur ein Aufruf, kein Zielordner", async () => {
+    for (const boese of ["../x", "/abs", "C:\\x", "./lib/index.js", "C:/Windows/x", "C:x", "lib/index.js:s"]) {
+      const dir = temp("win");
+      const zip = join(dir, "native.zip");
+      const dest = join(dir, "entpackt");
+      const { run, aufrufe } = fakeRun(`lib/index.js\r\n${boese}\r\n`);
+      await expect(windowsExtract(zip, dest, "C:\\W", run), boese).rejects.toThrow("Unzulässiger Pfad im ZIP");
+      expect(aufrufe, boese).toEqual([[TAR, ["-t", "-f", zip]]]);
+      expect(existsSync(dest), boese).toBe(false);
+    }
+  });
+
+  it("scheitert das Listing selbst, kommt der Fehler weiter und nichts wird angelegt oder entpackt", async () => {
+    const dir = temp("win");
+    const dest = join(dir, "entpackt");
+    const aufrufe: string[][] = [];
+    const run = async (_datei: string, args: string[]): Promise<string> => {
+      aufrufe.push(args);
+      throw new Error("tar kaputt");
+    };
+    await expect(windowsExtract(join(dir, "native.zip"), dest, "C:\\W", run)).rejects.toThrow("tar kaputt");
+    expect(aufrufe.length).toBe(1);
+    expect(existsSync(dest)).toBe(false);
+  });
+
+  it("ohne SystemRoot (leer oder fehlend) gilt C:\\Windows, nie ein Aufruf über PATH", async () => {
+    // Der Fall „fehlend“ greift auf den Vorgabewert process.env.SystemRoot zurück; der Test entfernt ihn, damit ein echter Wert
+    // (unter Windows gesetzt) das Ergebnis nicht bestimmt.
+    const echt = process.env.SystemRoot;
+    delete process.env.SystemRoot;
+    try {
+      for (const wurzel of [undefined, ""]) {
+        const dir = temp("win");
+        const { run, aufrufe } = fakeRun("lib/\n");
+        await windowsExtract(join(dir, "a.zip"), join(dir, "ziel"), wurzel, run);
+        expect(aufrufe.map(([datei]) => datei)).toEqual(["C:\\Windows\\System32\\tar.exe", "C:\\Windows\\System32\\tar.exe"]);
+      }
+    } finally {
+      if (echt !== undefined) process.env.SystemRoot = echt;
+    }
+  });
+});
+
+describe("Abend 40 (3): downloadNative räumt über removeUnlessLoaded auf", () => {
+  it("bleibt eine .node-Datei in Benutzung, bleibt der Temp-Ordner liegen, der Tausch steht und das Ergebnis ist ok", async () => {
+    const plugin = pluginMitAltemNative();
+    const aufrufe: string[] = [];
+    const cleanup: CleanupFs = {
+      files: async (dir) => {
+        aufrufe.push(`files ${dir}`);
+        return [join(dir, "alt", "geladen.node")];
+      },
+      unlink: async (datei) => {
+        aufrufe.push(`unlink ${datei}`);
+        throw Object.assign(new Error("EPERM"), { code: "EPERM" });
+      },
+      rmTree: async (dir) => {
+        aufrufe.push(`rmTree ${dir}`);
+      },
+      list: async () => [],
+    };
+    const { d } = deps(undefined, { cleanup });
+    const r = await downloadNative(OPT(plugin), d);
+    expect(r.ok).toBe(true);
+    expect(existsSync(join(plugin, "native", T, "alt.txt"))).toBe(false); // getauscht
+    const reste = readdirSync(plugin).filter((n) => n.startsWith(".native-download-"));
+    expect(reste.length).toBe(1);
+    const tempDir = join(plugin, reste[0]);
+    expect(aufrufe).toEqual([`files ${tempDir}`, `unlink ${join(tempDir, "alt", "geladen.node")}`]);
+    expect(existsSync(join(tempDir, "alt", "alt.txt"))).toBe(true); // das alte Paket liegt unversehrt in alt/
+  });
+
+  it("auch bei einem Fehler vor dem Tausch geht das Aufräumen über die Abhängigkeit", async () => {
+    const plugin = pluginMitAltemNative();
+    const aufrufe: string[] = [];
+    const cleanup: CleanupFs = {
+      files: async (dir) => {
+        aufrufe.push(`files ${dir}`);
+        return [];
+      },
+      unlink: async () => {},
+      rmTree: async (dir) => {
+        aufrufe.push(`rmTree ${dir}`);
+      },
+      list: async () => [],
+    };
+    const { d } = deps(undefined, { cleanup, fetchBytes: async () => ({ status: 404, bytes: new Uint8Array() }) });
+    const r = await downloadNative(OPT(plugin), d);
+    expect(r.ok).toBe(false);
+    expect(aufrufe.map((a) => a.split(" ")[0])).toEqual(["files", "rmTree"]);
   });
 });
 

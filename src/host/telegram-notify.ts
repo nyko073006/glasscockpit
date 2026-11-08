@@ -1,5 +1,6 @@
 import type { AttentionSignal } from "../core/attention";
 import type { SessionRecord } from "../core/session-model";
+import type { Platform } from "../core/platform-path";
 import type { CockpitSettings } from "../core/settings";
 import { redactToken, shouldSend, telegramText } from "../core/telegram";
 import { readIdleSeconds } from "./idle-time";
@@ -9,6 +10,8 @@ export interface TelegramNotifierDeps {
   settings: () => CockpitSettings;
   record: (id: string) => SessionRecord | null;
   home: string;
+  /** Plattform des Rechners (hostPlatform()), für die Home-Kürzung des Ordners und die Leerlaufzeit. */
+  platform: Platform;
   now?: () => number;
 }
 
@@ -25,13 +28,13 @@ export class TelegramNotifier {
     if (!enabled) return;
     const now = this.deps.now ?? Date.now;
     // Messen nur, wenn es etwas entscheidet; die Entscheidung samt Sperre danach in einem Zug (kein await dazwischen).
-    const idleSec = s.telegramIdleMin > 0 ? await readIdleSeconds() : null;
+    const idleSec = s.telegramIdleMin > 0 ? await readIdleSeconds(this.deps.platform) : null;
     const t = now();
     if (!shouldSend({ enabled, idleMin: s.telegramIdleMin, idleSec, lastAt: this.lastAt.get(sessionId) ?? null, now: t, gapMs: s.alertGapMs })) return;
     this.lastAt.set(sessionId, t);
     const record = this.deps.record(sessionId);
-    const text = telegramText(signal, record?.name ?? "Claude", record?.cwd ?? "", this.deps.home);
-    const result = await sendTelegram(text, s, this.deps.home);
+    const text = telegramText(signal, record?.name ?? "Claude", record?.cwd ?? "", this.deps.home, this.deps.platform);
+    const result = await sendTelegram(text, s, this.deps.home, this.deps.platform);
     if (!result.ok) console.warn("Glasscockpit: Telegram nicht gesendet:", redactToken(result.reason, null));
   }
 }

@@ -1,12 +1,14 @@
 // Prüfung des heruntergeladenen node-pty-Pakets (Abend 26). Rein: bekommt die erwartete Liste und das Gefundene,
 // liest selbst nichts. Zusammen mit den festen Summen in native-checksums.ts schützt sie davor, dass ein
 // manipulierter oder kaputter Download in native/ landet.
+// Nur der Typ: Die Release-Skripte laden diese Datei unter Node mit Typ-Entfernung, ein Laufzeit-Import bräuchte dort ".ts".
+import type { Platform } from "./platform-path";
 
 /**
  * Ziele des Downloads; gleich NATIVE_TARGETS in shell.ts (Test prüft die Gleichheit). Eigene Liste, damit
  * die Release-Skripte diese Datei ohne weitere Importe direkt unter Node laden können.
  */
-export const DOWNLOAD_TARGETS = ["darwin-arm64", "darwin-x64"] as const;
+export const DOWNLOAD_TARGETS = ["darwin-arm64", "darwin-x64", "win32-arm64", "win32-x64"] as const;
 
 export type EntryKind = "file" | "symlink" | "dir" | "other";
 
@@ -47,6 +49,36 @@ export function nativeStatusText(installed: boolean, target: string): string {
 export function isSafeRelPath(p: string): boolean {
   if (p === "" || p.startsWith("/") || /[\\\0]/.test(p)) return false;
   return p.split("/").every((s) => s !== "" && s !== "." && s !== "..");
+}
+
+/**
+ * Prüft die Namensliste eines ZIPs (unzip -Z1 auf dem Mac, tar -t unter Windows) vor dem Entpacken: Jeder Name ohne
+ * abschließendes "/" muss ein sicherer relativer Pfad sein, und kein Name darf einen Doppelpunkt enthalten (Laufwerk wie
+ * "C:/Windows/x" oder "C:x", unter NTFS auch ein Datenstrom "datei:s"; die Pakete haben keine solchen Namen, und isSafeRelPath
+ * lässt sie durch). Zeilen trennt "\n" oder "\r\n" (tar.exe schreibt CRLF), leere Zeilen zählen nicht. Liefert den Grund für
+ * den ersten Verstoß, sonst null.
+ */
+export function zipListingProblem(stdout: string): string | null {
+  for (const name of stdout.split(/\r?\n/)) {
+    if (name === "") continue;
+    if (name.includes(":") || !isSafeRelPath(name.replace(/\/$/, ""))) return `Unzulässiger Pfad im ZIP: ${JSON.stringify(name)}`;
+  }
+  return null;
+}
+
+/** Beschreibung unter dem Knopf „Binärdateien laden“, ab „Der Knopf lädt …“; die Statuszeile davor setzt der Aufrufer. */
+export function nativeDownloadHint(platform: Platform, version: string): string {
+  const rechner = platform === "win32" ? "diesen PC" : "diesen Mac";
+  return `Der Knopf lädt einmalig die Dateien für ${rechner} von github.com/nyko073006/glasscockpit (Release ${version}) und prüft sie gegen feste SHA256-Summen im Plugin. Nichts anderes wird geladen.`;
+}
+
+/**
+ * Meldung nach erfolgreichem Download. Unter Windows tauscht der Download sofort; ist node-pty in diesem Obsidian-Lauf
+ * aber schon geladen, bleibt das alte Paket im Speicher und das neue gilt erst nach dem Neustart.
+ */
+export function downloadDoneText(files: number, platform: Platform, alreadyLoaded: boolean): string {
+  if (platform === "win32" && alreadyLoaded) return `Binärdateien geladen (${files} Dateien). Obsidian neu starten, damit sie gelten.`;
+  return `Binärdateien geladen (${files} Dateien). Neue Sitzungen starten jetzt.`;
 }
 
 const SHA256 = /^[0-9a-f]{64}$/;

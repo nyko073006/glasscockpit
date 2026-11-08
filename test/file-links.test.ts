@@ -1,10 +1,11 @@
-import { posix } from "node:path";
+import { posix, win32 } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
-  type BufferLineLike, bufferRowOf, candidatesWithQuotes, cdTargets, type CellRow, exceedsLimit, extendCandidates, isRelativePath, lineSeparatorOf, linkBases,
-  logicalLine, looksBinary, MAX_PATH_PROBES, MAX_PATH_WORDS, mergeRecent, opensOnClick, pathCandidates, ProbeBudget, quotedCandidates, resolveCandidatePath,
-  resolveViaBases, saveDecision, toolPaths, vaultRelative, WORD_SEAM_ROWS, wordLine,
+  type BufferLineLike, bufferRowOf, candidatesWithQuotes, cdTargets, type CellRow, exceedsLimit, extendCandidates, formatBytes, IMAGE_MIME, imageInfo, imageMime, isRelativePath, lineSeparatorOf, linkBases,
+  linkModifierDown, logicalLine, looksBinary, MAX_PATH_PROBES, MAX_PATH_WORDS, mergeRecent, opensOnClick, pathCandidates, plainLeftClick, ProbeBudget,
+  quotedCandidates, resolveCandidatePath, resolveViaBases, saveDecision, toolPaths, vaultRelative, WORD_SEAM_ROWS, wordLine,
 } from "../src/core/file-links";
+import { modKeyName } from "../src/core/keymap";
 
 /** Nur Pfad, Zeile und Spalte; dazu prüft jeder Fall, dass text genau der Ausschnitt start..end ist. */
 const found = (line: string) =>
@@ -144,8 +145,8 @@ describe("Prüfungen", () => {
     expect(saveDecision(1000, null)).toBe("ask");
   });
   it("öffnen nur mit Cmd und linker Taste ohne Ctrl und Alt", () => {
-    const e = (extra: Partial<{ button: number; metaKey: boolean; ctrlKey: boolean; altKey: boolean }> = {}) =>
-      ({ button: 0, metaKey: true, ctrlKey: false, altKey: false, ...extra });
+    const e = (extra: Partial<{ button: number; metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }> = {}) =>
+      ({ button: 0, metaKey: true, ctrlKey: false, altKey: false, shiftKey: false, ...extra });
     expect(opensOnClick(e())).toBe(true);
     expect(opensOnClick(e({ metaKey: false }))).toBe(false);
     // xterm ruft activate bei jedem mouseup auf demselben Link (Linkifier._handleMouseUp), welche Taste auch gedrückt war.
@@ -260,8 +261,8 @@ const has = (...files: string[]) => (p: string) => files.includes(p);
 
 describe("isRelativePath", () => {
   it("relativ ist, was weder mit / noch mit ~ beginnt", () => {
-    expect(["src/main.ts", "./a.md", "../a.md", "package.json"].map(isRelativePath)).toEqual([true, true, true, true]);
-    expect(["/abs/a.md", "~/a.md", "~", "~user/a.md", ""].map(isRelativePath)).toEqual([false, false, false, false, false]);
+    expect(["src/main.ts", "./a.md", "../a.md", "package.json"].map((p) => isRelativePath(p))).toEqual([true, true, true, true]);
+    expect(["/abs/a.md", "~/a.md", "~", "~user/a.md", ""].map((p) => isRelativePath(p))).toEqual([false, false, false, false, false]);
   });
 });
 
@@ -782,5 +783,368 @@ describe("wordLine: logische Zeile mit Wortnähten (Abend 38)", () => {
     const l = wordLine(1, rowsOf(wide, rowW("x", 4)));
     expect(l?.text.trimEnd()).toBe("界 x");
     expect(l?.positions.slice(0, 3)).toEqual([{ x: 1, y: 1 }, { x: 3, y: 1 }, { x: 1, y: 2 }]);
+  });
+});
+
+// Abend 42, Task 2: Windows-Pfade. Die Plattform kommt als Parameter, die Tests laufen auf jedem Rechner; Erwartungen sind Literale.
+describe("Abend 42: resolveCandidatePath und isRelativePath unter win32", () => {
+  const ctx = { home: "C:\\Users\\x", cwd: "C:\\p", platform: "win32" as const };
+  it("Laufwerkspfad bleibt, Schrägstriche werden Backslashes, die Schreibweise des Laufwerks bleibt", () => {
+    expect(resolveCandidatePath("C:\\Users\\x\\a.txt", ctx)).toBe("C:\\Users\\x\\a.txt");
+    expect(resolveCandidatePath("c:/Users/x/a.txt", ctx)).toBe("c:\\Users\\x\\a.txt");
+    expect(resolveCandidatePath("C:\\a\\.\\b\\..\\c.ts", ctx)).toBe("C:\\a\\c.ts");
+  });
+  it("UNC-Pfad bleibt", () => {
+    expect(resolveCandidatePath("\\\\srv\\share\\a.txt", ctx)).toBe("\\\\srv\\share\\a.txt");
+  });
+  it("~ mit Backslash oder Schrägstrich gegen home, ~ allein und ~benutzer sind kein Dateipfad", () => {
+    expect(resolveCandidatePath("~\\a.txt", ctx)).toBe("C:\\Users\\x\\a.txt");
+    expect(resolveCandidatePath("~/b/a.txt", ctx)).toBe("C:\\Users\\x\\b\\a.txt");
+    expect(resolveCandidatePath("~", ctx)).toBeNull();
+    expect(resolveCandidatePath("~fremd\\x.md", ctx)).toBeNull();
+  });
+  it("relativ gegen den Startordner (beide Trenner, ..), ohne absoluten Startordner nichts", () => {
+    expect(resolveCandidatePath("src\\a.ts", ctx)).toBe("C:\\p\\src\\a.ts");
+    expect(resolveCandidatePath("src/a.ts", ctx)).toBe("C:\\p\\src\\a.ts");
+    expect(resolveCandidatePath("..\\b.md", { ...ctx, cwd: "C:\\p\\q" })).toBe("C:\\p\\b.md");
+    expect(resolveCandidatePath("src\\a.ts", { ...ctx, cwd: null })).toBeNull();
+    expect(resolveCandidatePath("src\\a.ts", { ...ctx, cwd: "relativ" })).toBeNull();
+  });
+  it("Startordner mit ~ wird ausgeschrieben", () => {
+    expect(resolveCandidatePath("a.md", { ...ctx, cwd: "~\\repo" })).toBe("C:\\Users\\x\\repo\\a.md");
+    expect(resolveCandidatePath("a.md", { ...ctx, cwd: "~" })).toBe("C:\\Users\\x\\a.md");
+  });
+  it("Gegentest: ohne platform bleibt es der Mac, ein Windows-Pfad ist dort kein absoluter Pfad", () => {
+    expect(resolveCandidatePath("C:\\Users\\x\\a.txt", { home: "/Users/n", cwd: "/Users/n/repo" })).toBe("/Users/n/repo/C:\\Users\\x\\a.txt");
+  });
+  it("isRelativePath", () => {
+    expect(isRelativePath("C:\\x", "win32")).toBe(false);
+    expect(isRelativePath("c:/x", "win32")).toBe(false);
+    expect(isRelativePath("\\\\srv\\share\\a", "win32")).toBe(false);
+    expect(isRelativePath("\\Vault\\a.md", "win32")).toBe(false);
+    expect(isRelativePath("/Vault/a.md", "win32")).toBe(false);
+    expect(isRelativePath("~\\a", "win32")).toBe(false);
+    expect(isRelativePath("src\\a.ts", "win32")).toBe(true);
+    expect(isRelativePath(".\\a.md", "win32")).toBe(true);
+    expect(isRelativePath("", "win32")).toBe(false);
+    expect(isRelativePath("C:\\x")).toBe(true);
+  });
+});
+
+describe("Abend 43: wurzelrelative Pfade im Terminal (win32)", () => {
+  const ctx = { home: "C:\\Users\\x", cwd: "C:\\Vault\\Sub", platform: "win32" as const };
+  it("\\Vault\\a.md und /Vault/a.md gelten am Laufwerk des Startordners, nicht unter ihm", () => {
+    expect(resolveCandidatePath("\\Vault\\a.md", ctx)).toBe("C:\\Vault\\a.md");
+    expect(resolveCandidatePath("/Vault/a.md", ctx)).toBe("C:\\Vault\\a.md");
+    expect(resolveCandidatePath("\\Vault\\a.md", { ...ctx, cwd: "D:\\p" })).toBe("D:\\Vault\\a.md");
+  });
+  it("UNC-Startordner: die Freigabe ist die Wurzel; ohne Startordner oder mit relativem gibt es nichts", () => {
+    expect(resolveCandidatePath("\\x\\a.md", { ...ctx, cwd: "\\\\srv\\share\\V" })).toBe("\\\\srv\\share\\x\\a.md");
+    expect(resolveCandidatePath("\\x\\a.md", { ...ctx, cwd: null })).toBeNull();
+    expect(resolveCandidatePath("\\x\\a.md", { ...ctx, cwd: "relativ" })).toBeNull();
+  });
+  it("C:a.md bleibt abgelehnt, auch mit Startordner auf C:", () => {
+    expect(resolveCandidatePath("C:a.md", ctx)).toBeNull();
+  });
+  it("resolveViaBases hängt Wurzelrelatives nicht mehr an Basisordner", () => {
+    expect(resolveViaBases("\\Vault\\a.md", ["C:\\Vault\\Sub"], () => true, "win32")).toBeNull();
+  });
+  it("doppelter Trenner am Anfang ohne UNC ist weder wurzelrelativ noch relativ noch aufgelöst", () => {
+    for (const p of ["\\\\server", "//server", "\\\\"]) {
+      expect(resolveCandidatePath(p, ctx), p).toBeNull();
+      expect(isRelativePath(p, "win32"), p).toBe(false);
+    }
+  });
+});
+
+describe("Abend 42: Kandidatensuche unter win32", () => {
+  const foundW = (line: string) => pathCandidates(line, "win32").map((c) => {
+    expect(line.slice(c.start, c.end)).toBe(c.text);
+    return [c.text, c.path, c.line, c.col];
+  });
+  it("Fehlerzeile mit Laufwerk, Zeile und Spalte", () => {
+    expect(foundW("Fehler in C:\\Users\\x\\Projekt\\main.ts:12:3")).toEqual([
+      ["C:\\Users\\x\\Projekt\\main.ts:12:3", "C:\\Users\\x\\Projekt\\main.ts", 12, 3],
+    ]);
+  });
+  it("Ordner ohne Punkt ist Kandidat, Satzpunkt hinten ab", () => {
+    expect(foundW("Ordner C:\\Users\\x\\Projekt")).toEqual([["C:\\Users\\x\\Projekt", "C:\\Users\\x\\Projekt", null, null]]);
+    expect(foundW("siehe C:\\Users\\x\\Projekt.")).toEqual([["C:\\Users\\x\\Projekt", "C:\\Users\\x\\Projekt", null, null]]);
+  });
+  it("relativer Pfad mit Backslash, Laufwerk mit Schrägstrichen, @ vorn", () => {
+    expect(foundW("@src\\core\\a.ts")).toEqual([["src\\core\\a.ts", "src\\core\\a.ts", null, null]]);
+    expect(foundW("c:/Users/x/a.md:7")).toEqual([["c:/Users/x/a.md:7", "c:/Users/x/a.md", 7, null]]);
+  });
+  it("Gegentest: URL und Wörter ohne Trenner und Punkt bleiben keine Kandidaten", () => {
+    expect(foundW("https://example.com/a.ts Version")).toEqual([]);
+    expect(foundW("Fehler in Datei")).toEqual([]);
+  });
+  it("Gegentest: Auf dem Mac (Vorgabe) ist ein Ordner mit Backslash und ohne Punkt kein Kandidat, mit Punkt wie bisher", () => {
+    expect(pathCandidates("Ordner C:\\Users\\x\\Projekt")).toEqual([]);
+    expect(pathCandidates("C:\\Users\\x\\main.ts:12:3").map((c) => [c.path, c.line, c.col])).toEqual([["C:\\Users\\x\\main.ts", 12, 3]]);
+  });
+  it("quotedCandidates und candidatesWithQuotes kennen die Plattform", () => {
+    const line = 'Datei "C:\\Mein Ordner\\a b.md:4" offen';
+    expect(quotedCandidates(line, "win32").map((c) => [c.text, c.path, c.line])).toEqual([["C:\\Mein Ordner\\a b.md:4", "C:\\Mein Ordner\\a b.md", 4]]);
+    expect(candidatesWithQuotes(line, "win32").map((c) => c.text)).toContain("C:\\Mein Ordner\\a b.md:4");
+    expect(quotedCandidates('Ordner "C:\\Mein Ordner\\Unter Ordner"', "win32").map((c) => c.path)).toEqual(["C:\\Mein Ordner\\Unter Ordner"]);
+    expect(quotedCandidates('Ordner "C:\\Mein Ordner\\Unter Ordner"')).toEqual([]);
+  });
+});
+
+describe("Abend 42: extendCandidates unter win32", () => {
+  const FULL = "C:\\Users\\Jürgen Müller\\Mein Ordner (alt)\\a #1.md";
+  const dirsW = (...files: string[]): Set<string> => {
+    const dirs = new Set<string>();
+    for (const file of files) for (let d = win32.dirname(file); !dirs.has(d); d = win32.dirname(d)) { dirs.add(d); if (win32.dirname(d) === d) break; }
+    return dirs;
+  };
+  const extendW = (line: string, files: string[], cwd: string | null = "C:\\p", dirs?: string[]) => {
+    const fileSet = new Set(files);
+    const dirSet = dirs ? new Set(dirs) : dirsW(...files);
+    const isFile = vi.fn((p: string) => fileSet.has(p));
+    const isDir = vi.fn((p: string) => dirSet.has(p));
+    const found = extendCandidates(line, { home: "C:\\Users\\x", cwd, isFile, isDir, budget: new ProbeBudget(), platform: "win32" });
+    return { found, isFile, isDir };
+  };
+  it("Leerzeichen, Umlaute, Klammern und # im Pfad: genau dieser Kandidat, wenn nur der ganze Pfad eine Datei ist", () => {
+    const line = `Datei: ${FULL} fertig`;
+    const { found, isFile } = extendW(line, [FULL]);
+    expect(found.map((c) => [c.text, c.abs])).toEqual([[FULL, FULL]]);
+    expect(line.slice(found[0].start, found[0].end)).toBe(FULL);
+    expect(isFile).toHaveBeenCalledWith(FULL);
+  });
+  it("Laufwerkswurzel: Datei direkt unter C:\\ wird über den Ordner C:\\ geprüft", () => {
+    const { found, isDir } = extendW("C:\\Mein Zeug.md", ["C:\\Mein Zeug.md"]);
+    expect(found.map((c) => c.abs)).toEqual(["C:\\Mein Zeug.md"]);
+    expect(isDir).toHaveBeenCalledWith("C:\\");
+  });
+  it("relativ mit Backslash gegen den Startordner, :zeile am Ende", () => {
+    const { found } = extendW("02 Projekte\\x y.md:12 dort", ["C:\\p\\02 Projekte\\x y.md"]);
+    expect(found.map((c) => [c.text, c.abs, c.line])).toEqual([["02 Projekte\\x y.md:12", "C:\\p\\02 Projekte\\x y.md", 12]]);
+  });
+  it("Gegentest: Die Datei gibt es, aber ihr Ordner ist kein Ordner: nur die Ordnerprüfung verhindert den Kandidaten", () => {
+    const { found, isFile } = extendW(`Datei: ${FULL}`, [FULL], "C:\\p", []);
+    expect(found).toEqual([]);
+    expect(isFile).not.toHaveBeenCalledWith(FULL);
+  });
+  it("Auf dem Mac (Vorgabe) steht die Klammer in der Wortlücke: genau dieser Kandidat, abs gleich dem Pfad", () => {
+    const abs = "/Users/u/Mein Ordner (alt)/a #1.md";
+    const fileSet = new Set([abs]);
+    const found = extendCandidates(abs, { home: "/Users/u", cwd: "/", isFile: (p) => fileSet.has(p), isDir: () => true, budget: new ProbeBudget() });
+    expect(found.map((c) => [c.text, c.abs])).toEqual([[abs, abs]]);
+  });
+});
+
+describe("Entscheidung vom 22.10.2026: Klammern in Pfaden mit Leerzeichen auch auf dem Mac", () => {
+  const FULL = "/Users/Jürgen Müller/Mein Ordner (alt)/a #1.md";
+  const dirsM = (...files: string[]): Set<string> => {
+    const dirs = new Set<string>();
+    for (const file of files) for (let d = posix.dirname(file); !dirs.has(d); d = posix.dirname(d)) { dirs.add(d); if (posix.dirname(d) === d) break; }
+    return dirs;
+  };
+  const extendM = (line: string, files: string[], cwd: string | null = "/p", dirs?: string[]) => {
+    const fileSet = new Set(files);
+    const dirSet = dirs ? new Set(dirs) : dirsM(...files);
+    const isFile = vi.fn((p: string) => fileSet.has(p));
+    const isDir = vi.fn((p: string) => dirSet.has(p));
+    const found = extendCandidates(line, { home: "/Users/x", cwd, isFile, isDir, budget: new ProbeBudget() });
+    return { found, isFile, isDir };
+  };
+  it("Leerzeichen, Umlaute, Klammern und # im Pfad: Zeile liefert genau einen Kandidaten", () => {
+    const line = `Datei: ${FULL} fertig`;
+    const { found, isFile } = extendM(line, [FULL]);
+    expect(found.map((c) => [c.text, c.abs])).toEqual([[FULL, FULL]]);
+    expect(line.slice(found[0].start, found[0].end)).toBe(FULL);
+    expect(isFile).toHaveBeenCalledWith(FULL);
+  });
+  it("Gegentest: Die Datei gibt es, aber ihr Ordner ist kein Ordner: nur die Ordnerprüfung verhindert den Kandidaten", () => {
+    const { found, isFile } = extendM(`Datei: ${FULL}`, [FULL], "/p", []);
+    expect(found).toEqual([]);
+    expect(isFile).not.toHaveBeenCalledWith(FULL);
+  });
+  it("Prosa-Klammern machen keinen Fehllink: Klammer um den Pfad liefert keinen Verlängerungs-Kandidaten, eine Klammer dahinter gehört nicht dazu", () => {
+    // Großzügige Dateiprüfung (jeder Pfad auf /a.md ist eine Datei): Nur die Ordnerprüfung vor der Verlängerung hält Fehllinks draußen.
+    const dirs = new Set(["/Users/u", "/Users", "/"]);
+    for (const line of ["(siehe /Users/u/a.md)", "(/Users/u/a.md) und (b.md)"]) {
+      const found = extendCandidates(line, { home: "/Users/x", cwd: "/p", isFile: (p) => p.endsWith("/a.md"), isDir: (p) => dirs.has(p), budget: new ProbeBudget() });
+      expect(found, line).toEqual([]);
+    }
+    const paren = "/Users/u/Mein Ordner (alt)/a.md";
+    const line = `Siehe ${paren}) danach`;
+    const { found } = extendM(line, [paren]);
+    expect(found.map((c) => [c.text, c.abs])).toEqual([[paren, paren]]);
+    expect(line.slice(found[0].start, found[0].end)).toBe(paren);
+  });
+  it("Gegentest: Die Lücke ist höchstens ein Leerzeichen mit Klammern; zwei Leerzeichen, Tab und andere Trenner (| [ \") trennen weiterhin", () => {
+    const ok = "/Users/u/Mein Ordner (alt)/a.md";
+    expect(extendM(`x ${ok}`, [ok]).found.map((c) => c.abs)).toEqual([ok]);
+    // Belegt: Klammern ohne Leerzeichen (`Mein(alt)`) sind ebenfalls eine Lücke, die zwei Wörter verbindet (wie unter win32).
+    const tight = "/Users/u/Mein(alt)/a.md";
+    expect(extendM(`x ${tight}`, [tight]).found.map((c) => c.abs)).toEqual([tight]);
+    // Jede Fassung unten wäre bei erlaubter Lücke ein Treffer, weil die Datei unter dem Namen mit EINEM Leerzeichen und Klammern existiert.
+    const gaps = ["  ", "\t", " | ", " [", " \"", "( )(  )", "(  ", "  )"];
+    for (const gap of gaps) {
+      const real = `/Users/u/Mein${gap}Ordner (alt)/a.md`;
+      expect(extendM(`x ${real}`, [real]).found, JSON.stringify(gap)).toEqual([]);
+    }
+  });
+  it("Probenzahl: Prosa mit Klammern bleibt unter MAX_PATH_PROBES, auch wenn jeder Ordner existierte", () => {
+    const line = "Der Ordner /Users/u/Mein Ordner (alt)/a #1.md (neu) wurde (gestern) mit docs/b.md (heute) angelegt und (dann) kopiert";
+    const count = (dirExists: boolean): number => {
+      let probes = 0;
+      extendCandidates(line, { home: "/Users/u", cwd: "/Users/u/p", isFile: () => { probes++; return false; }, isDir: () => { probes++; return dirExists; }, budget: new ProbeBudget(100000) });
+      return probes;
+    };
+    expect(count(false)).toBeLessThan(30);
+    expect(count(true)).toBeLessThan(MAX_PATH_PROBES);
+  });
+});
+
+describe("Abend 42: Basisordner unter win32", () => {
+  const HOMEW = "C:\\Users\\u";
+  const hasW = (...files: string[]) => (p: string) => files.includes(p);
+  it("linkBases: jeder Pfad und seine Elternordner, neueste zuerst", () => {
+    expect(linkBases(["C:\\Users\\u\\old\\proj\\src", "C:\\Users\\u\\proj\\app\\src"], HOMEW, 64, "win32")).toEqual([
+      "C:\\Users\\u\\proj\\app\\src", "C:\\Users\\u\\proj\\app", "C:\\Users\\u\\proj", "C:\\Users\\u\\old\\proj\\src", "C:\\Users\\u\\old\\proj", "C:\\Users\\u\\old",
+    ]);
+  });
+  it("ohne Dubletten, auch bei anderer Schreibweise", () => {
+    expect(linkBases(["C:\\Users\\u\\proj\\a", "C:\\Users\\u\\proj\\b", "C:\\Users\\u\\proj\\a"], HOMEW, 64, "win32")).toEqual([
+      "C:\\Users\\u\\proj\\a", "C:\\Users\\u\\proj", "C:\\Users\\u\\proj\\b",
+    ]);
+    expect(linkBases(["C:\\Users\\u\\Proj\\a", "c:\\users\\u\\proj\\b"], HOMEW, 64, "win32")).toEqual(["c:\\users\\u\\proj\\b", "c:\\users\\u\\proj", "C:\\Users\\u\\Proj\\a"]);
+  });
+  it("gegentest: nie home, nie ein Vorfahre von home, nie ein Ordner mit weniger als zwei Stufen unter dem Laufwerk", () => {
+    expect(linkBases(["C:\\Users\\u\\proj", HOMEW, "C:\\Users", "C:\\", "C:\\tmp", "C:\\tmp\\x", "D:\\opt\\tools\\bin"], HOMEW, 64, "win32")).toEqual([
+      "D:\\opt\\tools\\bin", "D:\\opt\\tools", "C:\\tmp\\x", "C:\\Users\\u\\proj",
+    ]);
+  });
+  it("home in anderer Schreibweise und mit Backslash am Ende gilt genauso", () => {
+    expect(linkBases(["c:\\users\\u\\proj", "c:\\users\\u"], "C:\\Users\\u\\", 64, "win32")).toEqual(["c:\\users\\u\\proj"]);
+  });
+  it("UNC: die Freigabe zählt nicht als Stufe", () => {
+    expect(linkBases(["\\\\srv\\share\\proj\\app"], HOMEW, 64, "win32")).toEqual(["\\\\srv\\share\\proj\\app"]);
+  });
+  it("höchstens max; relative Pfade sind keine Basisordner", () => {
+    expect(linkBases(["C:\\Users\\u\\proj\\app\\src\\core"], HOMEW, 2, "win32")).toEqual(["C:\\Users\\u\\proj\\app\\src\\core", "C:\\Users\\u\\proj\\app\\src"]);
+    expect(linkBases(["proj\\app", ".\\src"], HOMEW, 64, "win32")).toEqual([]);
+  });
+  it("resolveViaBases: der neueste Ordner gewinnt, beide Trenner", () => {
+    const isFile = hasW("C:\\Users\\u\\proj\\a\\src\\main.ts", "C:\\Users\\u\\proj\\b\\src\\main.ts");
+    expect(resolveViaBases("src\\main.ts", ["C:\\Users\\u\\proj\\a", "C:\\Users\\u\\proj\\b"], isFile, "win32")).toBe("C:\\Users\\u\\proj\\a\\src\\main.ts");
+    expect(resolveViaBases("./src/main.ts", ["C:\\Users\\u\\proj\\b", "C:\\Users\\u\\proj\\a"], isFile, "win32")).toBe("C:\\Users\\u\\proj\\b\\src\\main.ts");
+    expect(resolveViaBases("..\\x.md", ["C:\\r\\a\\b", "C:\\r\\a\\c"], hasW("C:\\r\\a\\x.md"), "win32")).toBe("C:\\r\\a\\x.md");
+  });
+  it("resolveViaBases: absolut, ~ und leer ergeben null, auch wenn es die Datei gäbe", () => {
+    for (const rel of ["C:\\abs\\a.md", "c:/abs/a.md", "~\\a.md", "~", "", "\\\\srv\\share\\a"]) {
+      expect(resolveViaBases(rel, ["C:\\Users\\u\\proj\\a"], () => true, "win32"), rel).toBeNull();
+    }
+  });
+  it("toolPaths: Ordner aus file_path, path und cd-Ziel mit Laufwerk", () => {
+    const paths = [...new Set(toolPaths(jsonl(
+      assistant("C:\\Users\\u\\vault", use("Read", { file_path: "C:\\Users\\u\\proj\\app\\src\\x.ts" })),
+      assistant("C:\\Users\\u\\vault", use("Grep", { pattern: "foo", path: "~\\proj\\lib" })),
+      assistant("C:\\Users\\u\\vault", bash("cd D:\\work\\app\\ && git status")),
+    ), HOMEW, "win32"))];
+    expect(paths).toEqual(["C:\\Users\\u\\proj\\app\\src", "C:\\Users\\u\\proj\\lib", "D:\\work\\app"]);
+  });
+});
+
+describe("Abend 42: vaultRelative unter win32", () => {
+  it("im Vault: relativer Pfad mit Schrägstrichen, Schreibweise und Trenner egal", () => {
+    expect(vaultRelative("C:\\Vault\\Ordner\\a.md", "C:\\VAULT", "win32")).toBe("Ordner/a.md");
+    expect(vaultRelative("c:/vault/Ordner/a.md", "C:\\Vault", "win32")).toBe("Ordner/a.md");
+    expect(vaultRelative("C:\\Vault\\Index.md", "C:\\Vault\\", "win32")).toBe("Index.md");
+  });
+  it("Gegentest: Nachbarordner mit gleichem Anfang, anderes Laufwerk, Vault selbst, kein Vault", () => {
+    expect(vaultRelative("C:\\Vault2\\a.md", "C:\\Vault", "win32")).toBeNull();
+    expect(vaultRelative("D:\\Vault\\a.md", "C:\\Vault", "win32")).toBeNull();
+    expect(vaultRelative("C:\\Vault", "C:\\Vault", "win32")).toBeNull();
+    expect(vaultRelative("C:\\Vault\\", "C:\\Vault", "win32")).toBeNull();
+    expect(vaultRelative("C:\\Vault\\a.md", null, "win32")).toBeNull();
+  });
+  it("Gegentest: Auf dem Mac (Vorgabe) liegt ein Windows-Pfad nie im Vault", () => {
+    expect(vaultRelative("C:\\Vault\\Ordner\\a.md", "C:\\VAULT")).toBeNull();
+    expect(vaultRelative("/V/Notes/a b.md", "/V")).toBe("Notes/a b.md");
+  });
+});
+
+describe("Abend 42: Ctrl+Klick unter Windows", () => {
+  const keys = (extra: Partial<{ button: number; metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }>) => ({ button: 0, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...extra });
+  it("win32: Ctrl+Linksklick öffnet", () => {
+    expect(opensOnClick(keys({ ctrlKey: true }), "win32")).toBe(true);
+  });
+  it("win32: Gegentest: Meta (Windows-Taste) allein, einfacher Klick, Ctrl+Alt (AltGr), andere Tasten öffnen nicht", () => {
+    expect(opensOnClick(keys({ metaKey: true }), "win32")).toBe(false);
+    expect(opensOnClick(keys({}), "win32")).toBe(false);
+    expect(opensOnClick(keys({ ctrlKey: true, altKey: true }), "win32")).toBe(false);
+    expect(opensOnClick(keys({ ctrlKey: true, button: 1 }), "win32")).toBe(false);
+    expect(opensOnClick(keys({ ctrlKey: true, button: 2 }), "win32")).toBe(false);
+  });
+  it("win32 (Abend 43): Ctrl+Shift und Ctrl+Meta öffnen nicht, Ctrl allein schon", () => {
+    expect(opensOnClick(keys({ ctrlKey: true, shiftKey: true }), "win32")).toBe(false);
+    expect(opensOnClick(keys({ ctrlKey: true, metaKey: true }), "win32")).toBe(false);
+    expect(opensOnClick(keys({ ctrlKey: true }), "win32")).toBe(true);
+  });
+  it("darwin (Abend 43): Cmd+Shift öffnet wie bisher (festgeschrieben, der Mac bleibt unverändert)", () => {
+    expect(opensOnClick(keys({ metaKey: true, shiftKey: true }), "darwin")).toBe(true);
+    expect(opensOnClick(keys({ metaKey: true }), "darwin")).toBe(true);
+  });
+  it("darwin unverändert: Cmd öffnet, Ctrl nicht, auch ohne Angabe der Plattform", () => {
+    expect(opensOnClick(keys({ metaKey: true }))).toBe(true);
+    expect(opensOnClick(keys({ metaKey: true }), "darwin")).toBe(true);
+    expect(opensOnClick(keys({ ctrlKey: true }), "darwin")).toBe(false);
+    expect(opensOnClick(keys({ ctrlKey: true }))).toBe(false);
+    expect(opensOnClick(keys({ metaKey: true, ctrlKey: true }), "darwin")).toBe(false);
+    expect(opensOnClick(keys({ metaKey: true, altKey: true }), "darwin")).toBe(false);
+  });
+  it("plainLeftClick bleibt: links ohne Ctrl und Alt", () => {
+    expect(plainLeftClick(keys({}))).toBe(true);
+    expect(plainLeftClick(keys({ ctrlKey: true }))).toBe(false);
+    expect(plainLeftClick(keys({ altKey: true }))).toBe(false);
+    expect(plainLeftClick(keys({ button: 2 }))).toBe(false);
+  });
+  it("linkModifierDown: win32 Ctrl, darwin Cmd", () => {
+    const k = (extra: Partial<{ metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }>) => ({ metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...extra });
+    expect(linkModifierDown(k({ ctrlKey: true }), "win32")).toBe(true);
+    expect(linkModifierDown(k({ metaKey: true }), "win32")).toBe(false);
+    expect(linkModifierDown(k({ metaKey: true }), "darwin")).toBe(true);
+    expect(linkModifierDown(k({ ctrlKey: true }), "darwin")).toBe(false);
+  });
+  it("linkModifierDown (Abend 43): win32 unterstreicht nur bei Ctrl allein, darwin Cmd+Shift wie bisher", () => {
+    const k = (extra: Partial<{ metaKey: boolean; ctrlKey: boolean; altKey: boolean; shiftKey: boolean }>) => ({ metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, ...extra });
+    for (const extra of [{ shiftKey: true }, { altKey: true }, { metaKey: true }]) expect(linkModifierDown(k({ ctrlKey: true, ...extra }), "win32"), JSON.stringify(extra)).toBe(false);
+    expect(linkModifierDown(k({ metaKey: true, shiftKey: true }), "darwin")).toBe(true);
+  });
+  it("vaultRelative (Abend 43): win32 gleicht die Schreibweise an die Dateiliste an, darwin nicht", () => {
+    expect(vaultRelative("c:\\vault\\ORDNER\\a.md", "C:\\Vault", "win32", ["Ordner/a.md"])).toBe("Ordner/a.md");
+    expect(vaultRelative("c:\\vault\\ORDNER\\neu.md", "C:\\Vault", "win32", ["Ordner/a.md"])).toBe("Ordner/neu.md");
+    expect(vaultRelative("c:\\vault\\ORDNER\\a.md", "C:\\Vault", "win32")).toBe("ORDNER/a.md");
+    expect(vaultRelative("/V/ORDNER/a.md", "/V", "darwin", ["Ordner/a.md"])).toBe("ORDNER/a.md");
+  });
+  it("modKeyName", () => {
+    expect(modKeyName("win32")).toBe("Ctrl");
+    expect(modKeyName("darwin")).toBe("Cmd");
+  });
+});
+
+describe("Bildtypen (Nachtrag 43c)", () => {
+  it("imageMime nach Endung", () => {
+    expect(imageMime("/a/hero-375.png")).toBe("image/png");
+    expect(imageMime("C:\\x\\Bild.JPEG")).toBe("image/jpeg");
+    expect(imageMime("/a/b.svg")).toBe("image/svg+xml");
+    for (const p of ["/a/.png", "/a/png", "/a.png/datei", "/a/b.pdf"]) expect(imageMime(p)).toBeNull();
+  });
+  it("genau acht Endungen", () => {
+    expect(Object.keys(IMAGE_MIME).sort()).toEqual(["bmp", "gif", "ico", "jpeg", "jpg", "png", "svg", "webp"]);
+    for (const e of Object.keys(IMAGE_MIME)) expect(imageMime(`/a/b.${e.toUpperCase()}`)).toBe(IMAGE_MIME[e]);
+  });
+  it("formatBytes", () => {
+    expect([0, 1023, 1024, 245760, 1048576, 2516582].map(formatBytes)).toEqual(["0 B", "1023 B", "1 KB", "240 KB", "1 MB", "2,4 MB"]);
+  });
+  it("imageInfo", () => {
+    expect(imageInfo(375, 812, 245760, false)).toBe("375 \u00d7 812 px \u00b7 240 KB");
+    expect(imageInfo(300, 150, 900, true)).toBe("SVG \u00b7 900 B");
   });
 });

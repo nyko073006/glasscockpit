@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Setting, type App, type Plugin } from "obsidian";
+import { Setting, type App } from "obsidian";
 import { DEFAULT_SETTINGS, invalidMessage, type CockpitSettings } from "../src/core/settings";
+import type { Platform } from "../src/core/platform-path";
 import type { SessionStore } from "../src/core/session-store";
+import { hostPlatform } from "../src/host/host-platform";
 import { CockpitSettingTab } from "../src/host/settings-tab";
 import { ROOT } from "./helpers/files";
+import { ON_WINDOWS } from "./helpers/platform";
 
 // Einstellungsseite (Abend 34, Task 4): Zeilen, Reihenfolge und Steuerelemente bleiben beim Umbau von display() auf
 // getSettingDefinitions(). Der Fake zeichnet in ein gemeinsames Protokoll auf; der Snapshot entstand gegen den alten Code.
@@ -18,6 +21,8 @@ const h = vi.hoisted(() => ({
   pluginDirOf: vi.fn((): string | null => null),
   nativeInstalled: vi.fn((): boolean => false),
   downloadNative: vi.fn(),
+  realDownloadDeps: vi.fn((_platform: string) => ({})),
+  loaded: false,
 }));
 
 vi.mock("obsidian", () => {
@@ -114,7 +119,7 @@ vi.mock("obsidian", () => {
   return { PluginSettingTab, Setting, Notice, requestUrl: vi.fn() };
 });
 vi.mock("../src/host/native-download", () => ({ downloadNative: h.downloadNative, nativeInstalled: h.nativeInstalled }));
-vi.mock("../src/host/native-download-fetch", () => ({ pluginDirOf: h.pluginDirOf, REAL_DOWNLOAD_DEPS: {} }));
+vi.mock("../src/host/native-download-fetch", () => ({ pluginDirOf: h.pluginDirOf, realDownloadDeps: h.realDownloadDeps }));
 
 type FakeComp = {
   kind: string; value: unknown; text: string; tooltip: string;
@@ -136,14 +141,14 @@ const store = {
   updateSetting: vi.fn((): { ok: true } | { ok: false; reason: string } => ({ ok: true })),
 };
 
-function makeTab(overrides: Partial<CockpitSettings> = {}): Tab {
+function makeTab(overrides: Partial<CockpitSettings> = {}, platform: Platform = hostPlatform()): Tab {
   current = {
     ...DEFAULT_SETTINGS,
     radars: [{ name: "Alpha", stateFile: "~/a/state.json" }, { name: "Beta", stateFile: "~/b/state.json" }],
     ...overrides,
   };
-  const plugin = { manifest: { version: "9.9.9" } };
-  return new CockpitSettingTab({} as App, plugin as unknown as Plugin, store as unknown as SessionStore) as Tab;
+  const plugin = { manifest: { version: "9.9.9" }, nativeLoader: { isLoaded: () => h.loaded } };
+  return new CockpitSettingTab({} as App, plugin as unknown as ConstructorParameters<typeof CockpitSettingTab>[1], store as unknown as SessionStore, platform) as Tab;
 }
 
 beforeEach(() => {
@@ -156,6 +161,8 @@ beforeEach(() => {
   h.pluginDirOf.mockClear();
   h.nativeInstalled.mockClear();
   h.downloadNative.mockReset();
+  h.realDownloadDeps.mockClear();
+  h.loaded = false;
 });
 
 type Item = { name?: string; type?: string; heading?: string; items?: Item[]; render?: (s: unknown, g?: unknown) => void | (() => void) };
@@ -234,8 +241,149 @@ function valueOf(defs: Item[], name: string, kind: string): unknown {
 const lastErrorsDiv = () => h.divs[divsBeforeRender] as { remove: ReturnType<typeof vi.fn> };
 
 describe("Einstellungsseite (Abend 34)", () => {
-  it("Zeilen, Reihenfolge und Steuerelemente bleiben", () => {
-    expect(record(makeTab())).toMatchSnapshot();
+  // Der Text der Binärdatei-Zeile hängt an process.platform („für diesen Mac“ / „für diesen PC“): Der Stand gilt für den Mac,
+  // also läuft der Test mit dieser Plattform auch unter Windows.
+  it("Zeilen, Reihenfolge und Steuerelemente bleiben", async () => {
+    await mitPlattform("darwin", false, async (tab) => {
+      expect(record(tab)).toMatchSnapshot();
+    });
+  });
+
+  // Abend 42, Task 2: Unter Windows heißt die Taste Ctrl. Der darwin-Snapshot oben bleibt unverändert; hier die Windows-Fassung als Literale.
+  describe("Datei-Links: Taste je Plattform (Abend 42)", () => {
+    const FILE_LINKS_DESC = (mod: string, save: string) =>
+      `An: Dateipfade im Terminal (absolut, mit ~ oder relativ zum Startordner der Sitzung, auch mit :zeile) öffnen per ${mod}+Klick. Dateien im Vault als Tab, alle anderen in einem Fenster zum Lesen und Ändern (${save}+S speichert, Esc schließt). Ein einfacher Klick markiert weiter Text. Wirkt sofort.`;
+    const FULLSCREEN_DESC = (copy: string) =>
+      `An: Claude läuft im Vollbild-Modus, die Eingabezeile bleibt unten stehen und das Mausrad scrollt den Verlauf in Claude. Ziehen markiert in Claude und kopiert beim Loslassen, Shift+Ziehen markiert im Terminal (dann ${copy}+C). Suchen im Verlauf mit Ctrl+O und /. Der Scrollback des Terminals bleibt leer. Aus: klassisch, der Verlauf liegt im Scrollback. Wirkt für neu gestartete Sitzungen.`;
+
+    it("win32: Name „Pfade per Ctrl+Klick öffnen“, Beschreibungen mit Ctrl+Klick, Ctrl+S und (dann Ctrl+C)", () => {
+      const rows = rowsOf(record(makeTab({}, "win32")));
+      expect(Object.keys(rows)).toContain("Pfade per Ctrl+Klick öffnen");
+      expect(Object.keys(rows)).not.toContain("Pfade per Cmd+Klick öffnen");
+      expect(rows["Pfade per Ctrl+Klick öffnen"]).toContainEqual({ desc: FILE_LINKS_DESC("Ctrl", "Ctrl") });
+      expect(rows["Eingabezeile fest (Vollbild)"]).toContainEqual({ desc: FULLSCREEN_DESC("Ctrl") });
+    });
+
+    it("win32: Gegentest: in keinem Namen und keiner Beschreibung steht noch Cmd", () => {
+      const text = JSON.stringify(record(makeTab({}, "win32")));
+      expect(text).not.toContain("Cmd");
+      expect(text).toContain("Ctrl+Klick");
+    });
+
+    it("darwin: Cmd bleibt in Name und Beschreibungen (auch mit ausdrücklicher Plattform)", () => {
+      const rows = rowsOf(record(makeTab({}, "darwin")));
+      expect(rows["Pfade per Cmd+Klick öffnen"]).toContainEqual({ desc: FILE_LINKS_DESC("Cmd", "Cmd") });
+      expect(rows["Eingabezeile fest (Vollbild)"]).toContainEqual({ desc: FULLSCREEN_DESC("Cmd") });
+      expect(Object.keys(rows)).not.toContain("Pfade per Ctrl+Klick öffnen");
+    });
+
+    it("Abend 43: makeTab() ohne Plattform gilt die des Rechners: unter Windows die Windows-Texte, sonst die Mac-Texte", () => {
+      const rows = rowsOf(record(makeTab()));
+      expect(Object.keys(rows).includes("Pfade per Ctrl+Klick öffnen")).toBe(ON_WINDOWS);
+      expect(Object.keys(rows).includes("Pfade per Cmd+Klick öffnen")).toBe(!ON_WINDOWS);
+      expect(rows[ON_WINDOWS ? "Pfade per Ctrl+Klick öffnen" : "Pfade per Cmd+Klick öffnen"]).toContainEqual({ desc: FILE_LINKS_DESC(ON_WINDOWS ? "Ctrl" : "Cmd", ON_WINDOWS ? "Ctrl" : "Cmd") });
+    });
+
+    it("die Plattform kommt vom Konstruktor, nicht von process.platform", () => {
+      const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+      Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+      try {
+        expect(Object.keys(rowsOf(record(makeTab({}, "win32"))))).toContain("Pfade per Ctrl+Klick öffnen");
+      } finally {
+        Object.defineProperty(process, "platform", original);
+      }
+    });
+  });
+
+  // Abend 43, Task 2: Einstellungsseite unter Windows. Die darwin-Texte stehen als Literale, damit der Mac unverändert bleibt.
+  describe("Windows-Texte und Sperren (Abend 43)", () => {
+    const USAGE_MAC = "So oft liest die Karte „Usage“ den Schnappschuss der Statuszeile und die heutigen Transkripte (10 bis 3600), auch bei geschlossenem Dashboard.";
+    const TOKENS_MAC = "Schreibt nach jedem Zählerlauf die heutigen Output-Tokens nach ~/.claude/cockpit/tokens-today.json. Aus: Das Cockpit zählt weiter, die Statuszeile zeigt dann nur noch die letzte Summe mit ihrem Alter.";
+    const BANNER_SECONDS_MAC = "So lange bleibt das macOS-Banner stehen (1 bis 60), dann verschwindet es von selbst und steht auch nicht in der Mitteilungszentrale. Je Sitzung gibt es höchstens ein Banner: Ein neues ersetzt das alte.";
+    const descs = (tab: CockpitSettingTab, name: string) => rowsOf(record(tab))[name]!.filter((e) => "desc" in (e as object)).map((e) => (e as { desc: string }).desc);
+
+    it("win32: Usage-Abstand endet auf den Hinweis", () => {
+      const [d] = descs(makeTab({}, "win32"), "Usage-Abstand (Sekunden)");
+      expect(d).toBe(`${USAGE_MAC} Unter Windows noch ohne Statuszeile, Limits fehlen.`);
+    });
+
+    it("win32: Tokens für die Statuszeile ist gesperrt und endet auf den Sperrtext", () => {
+      const rows = rowsOf(record(makeTab({}, "win32")));
+      const row = rows["Tokens für die Statuszeile schreiben"]!;
+      expect(row).toContainEqual({ desc: `${TOKENS_MAC} Unter Windows nicht verfügbar: Die Statuszeile gibt es dort noch nicht.` });
+      expect(row).toContainEqual({ disabled: true });
+    });
+
+    it("win32: ein gespeichertes writeTokensFile: true bleibt nach display() und einem Bedienversuch true", () => {
+      // Der Mock schreibt wie der echte Speicher in current; sonst könnte die Zusicherung unten nie fallen.
+      store.updateSetting.mockImplementation(((key: keyof CockpitSettings, value: never) => { (current as unknown as Record<string, unknown>)[key] = value; return { ok: true }; }) as never);
+      const tab = makeTab({ writeTokensFile: true }, "win32");
+      const row = openRow(tab, "Tokens für die Statuszeile schreiben");
+      const toggle = row.comps.find((c) => c.kind === "toggle")!;
+      expect(toggle.getValue()).toBe(true);
+      // Bedienversuch: Ein gesperrter Schalter nimmt keine Eingabe an. Fällt die Sperre weg, speichert der Klick false.
+      if (!row.disabledNow) toggle.changeCb!(false);
+      record(tab);
+      expect(current.writeTokensFile).toBe(true);
+      expect(row.disabledNow).toBe(true);
+    });
+
+    it("win32: Klangdatei und Banner tragen die Windows-Texte, ohne macOS und afplay", () => {
+      const rows = rowsOf(record(makeTab({}, "win32")));
+      expect(rows["Klangdatei"]).toContainEqual({ desc: "Pfad zur Klangdatei (WAV oder MP3), abgespielt in Obsidian. Leer oder Mac-Pfad = Windows-Ton." });
+      expect(Object.keys(rows)).toContain("Windows-Benachrichtigung");
+      expect(Object.keys(rows)).not.toContain("macOS-Banner");
+      expect(rows["Banner ausblenden nach (Sekunden)"]).toContainEqual({
+        desc: "So lange bleibt die Benachrichtigung stehen (1 bis 60), dann verschwindet sie von selbst. Je Sitzung gibt es höchstens ein Banner: Ein neues ersetzt das alte.",
+      });
+      expect(JSON.stringify(rows)).not.toContain("Mitteilungszentrale");
+      expect(JSON.stringify(rows)).not.toContain("afplay");
+    });
+
+    it("win32: das Klangdatei-Feld zeigt den Windows-Ton als Platzhalter (SystemRoot)", () => {
+      const old = process.env.SystemRoot;
+      process.env.SystemRoot = "D:\\Win";
+      try {
+        const rows = rowsOf(record(makeTab({}, "win32")));
+        expect(rows["Klangdatei"]).toContainEqual({ placeholder: "D:\\Win\\Media\\Windows Notify System Generic.wav" });
+      } finally {
+        if (old === undefined) delete process.env.SystemRoot; else process.env.SystemRoot = old;
+      }
+    });
+
+    it("win32: der Rechte-Bypass ist vorhanden und nicht gesperrt", () => {
+      const row = rowsOf(record(makeTab({}, "win32")))["Rechteabfragen überspringen"]!;
+      expect(row).toBeDefined();
+      expect(row).not.toContainEqual({ disabled: true });
+      expect(openRow(makeTab({}, "win32"), "Rechteabfragen überspringen").disabledNow).toBe(false);
+    });
+
+    // Fix-Welle, Spec Bauweg 10 geprüft: Diese Schwellen wirken auch ohne Statuszeile und bleiben unter Windows frei.
+    // contextWarn/contextHandoff färben das Kontext-Instrument (cockpit-panels.ts), clearableMin* steuern den Stop-Hook
+    // (hooks/clearable-banner.py); thresholds.json wird deshalb auch unter Windows geschrieben.
+    it.each([
+      "Kontext: Warnschwelle (Tokens)", "Kontext: Handoff-Schwelle (Tokens)",
+      "Handoff frühestens ab Kontext (%)", "Handoff frühestens ab Nachrichten",
+    ])("win32: %s ist nicht gesperrt und trägt dieselbe Beschreibung wie auf dem Mac", (name) => {
+      const win = rowsOf(record(makeTab({}, "win32")))[name]!;
+      const mac = rowsOf(record(makeTab({}, "darwin")))[name]!;
+      expect(win).toBeDefined();
+      expect(win).not.toContainEqual({ disabled: true });
+      expect(win).toEqual(mac);
+      expect(openRow(makeTab({}, "win32"), name).disabledNow).toBe(false);
+    });
+
+    it("darwin: alle vier Felder wörtlich wie heute, ohne Sperre, ohne Platzhalter", () => {
+      const rows = rowsOf(record(makeTab({}, "darwin")));
+      expect(rows["Usage-Abstand (Sekunden)"]).toContainEqual({ desc: USAGE_MAC });
+      expect(rows["Tokens für die Statuszeile schreiben"]).toContainEqual({ desc: TOKENS_MAC });
+      expect(rows["Tokens für die Statuszeile schreiben"]).not.toContainEqual({ disabled: true });
+      expect(rows["Klangdatei"]).toContainEqual({ desc: "Pfad zur Klangdatei, abgespielt mit afplay." });
+      expect(rows["Klangdatei"]!.some((e) => "placeholder" in (e as object))).toBe(false);
+      expect(Object.keys(rows)).toContain("macOS-Banner");
+      expect(Object.keys(rows)).not.toContain("Windows-Benachrichtigung");
+      expect(rows["Banner ausblenden nach (Sekunden)"]).toContainEqual({ desc: BANNER_SECONDS_MAC });
+    });
   });
 
   it("Textfeld: speichert bei change, ungültig zeigt roten Grund, blur setzt den geltenden Wert zurück", () => {
@@ -275,6 +423,92 @@ describe("Einstellungsseite (Abend 34)", () => {
     area.setValue("a | stars | 3");
     area.inputEl.listeners.change!();
     expect(store.updateSetting).toHaveBeenLastCalledWith("researchSearches", "a | stars | 3");
+  });
+
+  it("Sitzungen: „Reihenfolge in „Neue Sitzung““ steht direkt nach dem Projektordner, mit Name, Beschreibung und beiden Optionen (Nachtrag 40a)", () => {
+    const NAME = "Reihenfolge in „Neue Sitzung“";
+    const DESC = "Zuletzt benutzt: Projektordner mit der jüngsten Claude-Unterhaltung zuerst, nie benutzte alphabetisch darunter. Alphabetisch: wie bisher. „Weiter“, Vault und Home bleiben oben.";
+    const tab = makeTab();
+    const sitzungen = (tab.getSettingDefinitions() as Item[]).find((d) => d.heading === "Sitzungen")!;
+    const names = (sitzungen.items ?? []).map((i) => i.name);
+    expect(names[names.indexOf("Projektordner") + 1]).toBe(NAME);
+    const row = rowsOf(record(tab))[NAME]!;
+    expect(row).toContainEqual({ desc: DESC });
+    expect(row).toContainEqual({ control: "dropdown" });
+    expect(row.filter((e) => "option" in (e as object))).toEqual([{ option: ["recent", "Zuletzt benutzt"] }, { option: ["alpha", "Alphabetisch"] }]);
+    openRow(tab, NAME).comps.find((c) => c.kind === "dropdown")!.changeCb!("alpha");
+    expect(store.updateSetting).toHaveBeenLastCalledWith("newSessionOrder", "alpha");
+  });
+
+  it("Sitzungen: „Ausgeblendete Ordner“ steht direkt nach „Reihenfolge in „Neue Sitzung““ (vor „Shell unter Windows“), mit Beschreibung, auf jeder Plattform, speichert hiddenProjectDirs (Nachtrag Abend 41)", () => {
+    const NAME = "Ausgeblendete Ordner";
+    const DESC = "Diese Unterordner des Projektordners erscheinen nicht in „Neue Sitzung“. Mehrere mit Komma trennen. Leer = alle zeigen.";
+    const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+    try {
+      for (const plattform of ["darwin", "win32"]) {
+        Object.defineProperty(process, "platform", { value: plattform, configurable: true });
+        const tab = makeTab();
+        const sitzungen = (tab.getSettingDefinitions() as Item[]).find((d) => d.heading === "Sitzungen")!;
+        const names = (sitzungen.items ?? []).map((i) => i.name);
+        expect(names[names.indexOf("Reihenfolge in „Neue Sitzung“") + 1], plattform).toBe(NAME);
+        if (plattform === "win32") expect(names[names.indexOf(NAME) + 1]).toBe("Shell unter Windows");
+        const row = rowsOf(record(tab))[NAME]!;
+        expect(row).toContainEqual({ desc: DESC });
+        expect(row).toContainEqual({ control: "text" });
+        const field = openRow(tab, NAME).comps.find((c) => c.kind === "text")!;
+        field.setValue("worktrees, tmp");
+        field.inputEl.listeners.change!();
+        expect(store.updateSetting).toHaveBeenLastCalledWith("hiddenProjectDirs", "worktrees, tmp");
+      }
+    } finally {
+      Object.defineProperty(process, "platform", original);
+    }
+  });
+
+  describe("Shell unter Windows (Abend 41)", () => {
+    const NAME = "Shell unter Windows";
+    const DESC = "Leer = automatisch: PowerShell 7 (pwsh.exe), sonst Windows PowerShell.";
+    const sitzungenNamen = (tab: CockpitSettingTab) => {
+      const sitzungen = (tab.getSettingDefinitions() as Item[]).find((d) => d.heading === "Sitzungen")!;
+      return (sitzungen.items ?? []).map((i) => i.name);
+    };
+    const mitPlattformSync = <T,>(plattform: string, f: () => T): T => {
+      const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+      Object.defineProperty(process, "platform", { value: plattform, configurable: true });
+      try { return f(); } finally { Object.defineProperty(process, "platform", original); }
+    };
+
+    it("win32: Textfeld im Abschnitt Sitzungen nach „Reihenfolge in „Neue Sitzung““, mit Beschreibung, speichert windowsShell", () => {
+      mitPlattformSync("win32", () => {
+        const tab = makeTab();
+        const names = sitzungenNamen(tab);
+        expect(names).toContain(NAME);
+        expect(names.indexOf(NAME)).toBeGreaterThan(names.indexOf("Reihenfolge in „Neue Sitzung“"));
+        const row = rowsOf(record(tab))[NAME]!;
+        expect(row).toContainEqual({ desc: DESC });
+        expect(row).toContainEqual({ control: "text" });
+        const field = openRow(tab, NAME).comps.find((c) => c.kind === "text")!;
+        field.setValue("D:\\tools\\nu.exe");
+        field.inputEl.listeners.change!();
+        expect(store.updateSetting).toHaveBeenLastCalledWith("windowsShell", "D:\\tools\\nu.exe");
+      });
+    });
+
+    it("darwin: das Feld fehlt", () => {
+      mitPlattformSync("darwin", () => {
+        expect(sitzungenNamen(makeTab())).not.toContain(NAME);
+      });
+    });
+
+    // Abend 42, Ruling 6: Die Klasse hat genau eine Plattformquelle, den Konstruktor.
+    it("die Plattform kommt vom Konstruktor: win32 zeigt das Feld auch auf einem Mac, darwin versteckt es auch unter Windows", () => {
+      mitPlattformSync("darwin", () => {
+        expect(sitzungenNamen(makeTab({}, "win32"))).toContain(NAME);
+      });
+      mitPlattformSync("win32", () => {
+        expect(sitzungenNamen(makeTab({}, "darwin"))).not.toContain(NAME);
+      });
+    });
   });
 
   it("kein display() mehr", () => {
@@ -473,6 +707,59 @@ describe("Einstellungsseite (Abend 34)", () => {
     expect(h.notices).toEqual(["Binärdateien geladen (3 Dateien). Neue Sitzungen starten jetzt."]);
     h.pluginDirOf.mockReturnValue(null);
   });
+
+  // Der Host liest process.platform erst in render; die Attrappe gilt für Aufbau und Klick und wird danach zurückgelegt.
+  async function mitPlattform(plattform: string, geladen: boolean, ablauf: (tab: Tab) => Promise<void>): Promise<void> {
+    const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+    Object.defineProperty(process, "platform", { value: plattform, configurable: true });
+    try {
+      h.loaded = geladen;
+      await ablauf(makeTab());
+    } finally {
+      Object.defineProperty(process, "platform", original);
+    }
+  }
+
+  it("Binärdateien: Hinweis und Download-Abhängigkeiten folgen der Plattform des Konstruktors, nicht process.platform", async () => {
+    h.pluginDirOf.mockReturnValue("/plugin");
+    h.downloadNative.mockResolvedValue({ ok: true, files: 3 });
+    const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+    Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+    try {
+      const tab = makeTab({}, "win32");
+      clickButton(tab, "Terminal-Binärdateien (node-pty)", "Binärdateien laden");
+      await vi.waitFor(() => expect(tab.update).toHaveBeenCalledTimes(1));
+      expect(lastRow.descs.some((d) => d.includes("für diesen PC"))).toBe(true);
+      expect(h.realDownloadDeps).toHaveBeenCalledWith("win32");
+    } finally {
+      Object.defineProperty(process, "platform", original);
+      h.pluginDirOf.mockReturnValue(null);
+    }
+  });
+
+  it("Binärdateien laden: Plattform und Stand des Laders bestimmen Beschreibung, Abhängigkeiten und Notice", async () => {
+    h.pluginDirOf.mockReturnValue("/plugin");
+    h.downloadNative.mockResolvedValue({ ok: true, files: 3 });
+    const neu = "Binärdateien geladen (3 Dateien). Neue Sitzungen starten jetzt.";
+    const neustart = "Binärdateien geladen (3 Dateien). Obsidian neu starten, damit sie gelten.";
+    for (const [plattform, geladen, hinweis, notice] of [
+      ["win32", true, "für diesen PC", neustart],
+      ["win32", false, "für diesen PC", neu],
+      ["darwin", true, "für diesen Mac", neu],
+      ["darwin", false, "für diesen Mac", neu],
+    ] as const) {
+      h.notices.length = 0;
+      h.realDownloadDeps.mockClear();
+      await mitPlattform(plattform, geladen, async (tab) => {
+        clickButton(tab, "Terminal-Binärdateien (node-pty)", "Binärdateien laden");
+        await vi.waitFor(() => expect(tab.update).toHaveBeenCalledTimes(1));
+        expect(lastRow.descs.some((d) => d.includes(hinweis)), `${plattform}: ${hinweis}`).toBe(true);
+      });
+      expect(h.notices, `${plattform}, geladen ${geladen}`).toEqual([notice]);
+      expect(h.realDownloadDeps).toHaveBeenCalledWith(plattform);
+    }
+    h.pluginDirOf.mockReturnValue(null);
+  });
 });
 
 describe("Ausschluss-Schalter (Abend 33)", () => {
@@ -492,10 +779,57 @@ describe("Ausschluss-Schalter (Abend 33)", () => {
   });
 
   it("Sandbox gesperrt, wenn die Sperre aus ist, frei, wenn sie an ist", () => {
-    expect(rowsOf(record(makeTab({ claudeExclusion: false })))[SANDBOX]).toContainEqual({ disabled: true });
-    const an = rowsOf(record(makeTab({ claudeExclusion: true })))[SANDBOX];
+    // darwin ausdrücklich: unter Windows ist der Schalter immer gesperrt (eigene Tests unten)
+    expect(rowsOf(record(makeTab({ claudeExclusion: false }, "darwin")))[SANDBOX]).toContainEqual({ disabled: true });
+    const an = rowsOf(record(makeTab({ claudeExclusion: true }, "darwin")))[SANDBOX];
     expect(an).toBeDefined();
     expect(an).not.toContainEqual({ disabled: true });
+  });
+
+  // Abend 42, Task 5: Unter Windows hat Claude Code keine Sandbox; der Schalter ist gesperrt, der gespeicherte Wert bleibt.
+  describe("Sandbox-Schalter je Plattform (Abend 42)", () => {
+    const GRUND = "Unter Windows nicht verfügbar: Claude Code hat dort keine Sandbox.";
+    const AN = { claudeExclusion: true, claudeExclusionSandbox: true };
+    const descOf = (rows: Record<string, unknown[]>) => (rows[SANDBOX].find((x) => "desc" in (x as object)) as { desc: string }).desc;
+
+    it("win32: gesperrt (auch bei eingeschalteter Sperre), Beschreibung endet mit dem Grund", () => {
+      const rows = rowsOf(record(makeTab(AN, "win32")));
+      expect(rows[SANDBOX]).toContainEqual({ disabled: true });
+      expect(descOf(rows).endsWith(` ${GRUND}`)).toBe(true);
+      expect(descOf(rows)).toContain("Gilt ab dem nächsten Sitzungsstart.");
+    });
+
+    it("win32: der gespeicherte Wert bleibt unverändert (nichts wird beim Zeichnen geschrieben)", () => {
+      const tab = makeTab(AN, "win32");
+      record(tab);
+      expect(store.updateSetting).not.toHaveBeenCalled();
+      expect(current.claudeExclusionSandbox).toBe(true);
+      const row = rowsOf(record(tab))[SANDBOX];
+      expect(row).toContainEqual({ control: "toggle" });
+    });
+
+    it("Abend 43: makeTab() ohne Plattform gilt die des Rechners: unter Windows gesperrt mit Grund, sonst frei", () => {
+      const rows = rowsOf(record(makeTab(AN)));
+      expect(rows[SANDBOX].some((x) => (x as object) && "disabled" in (x as object))).toBe(ON_WINDOWS);
+      expect(descOf(rows).endsWith(` ${GRUND}`)).toBe(ON_WINDOWS);
+    });
+
+    it("darwin: Beschreibung ohne den Grund, frei bei eingeschalteter Sperre (Snapshot unverändert)", () => {
+      const rows = rowsOf(record(makeTab(AN, "darwin")));
+      expect(descOf(rows)).not.toContain("Windows");
+      expect(descOf(rows).endsWith("Gilt ab dem nächsten Sitzungsstart.")).toBe(true);
+      expect(rows[SANDBOX]).not.toContainEqual({ disabled: true });
+    });
+
+    it("die Plattform kommt vom Konstruktor, nicht von process.platform", () => {
+      const original = Object.getOwnPropertyDescriptor(process, "platform")!;
+      Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+      try {
+        expect(rowsOf(record(makeTab(AN, "win32")))[SANDBOX]).toContainEqual({ disabled: true });
+      } finally {
+        Object.defineProperty(process, "platform", original);
+      }
+    });
   });
 
   it("Umschalten der Sperre speichert und zeichnet über update() neu, Umschalten der Sandbox zeichnet nicht neu", () => {
@@ -510,7 +844,7 @@ describe("Ausschluss-Schalter (Abend 33)", () => {
   });
 
   it("Sandbox bleibt nach dem Neuzeichnen im selben Setting nicht gesperrt, wenn die Sperre wieder an ist", () => {
-    const tab = makeTab({ claudeExclusion: false });
+    const tab = makeTab({ claudeExclusion: false }, "darwin");
     const def = findDef(tab.getSettingDefinitions() as Item[], SANDBOX);
     const row = new Setting({} as HTMLElement) as unknown as FakeRow;
     def.render!(row, {});

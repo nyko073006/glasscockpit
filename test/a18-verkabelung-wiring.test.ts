@@ -10,7 +10,7 @@ describe("Abend 18 Verkabelung: main.ts", () => {
   const main = src("src/main.ts");
 
   it("Schwellen: beim Laden und bei jeder Einstellungsänderung atomar nach THRESHOLDS_FILE", () => {
-    expect(main).toMatch(/new ThresholdsSync\(\{[\s\S]*?write:\s*\(text\)\s*=>\s*writeFileAtomic\(expandHome\(THRESHOLDS_FILE, home\), text\)/);
+    expect(main).toMatch(/new ThresholdsSync\(\{[\s\S]*?write:\s*\(text\)\s*=>\s*writeFileAtomic\(expandHome\(THRESHOLDS_FILE, home, hostPlatform\(\)\), text\)/);
     expect(main).toMatch(/void thresholds\.sync\(store\.settings\(\)\)/);
     expect(main).toMatch(/store\.onSettingsChange\(\(s\)\s*=>\s*void thresholds\.sync\(s\)\)/);
   });
@@ -24,7 +24,7 @@ describe("Abend 18 Verkabelung: main.ts", () => {
   });
 
   it("LOC und Commits heute (Abend 19): eigener Scanner, im Pull-Takt, gleiche Repo-Liste, Quelle und Abonnement", () => {
-    expect(main).toMatch(/const dayScan = new DayScan\(\{\s*list:\s*\(\)\s*=>\s*listGitRepos\(expandHome\(store\.settings\(\)\.projectsRoot, home\)\)/);
+    expect(main).toMatch(/const dayScan = new DayScan\(\{\s*list:\s*\(\)\s*=>\s*listGitRepos\(projectsRoot\(\)\)/);
     expect(main).toMatch(/dayLog:\s*async \(dir, since\)\s*=>\s*runGitDayLog\(dir, since,/);
     expect(main).toMatch(/now:\s*\(\)\s*=>\s*new Date\(\)/);
     expect(main).toMatch(/afterPull:\s*\(\)\s*=>\s*\{[^}]*void dayScan\.run\(\)/);

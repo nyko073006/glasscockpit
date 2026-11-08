@@ -15,7 +15,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { copyNodePty } from "./lib/native-copy.ts";
+import { PTY_TARGETS, copyNodePty } from "./lib/native-copy.ts";
 import { checkDeployTarget, resolveDeployTarget } from "../src/core/deploy-target.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -123,7 +123,8 @@ function deploy(zielRoh) {
 }
 
 function deployNodePty(nativeZiel) {
-  const anzahl = copyNodePty(PTY_QUELLE, nativeZiel);
+  // Deploy bleibt beim Mac (xattr, chmod); Release und Prüfsummen umfassen alle vier Ziele.
+  const anzahl = copyNodePty(PTY_QUELLE, nativeZiel, PTY_TARGETS.filter((t) => t.startsWith("darwin-")));
   execFileSync("xattr", ["-cr", nativeZiel]);
   return anzahl;
 }

@@ -230,9 +230,9 @@ describe("Rundinstrumente", () => {
     expect(q(".cockpit-field-gaugeRight").className).toContain("cockpit-tone-yellow");
   });
   it("Token-Ring: Median grün, ab p90 Regenbogen am Feld und im Zoom, ohne Pulsieren", () => {
-    feed(feedOf({ tokensToday: { tokens: 340_000, asOf: NOW - 30_000 } }));
+    feed(feedOf({ tokensToday: { tokens: 800_000, asOf: NOW - 30_000 } }));
     expect(q(".cockpit-field-gaugeRight").className).toContain("cockpit-tone-green");
-    feed(feedOf({ tokensToday: { tokens: 870_000, asOf: NOW - 30_000 } }));
+    feed(feedOf({ tokensToday: { tokens: 4_500_000, asOf: NOW - 30_000 } }));
     expect(q(".cockpit-field-gaugeRight").className).toContain("cockpit-tone-rainbow");
     expect(q(".cockpit-field-gaugeRight .cockpit-ring").className).not.toContain("cockpit-ring-pulse");
     expect(q(".cockpit-field-gaugeLeft").className).not.toContain("cockpit-tone-rainbow");
@@ -258,7 +258,7 @@ describe("Rundinstrumente", () => {
     click(clipOf("gaugeRight"));
     expect(layout.zoomedField()).toBe("gaugeRight");
     const t = q(".cockpit-zoom").textContent ?? "";
-    for (const part of ["142.000", "150.000", "175.000", "301.000", "340.000", "870.000", "Stand"]) expect(t).toContain(part);
+    for (const part of ["142.000", "150.000", "175.000", "301.000", "800.000", "4.500.000", "Stand"]) expect(t).toContain(part);
     layout.closeZoom();
     click(clipOf("gaugeLeft"));
     expect(layout.zoomedField()).toBe("gaugeLeft");
@@ -618,7 +618,7 @@ describe("CSS", () => {
   it("neue Klassen tragen alle das Präfix cockpit- (fremde Plugins teilen Klassennamen)", () => {
     const after = css.slice(css.indexOf("Neue Flächen (Abend 18"));
     expect(after.length).toBeGreaterThan(100);
-    const selectors = [...after.matchAll(/\.([a-z][\w-]*)/g)].map((m) => m[1]).filter((c) => !c.startsWith("cockpit-") && !/^\d/.test(c));
+    const selectors = [...after.matchAll(/\.([a-z][\w-]*)/g)].map((m) => m[1]).filter((c) => !c.startsWith("cockpit-") && !/^\d/.test(c) && c !== "theme-dark"); // theme-dark: Theme-Klasse von Obsidian am body (Markdown-Farben, Nachtrag 43b)
     expect(selectors).toEqual([]);
   });
 });

@@ -6,6 +6,7 @@ import { buildEnv } from "../src/core/claude-launch";
 import { ideEnv } from "../src/core/ide-protocol";
 import type { SessionRecord } from "../src/core/session-model";
 import { Launcher } from "../src/host/launcher";
+import { ON_WINDOWS } from "./helpers/platform";
 
 const START = { startKind: "new" as const, fresh: false, resumeConversations: true, fullscreen: false, effort: "aus" as const, skipPermissions: false };
 const shellRecord: SessionRecord = { id: "11111111-1111-4111-8111-111111111111", name: "Shell", kind: "shell", cwd: "/tmp", createdAt: "2026-10-05T00:00:00.000Z" };
@@ -40,7 +41,7 @@ describe("buildEnv mit IDE-Brücke", () => {
 
 describe("Launcher: Shell bekommt nie IDE-Variablen", () => {
   it("auch dann nicht, wenn die Brücke läuft", async () => {
-    const launcher = new Launcher(() => undefined, () => ideEnv(51234));
+    const launcher = new Launcher(() => undefined, () => ideEnv(51234), undefined, { platform: "darwin", env: () => process.env });
     const plan = await launcher.plan(shellRecord, START);
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
@@ -50,13 +51,14 @@ describe("Launcher: Shell bekommt nie IDE-Variablen", () => {
   });
   it("auch eine Shell-Sitzung mit async ideEnv wird nicht danach gefragt", async () => {
     let asked = 0;
-    const launcher = new Launcher(() => undefined, async () => { asked++; return ideEnv(1); });
+    const launcher = new Launcher(() => undefined, async () => { asked++; return ideEnv(1); }, undefined, { platform: "darwin", env: () => process.env });
     await launcher.plan(shellRecord, START);
     expect(asked).toBe(0);
   });
 });
 
-describe("Launcher: Claude-Start wartet auf die Brücke, aber nicht ewig", () => {
+// Windows: Launcher liest PATH über /bin/sh, claude-Attrappe mit chmod 0o755 (Inventur H17)
+describe.skipIf(ON_WINDOWS)("Launcher: Claude-Start wartet auf die Brücke, aber nicht ewig", () => {
   let dir: string;
   const saved = { PATH: process.env.PATH, SHELL: process.env.SHELL };
   const record: SessionRecord = { id: "22222222-2222-4222-8222-222222222222", name: "c", kind: "claude", cwd: "", createdAt: "2026-10-05T00:00:00.000Z" };
@@ -75,7 +77,7 @@ describe("Launcher: Claude-Start wartet auf die Brücke, aber nicht ewig", () =>
   });
 
   it("ideEnv löst erst später auf: die Startumgebung enthält danach CLAUDE_CODE_SSE_PORT", async () => {
-    const launcher = new Launcher(() => undefined, () => new Promise((r) => setTimeout(() => r(ideEnv(5555)), 150)), 5000);
+    const launcher = new Launcher(() => undefined, () => new Promise((r) => setTimeout(() => r(ideEnv(5555)), 150)), 5000, { platform: "darwin", env: () => process.env });
     const plan = await launcher.plan(record, START);
     expect(plan.ok).toBe(true);
     if (!plan.ok) return;
@@ -83,7 +85,7 @@ describe("Launcher: Claude-Start wartet auf die Brücke, aber nicht ewig", () =>
     expect(plan.spawn.env.ENABLE_IDE_INTEGRATION).toBe("true");
   });
   it("skipPermissions im Start (Abend 20): an gibt das Rechte-Flag, aus nicht", async () => {
-    const launcher = new Launcher(() => undefined, () => null);
+    const launcher = new Launcher(() => undefined, () => null, undefined, { platform: "darwin", env: () => process.env });
     const an = await launcher.plan(record, { ...START, skipPermissions: true });
     const aus = await launcher.plan(record, { ...START, skipPermissions: false });
     if (!an.ok || !aus.ok) throw new Error("Plan nicht ok");
@@ -91,7 +93,7 @@ describe("Launcher: Claude-Start wartet auf die Brücke, aber nicht ewig", () =>
     expect(aus.spawn.args).not.toContain("--dangerously-skip-permissions");
   });
   it("ideEnv hängt: nach dem Zeitlimit startet die Sitzung ohne Variablen, statt zu hängen", async () => {
-    const launcher = new Launcher(() => undefined, () => new Promise(() => undefined), 100);
+    const launcher = new Launcher(() => undefined, () => new Promise(() => undefined), 100, { platform: "darwin", env: () => process.env });
     const t0 = Date.now();
     const plan = await launcher.plan(record, START);
     expect(Date.now() - t0).toBeLessThan(3000);
@@ -100,7 +102,7 @@ describe("Launcher: Claude-Start wartet auf die Brücke, aber nicht ewig", () =>
     expect("CLAUDE_CODE_SSE_PORT" in plan.spawn.env).toBe(false);
   });
   it("ideEnv wirft: Sitzung startet trotzdem ohne Variablen", async () => {
-    const launcher = new Launcher(() => undefined, () => Promise.reject(new Error("kaputt")), 100);
+    const launcher = new Launcher(() => undefined, () => Promise.reject(new Error("kaputt")), 100, { platform: "darwin", env: () => process.env });
     const plan = await launcher.plan(record, START);
     expect(plan.ok).toBe(true);
     if (plan.ok) expect("CLAUDE_CODE_SSE_PORT" in plan.spawn.env).toBe(false);

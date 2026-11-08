@@ -30,6 +30,21 @@ describe("parseUriList", () => {
   it("kaputte Prozent-Kodierung fällt nicht um", () => {
     expect(parseUriList("file:///a%ZZ")).toEqual([]);
   });
+  it("win32: Laufwerkspfad ohne führenden Schrägstrich, mit Backslash, dekodiert", () => {
+    expect(parseUriList("file:///C:/Users/x/a%20b.md", "win32")).toEqual(["C:\\Users\\x\\a b.md"]);
+  });
+  it("win32: file://server/share wird UNC", () => {
+    expect(parseUriList("file://srv/share/a.md", "win32")).toEqual(["\\\\srv\\share\\a.md"]);
+  });
+  it("win32: Umlaut, # und Klammern aus der Kodierung", () => {
+    expect(parseUriList("file:///C:/Users/J%C3%BCrgen%20M%C3%BCller/Mein%20Ordner%20(alt)/a%20%231.md", "win32")).toEqual([
+      "C:\\Users\\Jürgen Müller\\Mein Ordner (alt)\\a #1.md",
+    ]);
+  });
+  it("darwin bleibt mit und ohne Angabe gleich (kein Laufwerk-Umbau)", () => {
+    expect(parseUriList("file:///C:/Users/x/a.md")).toEqual(["/C:/Users/x/a.md"]);
+    expect(parseUriList("file:///C:/Users/x/a.md", "darwin")).toEqual(["/C:/Users/x/a.md"]);
+  });
 });
 
 describe("isPathLike", () => {
@@ -42,6 +57,16 @@ describe("isPathLike", () => {
     expect(isPathLike("a/b")).toBe(false);
     expect(isPathLike("")).toBe(false);
     expect(isPathLike("~foo")).toBe(false);
+  });
+  it("win32: Laufwerk, UNC und Home sind Pfadform", () => {
+    for (const p of ["C:\\a", "c:/a", "\\\\srv\\s\\a", "~\\a", "~/a"]) expect(isPathLike(p, "win32"), p).toBe(true);
+  });
+  it("win32: nacktes Laufwerk und relativer Pfad sind keine Pfadform", () => {
+    for (const p of ["C:", "a\\b", "\\a", "C:a"]) expect(isPathLike(p, "win32"), p).toBe(false);
+  });
+  it("darwin: Backslash-Pfade bleiben keine Pfadform", () => {
+    expect(isPathLike("C:\\a")).toBe(false);
+    expect(isPathLike("~\\a")).toBe(false);
   });
 });
 
@@ -111,5 +136,54 @@ describe("pathsFromText", () => {
   });
   it("normaler Text liefert nichts", () => {
     expect(pathsFromText("hallo welt", VAULT, all, lookup)).toEqual([]);
+  });
+});
+
+describe("Vault auf Windows (win32)", () => {
+  const WVAULT = "C:\\Users\\x\\Mein Vault";
+  it("resolveObsidianDrop: Notiz im Unterordner, Teile mit Backslash", () => {
+    expect(resolveObsidianDrop("obsidian://open?vault=Mein%20Vault&file=Notiz", WVAULT, all, lookup, "win32")).toBe(`${WVAULT}\\Projekte\\A\\Notiz.md`);
+  });
+  it("resolveObsidianDrop: Vault-Name aus dem letzten Teil, auch mit Backslash am Ende", () => {
+    expect(resolveObsidianDrop("obsidian://open?vault=Mein%20Vault&file=Notiz", `${WVAULT}\\`, all, lookup, "win32")).toBe(`${WVAULT}\\Projekte\\A\\Notiz.md`);
+    expect(resolveObsidianDrop("obsidian://open?vault=Anderer&file=Notiz", WVAULT, all, lookup, "win32")).toBeNull();
+  });
+  it("resolveObsidianDrop: Ausbruch mit .. in beiden Schreibweisen abgelehnt", () => {
+    expect(resolveObsidianDrop("obsidian://open?vault=Mein%20Vault&file=..%5Cx", WVAULT, all, () => "..\\x.md", "win32")).toBeNull();
+    expect(resolveObsidianDrop("a\\..\\b.md", WVAULT, all, noName, "win32")).toBeNull();
+  });
+  it("resolveObsidianDrop: vault-relativer Pfad mit Endung (beide Trenner) wird zu Backslash-Pfad", () => {
+    expect(resolveObsidianDrop("Ordner/Notiz.md", WVAULT, all, noName, "win32")).toBe(`${WVAULT}\\Ordner\\Notiz.md`);
+    expect(resolveObsidianDrop("Ordner\\Notiz.md", WVAULT, all, noName, "win32")).toBe(`${WVAULT}\\Ordner\\Notiz.md`);
+    expect(resolveObsidianDrop("Ordner/Notiz.md", WVAULT, none, noName, "win32")).toBeNull();
+  });
+  it("resolveObsidianDrop: absolute Windows-Pfade sind kein vault-relativer Pfad", () => {
+    expect(resolveObsidianDrop("C:\\x\\a.md", WVAULT, all, noName, "win32")).toBeNull();
+    expect(resolveObsidianDrop("\\\\srv\\s\\a.md", WVAULT, all, noName, "win32")).toBeNull();
+  });
+  it("pathsFromText: Laufwerkspfad und UNC gelten als Pfad, Obsidian-Name wird aufgelöst", () => {
+    expect(pathsFromText("C:\\a\\b.md", WVAULT, none, noName, "win32")).toEqual(["C:\\a\\b.md"]);
+    expect(pathsFromText("obsidian://open?vault=Mein%20Vault&file=Notiz", WVAULT, all, lookup, "win32")).toEqual([`${WVAULT}\\Projekte\\A\\Notiz.md`]);
+    expect(pathsFromText("irgendwas", WVAULT, none, noName, "win32")).toEqual([]);
+  });
+  it("Abend 43: pathsFromText: wurzelrelativer Pfad im Vault ergibt dieselbe Erwähnung wie der Laufwerkspfad", () => {
+    const base = "C:\\Vault";
+    const ref = pathsFromText("C:\\Vault\\a.md", base, none, noName, "win32");
+    expect(ref).toEqual(["C:\\Vault\\a.md"]);
+    expect(pathsFromText("\\Vault\\a.md", base, all, noName, "win32")).toEqual(ref);
+    expect(pathsFromText("/Vault/a.md", base, all, noName, "win32")).toEqual(ref);
+    expect(pathsFromText("\\Vault\\a.md", base, none, noName, "win32")).toEqual([]); // gibt es die Datei nicht, ist es kein Pfad
+  });
+  it("Abend 43: pathsFromText: Text, der nur nach Pfad aussieht, bleibt Text", () => {
+    for (const t of ["/foo\nbar baz", "/clear", "// kommentar", "\\\\srv", "C:a.md"]) expect(pathsFromText(t, "C:\\Vault", (abs) => abs === "C:\\Vault\\a.md", noName, "win32"), t).toEqual([]);
+    expect(pathsFromText("\\x\\a.md", "", all, noName, "win32")).toEqual([]);
+  });
+  it("Abend 43: darwin: ein Text mit \\ am Anfang bleibt kein Pfad", () => {
+    expect(pathsFromText("\\Vault\\a.md", VAULT, none, noName)).toEqual([]);
+  });
+  it("Vorgabe darwin: ein Windows-Vault wird nicht als Backslash-Vault erkannt und mit Schrägstrich verbunden", () => {
+    // Der Vault-Name ist der ganze Pfad (kein "/" darin), also passt "Mein Vault" nicht; ohne vault= in der URL wird mit "/" angehängt.
+    expect(resolveObsidianDrop("obsidian://open?vault=Mein%20Vault&file=Notiz", WVAULT, all, lookup)).toBeNull();
+    expect(resolveObsidianDrop("obsidian://open?file=Notiz", WVAULT, all, lookup)).toBe(`${WVAULT}/Projekte/A/Notiz.md`);
   });
 });

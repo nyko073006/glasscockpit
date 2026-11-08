@@ -6,6 +6,7 @@ import {
   atMentionParams,
   authorized,
   dispatchRequest,
+  fileUrl,
   ideEnv,
   initializeResult,
   jsonResult,
@@ -20,6 +21,7 @@ import {
   selectionParams,
   textResult,
   tokenEquals,
+  type DispatchContext,
   type IdeHandlers,
 } from "../src/core/ide-protocol";
 
@@ -235,6 +237,125 @@ describe("resolveInVault", () => {
   it("auch ein Segment .. mit Punkten davor ist kein Freibrief (...  ist ein Name)", () => {
     expect(resolveInVault(BASE, `${BASE}/...md`)).toMatchObject({ ok: true });
     expect(resolveInVault(BASE, `${BASE}/..hidden/x.md`)).toMatchObject({ ok: true });
+  });
+});
+
+describe("resolveInVault unter Windows (Abend 42)", () => {
+  const WIN = "C:\\Vault";
+  const win = (input: string, base = WIN) => resolveInVault(base, input, "win32");
+
+  it.each([
+    ["c:/vault/Ordner/a.md"], // Schreibweise und Trenner gemischt
+    ["C:\\Vault\\Ordner\\a.md"],
+    ["C:\\VAULT/Ordner\\a.md"],
+    ["Ordner\\a.md"], // relativ, mit Backslash
+    ["Ordner/a.md"],
+    [".\\Ordner\\a.md"],
+  ])("%j ergibt Ordner/a.md mit dem Backslash-Pfad der Basis", (input) => {
+    expect(win(input)).toEqual({ ok: true, path: "Ordner/a.md", absolute: "C:\\Vault\\Ordner\\a.md" });
+  });
+  it("Basis mit Backslash am Ende ändert nichts, Umlaute und Leerzeichen bleiben", () => {
+    expect(win("C:\\Users\\Jürgen Müller\\V\\a #1.md", "C:\\Users\\Jürgen Müller\\V\\")).toEqual({
+      ok: true,
+      path: "a #1.md",
+      absolute: "C:\\Users\\Jürgen Müller\\V\\a #1.md",
+    });
+  });
+  it("Netzwerk-Basis (UNC) geht ebenso", () => {
+    expect(win("\\\\srv\\share\\V\\a.md", "\\\\srv\\share\\V")).toEqual({ ok: true, path: "a.md", absolute: "\\\\srv\\share\\V\\a.md" });
+  });
+  it("derselbe Fehler wie auf dem Mac: .. bleibt abgelehnt (auch wenn der Pfad im Vault bliebe)", () => {
+    const mac = resolveInVault(BASE, `${BASE}/../x`);
+    expect(mac).toEqual({ ok: false, reason: "Pfad darf kein .. enthalten" });
+    expect(win("C:\\Vault\\..\\x")).toEqual(mac);
+    expect(win("C:\\Vault\\a\\..\\b.md")).toEqual(mac);
+    expect(win("..\\a.md")).toEqual(mac);
+    expect(win("sub/../../a.md")).toEqual(mac);
+  });
+  it("derselbe Fehler wie auf dem Mac: außerhalb des Vaults (Präfix-Falle, anderes Laufwerk, UNC, Wurzelpfad)", () => {
+    const mac = resolveInVault(BASE, `${BASE}2/a.md`);
+    expect(mac).toEqual({ ok: false, reason: "Pfad liegt außerhalb des Vaults" });
+    for (const input of ["C:\\Vault2\\a.md", "D:\\x", "D:\\Vault\\a.md", "\\\\srv\\share\\a.md", "\\x.md", "C:x.md", "~\\x.md"]) {
+      expect(win(input), input).toEqual(mac);
+    }
+  });
+  it("der Vault selbst, leer, NUL und ein Strom-Name sind keine Datei", () => {
+    expect(win("C:\\Vault")).toMatchObject({ ok: false });
+    expect(win("c:/vault/")).toMatchObject({ ok: false });
+    expect(win("")).toMatchObject({ ok: false });
+    expect(win("C:\\Vault\\a\0.md")).toMatchObject({ ok: false });
+    expect(win("a.md:stream")).toMatchObject({ ok: false });
+    expect(resolveInVault("", "a.md", "win32")).toEqual({ ok: false, reason: "Vault-Ordner unbekannt" });
+  });
+  it("der Mac-Pfad bleibt unverändert, auch mit Backslash im Namen (Vorgabe darwin)", () => {
+    expect(resolveInVault(BASE, "Ordner\\a.md")).toEqual({ ok: true, path: "Ordner\\a.md", absolute: `${BASE}/Ordner\\a.md` });
+  });
+  it("im Dispatch: openFile mit Windows-Pfad bekommt den vault-relativen Pfad", async () => {
+    const openFile = vi.fn(() => textResult("ok"));
+    const context: DispatchContext = { handlers: handlers({ openFile }), vaultBase: () => WIN, platform: "win32" };
+    await dispatchRequest({ id: 1, method: "tools/call", params: { name: "openFile", arguments: { filePath: "c:/vault/Ordner/a.md" } } }, context);
+    expect(openFile).toHaveBeenCalledWith({ path: "Ordner/a.md", absolute: "C:\\Vault\\Ordner\\a.md" });
+  });
+
+  // Abend 43: wurzelrelative Pfade (Laufwerk der Basis) und Schreibweise aus Obsidian.
+  it("wurzelrelativ: \\Vault\\Ordner\\a.md und /Vault/Ordner/a.md liegen im Vault C:\\Vault", () => {
+    const erwartet = { ok: true, path: "Ordner/a.md", absolute: "C:\\Vault\\Ordner\\a.md" };
+    expect(win("\\Vault\\Ordner\\a.md")).toEqual(erwartet);
+    expect(win("/Vault/Ordner/a.md")).toEqual(erwartet);
+    expect(win("/vault/Ordner/a.md")).toEqual(erwartet);
+  });
+  it("wurzelrelativ: \\x\\a.md liegt außerhalb, C:a.md meldet wie bisher, .. bleibt abgelehnt", () => {
+    const aussen = { ok: false, reason: "Pfad liegt außerhalb des Vaults" };
+    expect(win("\\x\\a.md")).toEqual(aussen);
+    expect(win("/x/a.md")).toEqual(aussen);
+    expect(win("\\Vault2\\a.md")).toEqual(aussen);
+    expect(win("C:a.md")).toEqual(aussen);
+    expect(win("\\\\server")).toEqual(aussen);
+    expect(win("//server/x.md")).toEqual(aussen);
+    expect(win("\\Vault\\..\\x")).toEqual({ ok: false, reason: "Pfad darf kein .. enthalten" });
+  });
+  it("wurzelrelativ: UNC-Basis, Wurzel ist die Freigabe", () => {
+    expect(win("\\V\\a.md", "\\\\srv\\share\\V")).toEqual({ ok: true, path: "a.md", absolute: "\\\\srv\\share\\V\\a.md" });
+    expect(win("\\x\\a.md", "\\\\srv\\share\\V")).toMatchObject({ ok: false });
+  });
+  it("Schreibweise: c:\\vault\\ORDNER\\a.md ergibt Ordner/a.md aus der Liste", () => {
+    expect(resolveInVault(WIN, "c:\\vault\\ORDNER\\a.md", "win32", ["Ordner/a.md"])).toEqual({ ok: true, path: "Ordner/a.md", absolute: "C:\\Vault\\Ordner\\a.md" });
+    expect(resolveInVault(WIN, "ORDNER/A.md", "win32", ["Ordner/a.md"])).toMatchObject({ path: "Ordner/a.md" });
+  });
+  it("Schreibweise: Datei nicht in der Liste oder keine Liste: die Eingabe bleibt", () => {
+    expect(resolveInVault(WIN, "c:\\vault\\Neu\\a.md", "win32", ["Ordner/a.md"])).toMatchObject({ path: "Neu/a.md" });
+    expect(resolveInVault(WIN, "c:\\vault\\ORDNER\\neu.md", "win32", ["Ordner/a.md"])).toMatchObject({ path: "Ordner/neu.md", absolute: "C:\\Vault\\Ordner\\neu.md" });
+    expect(resolveInVault(WIN, "c:\\vault\\ORDNER\\a.md", "win32")).toMatchObject({ path: "ORDNER/a.md" });
+  });
+  it("im Dispatch: openFile übernimmt die Schreibweise aus vaultPaths (win32), ohne vaultPaths bleibt die Eingabe", async () => {
+    const openFile = vi.fn(() => textResult("ok"));
+    const context: DispatchContext = { handlers: handlers({ openFile }), vaultBase: () => WIN, platform: "win32", vaultPaths: () => ["Ordner/a.md"] };
+    await dispatchRequest({ id: 1, method: "tools/call", params: { name: "openFile", arguments: { filePath: "c:\\vault\\ORDNER\\a.md" } } }, context);
+    expect(openFile).toHaveBeenCalledWith({ path: "Ordner/a.md", absolute: "C:\\Vault\\Ordner\\a.md" });
+    await dispatchRequest({ id: 2, method: "tools/call", params: { name: "openFile", arguments: { filePath: "c:\\vault\\ORDNER\\a.md" } } }, { ...context, vaultPaths: undefined });
+    expect(openFile).toHaveBeenLastCalledWith({ path: "ORDNER/a.md", absolute: "C:\\Vault\\ORDNER\\a.md" });
+  });
+  it("Schreibweise: darwin behält die Eingabe trotz Liste", () => {
+    expect(resolveInVault("/V", "/V/ORDNER/a.md", "darwin", ["Ordner/a.md"])).toEqual({ ok: true, path: "ORDNER/a.md", absolute: "/V/ORDNER/a.md" });
+  });
+});
+
+describe("fileUrl", () => {
+  it("darwin (Vorgabe) unverändert", () => {
+    expect(fileUrl("/a/b c#.md")).toBe("file:///a/b%20c%23.md");
+    expect(fileUrl("/a/b c#.md", "darwin")).toBe("file:///a/b%20c%23.md");
+  });
+  it("win32: Laufwerk mit drei Schrägstrichen, Segmente kodiert, Backslash wird zu Schrägstrich", () => {
+    expect(fileUrl("C:\\Users\\x\\a b#.md", "win32")).toBe("file:///C:/Users/x/a%20b%23.md");
+    expect(fileUrl("c:/Users/Jürgen/a.md", "win32")).toBe("file:///c:/Users/J%C3%BCrgen/a.md");
+  });
+  it("win32: UNC-Pfad wird zu file://server/share/…", () => {
+    expect(fileUrl("\\\\srv\\share\\a.md", "win32")).toBe("file://srv/share/a.md");
+  });
+  it("selectionParams reicht die Plattform an fileUrl", () => {
+    const a = { filePath: "C:\\Vault\\a b.md", text: "t", start: { line: 0, character: 0 }, end: { line: 0, character: 1 } };
+    expect(selectionParams(a, "win32").fileUrl).toBe("file:///C:/Vault/a%20b.md");
+    expect(selectionParams(a, "win32").filePath).toBe("C:\\Vault\\a b.md");
   });
 });
 

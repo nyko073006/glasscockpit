@@ -26,14 +26,14 @@ describe("Abend 32: Code-Editor verkabelt", () => {
 
   it("main: Fenster bekommt die Einstellung beim Öffnen", () => {
     expect(read("src/main.ts")).toMatch(
-      /new FileViewerModal\(this\.app, t, \{ maxMb: store\.settings\(\)\.fileViewerMaxMb, autocomplete: store\.settings\(\)\.fileViewerAutocomplete, home: homedir\(\), onClosed: refocus \}\)/,
+      /new FileViewerModal\(this\.app, t, \{ maxMb: store\.settings\(\)\.fileViewerMaxMb, autocomplete: store\.settings\(\)\.fileViewerAutocomplete, fontSize: store\.settings\(\)\.fileViewerFontSize, widthPct: store\.settings\(\)\.fileViewerWidthPct, heightPct: store\.settings\(\)\.fileViewerHeightPct, markdown: [^}]*\}, home: homedir\(\), onClosed: refocus \}\)/,
     );
   });
 
   it("Fenster: Module einmal laden, Erweiterungen und Esc-Wächter mit denselben Modulen", () => {
     const modal = read("src/host/file-viewer-modal.ts");
     expect(modal).toMatch(/const mods = loadCodeModules\(\);/);
-    expect(modal).toMatch(/\.\.\.codeExtensions\(this\.target\.path, \{ autocomplete: this\.options\.autocomplete \}, mods\)/);
+    expect(modal).toMatch(/\.\.\.codeExtensions\(this\.target\.path, \{ autocomplete: this\.options\.autocomplete, markdown: this\.options\.markdown, mdCommands: this\.options\.mdCommands \}, mods\)/);
     expect(modal).toMatch(/this\.esc = new EscGuard\(this\.modalEl, this\.view, mods\);/);
   });
 

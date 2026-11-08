@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { BackgroundTasks, scanBackgroundTasks } from "../core/background-tasks";
 import { MAX_LINK_BASES, MAX_TOOL_PATHS, TRANSCRIPT_SEARCH_MS, TRANSCRIPT_TAIL_BYTES } from "../core/constants";
 import { linkBases as baseFolders, mergeRecent, toolPaths } from "../core/file-links";
+import type { Platform } from "../core/platform-path";
 import { type CodeBlock, extractCodeBlocks, lastAnswerText, lastHandoffBlock } from "../core/transcript-code";
 import { type FileStamp, mayRescan, statChanged, tailStart } from "../core/transcript-poll";
 
@@ -59,11 +60,14 @@ export class TranscriptReader {
   private readonly sessionId: string;
   private readonly root: string;
   private readonly home: string;
+  /** Pfadform der Werkzeugaufrufe im Transkript (Abend 42): Windows-Pfade mit Laufwerk und Backslash. */
+  private readonly platform: Platform;
 
-  constructor(sessionId: string, root: string = join(homedir(), ".claude", "projects"), home: string = homedir()) {
+  constructor(sessionId: string, root: string = join(homedir(), ".claude", "projects"), home: string = homedir(), platform: Platform) {
     this.sessionId = sessionId;
     this.root = root;
     this.home = home;
+    this.platform = platform;
   }
 
   /**
@@ -71,7 +75,7 @@ export class TranscriptReader {
    * gehört zu einer Claude-ID, nach /clear beginnt der neue Leser leer.
    */
   linkBases(): string[] {
-    return (this.basesCache ??= baseFolders(this.paths, this.home, MAX_LINK_BASES));
+    return (this.basesCache ??= baseFolders(this.paths, this.home, MAX_LINK_BASES, this.platform));
   }
 
   /**
@@ -106,7 +110,7 @@ export class TranscriptReader {
     // Erst nach gelungenem Lesen: wirft readTail, bleibt der alte Stand, und der nächste Aufruf liest erneut (Abend 29).
     this.stamp = next;
     // Auf dem ohnehin gelesenen Text, ohne zweites Lesen: neue Funde ans Ende, ältere bleiben (bis MAX_TOOL_PATHS).
-    this.paths = mergeRecent(this.paths, toolPaths(text, this.home), MAX_TOOL_PATHS);
+    this.paths = mergeRecent(this.paths, toolPaths(text, this.home, this.platform), MAX_TOOL_PATHS);
     this.basesCache = null;
     this.tasks.merge(scanBackgroundTasks(text));
     const answer = lastAnswerText(text);

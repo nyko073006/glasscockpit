@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { isDirSync, isFileSync, loadFile, saveFile } from "../src/host/file-viewer-fs";
+import { ON_WINDOWS } from "./helpers/platform";
 
 let dir = "";
 beforeEach(() => {
@@ -32,7 +33,8 @@ describe("isFileSync: nur existierende Dateien sind Links", () => {
 });
 
 describe("isDirSync: nur existierende Ordner, für Pfade mit Leerzeichen (Abend 38)", () => {
-  it("Ordner (auch mit Leerzeichen) und Symlink auf einen Ordner ja, Datei nein, fehlend nein", () => {
+  // Windows: Symlink anlegen (Inventur H21)
+  it.skipIf(ON_WINDOWS)("Ordner (auch mit Leerzeichen) und Symlink auf einen Ordner ja, Datei nein, fehlend nein", () => {
     const p = file("a.md", "x");
     mkdirSync(join(dir, "mein ordner"));
     symlinkSync(join(dir, "mein ordner"), join(dir, "verweis"));
@@ -50,7 +52,7 @@ describe("loadFile", () => {
   });
   it("zu groß: Hinweis statt Inhalt", async () => {
     const p = file("gross.txt", "a".repeat(1024 * 1024 + 1));
-    expect(await loadFile(p, 1)).toEqual({ kind: "tooLarge", size: 1024 * 1024 + 1 });
+    expect(await loadFile(p, 1)).toEqual({ kind: "tooLarge", size: 1024 * 1024 + 1, image: false });
   });
   it("binär und kein UTF-8", async () => {
     expect(await loadFile(file("b.bin", Uint8Array.from([1, 0, 2])), 2)).toEqual({ kind: "binary" });
@@ -63,7 +65,8 @@ describe("loadFile", () => {
 });
 
 describe("saveFile", () => {
-  it("schreibt, behält die Rechte, liefert neue mtime, lässt keine Temp-Datei liegen", async () => {
+  // Windows: chmod 0o754 und Modus prüfen (Inventur H21)
+  it.skipIf(ON_WINDOWS)("schreibt, behält die Rechte, liefert neue mtime, lässt keine Temp-Datei liegen", async () => {
     const p = file("s.sh", "alt");
     chmodSync(p, 0o754);
     const opened = statSync(p).mtimeMs;
@@ -94,12 +97,34 @@ describe("saveFile", () => {
     expect((await saveFile(p, "meins", opened, true)).status).toBe("saved");
     expect(readFileSync(p, "utf8")).toBe("meins");
   });
-  it("Symlink bleibt Symlink, geschrieben wird das Ziel", async () => {
+  // Windows: Symlink anlegen (Inventur H21)
+  it.skipIf(ON_WINDOWS)("Symlink bleibt Symlink, geschrieben wird das Ziel", async () => {
     const target = file("ziel.md", "alt");
     const link = join(dir, "link.md");
     symlinkSync(target, link);
     await saveFile(link, "neu", statSync(link).mtimeMs, false);
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
     expect(readFileSync(target, "utf8")).toBe("neu");
+  });
+});
+
+describe("loadFile mit Bildgrenze (Nachtrag 43c)", () => {
+  const MB3 = 3 * 1024 * 1024;
+  const png = (): Uint8Array => new Uint8Array(MB3); // lauter NUL-Bytes
+  it("Bild über der Textgrenze, unter der Bildgrenze: image", async () => {
+    const p = file("a.png", png());
+    const r = await loadFile(p, 2, 20);
+    expect(r).toMatchObject({ kind: "image", mime: "image/png", size: MB3 });
+    if (r.kind === "image") expect(r.bytes.length).toBe(MB3);
+  });
+  it("über der Bildgrenze: tooLarge mit image true", async () => {
+    expect(await loadFile(file("a.png", png()), 2, 1)).toMatchObject({ kind: "tooLarge", image: true });
+  });
+  it("Bilder aus: tooLarge mit image false, kleine PNG binary", async () => {
+    expect(await loadFile(file("a.png", png()), 2)).toMatchObject({ kind: "tooLarge", image: false });
+    expect(await loadFile(file("k.png", Uint8Array.from([1, 0, 2])), 2)).toEqual({ kind: "binary" });
+  });
+  it("Textdatei groß, Bildgrenze 20: tooLarge ohne image", async () => {
+    expect(await loadFile(file("a.md", "a".repeat(MB3)), 2, 20)).toMatchObject({ kind: "tooLarge", image: false });
   });
 });

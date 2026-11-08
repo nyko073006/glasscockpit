@@ -52,7 +52,16 @@ describe("Abend 37: Link-Hülle verkabelt", () => {
 
   it("setModifier geht an den Original-Provider, nicht an die Hülle", () => {
     const body = code(method(pane, "registerLinkProvider("));
-    expect(body).toMatch(/const onKey = \(event: KeyboardEvent\): void => provider\.setModifier\?\.\(event\.metaKey\);/);
+    // Abend 42: Die Taste hängt an der Plattform (Cmd auf dem Mac, Ctrl unter Windows), nie fest an metaKey.
+    expect(body).toMatch(/const onKey = \(event: KeyboardEvent\): void => provider\.setModifier\?\.\(linkModifierDown\(event, this\.platform\)\);/);
+    expect(body).not.toContain("event.metaKey");
+  });
+  it("die Pane merkt sich die Plattform aus hostPlatform() und nutzt linkModifierDown aus dem Kern", () => {
+    const paneCode = code(pane);
+    expect(paneCode).toMatch(/private readonly platform: Platform;/);
+    expect(paneCode).toMatch(/this\.platform = platform;/);
+    expect(paneCode).toMatch(/const platform = hostPlatform\(\);/);
+    expect(paneCode).toMatch(/import \{[^}]*\blinkModifierDown\b[^}]*\} from "\.\.\/core\/file-links";/);
   });
 
   it("die View meldet Provider nur über die Pane an, nie direkt an xterm", () => {

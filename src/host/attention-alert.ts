@@ -1,11 +1,60 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { BannerManager, type BannerHandle } from "../core/banner-manager";
+import type { Platform } from "../core/platform-path";
 import { electronRemote } from "./electron";
 
-/** Ton über macOS `afplay`. Fehler (Datei fehlt, kein afplay) nur als Warnung, nie als Absturz. */
-export function playSound(path: string): void {
+/** Abspielen im Renderer (Windows): Datei lesen, als Blob-URL in ein Audio-Element. Austauschbar für Tests. */
+export interface SoundDeps {
+  readFile: (path: string) => Promise<Uint8Array> | Uint8Array;
+  createAudio: (url: string) => { play(): Promise<void> | void; addEventListener(type: "ended" | "error", cb: () => void): void };
+  createObjectURL: (blob: Blob) => string;
+  revokeObjectURL: (url: string) => void;
+}
+
+const realSoundDeps = (): SoundDeps => ({
+  readFile: (p) => readFile(p),
+  createAudio: (url) => new Audio(url),
+  createObjectURL: (blob) => URL.createObjectURL(blob),
+  revokeObjectURL: (url) => URL.revokeObjectURL(url),
+});
+
+async function playBlob(path: string, deps: SoundDeps): Promise<void> {
+  let url: string | null = null;
+  const release = () => {
+    if (url === null) return;
+    const u = url;
+    url = null;
+    deps.revokeObjectURL(u);
+  };
   try {
-    execFile("afplay", [path], (fehler) => {
+    const bytes = await deps.readFile(path);
+    const type = /\.wav$/i.test(path) ? "audio/wav" : /\.mp3$/i.test(path) ? "audio/mpeg" : "";
+    url = deps.createObjectURL(new Blob([bytes as BlobPart], { type }));
+    const audio = deps.createAudio(url);
+    audio.addEventListener("ended", release);
+    audio.addEventListener("error", () => {
+      console.warn("Glasscockpit: Ton nicht abspielbar (Audio-Fehler)");
+      release();
+    });
+    await audio.play();
+  } catch (fehler) {
+    console.warn("Glasscockpit: Ton nicht abspielbar", fehler);
+    release();
+  }
+}
+
+/**
+ * Ton: macOS über `afplay`, Windows über Audio und Blob im Renderer (kein Prozess, kein file://). Fehler (Datei fehlt,
+ * kein afplay) nur als Warnung, nie als Absturz.
+ */
+export function playSound(path: string, platform: Platform, deps?: SoundDeps): void {
+  if (platform === "win32") {
+    void playBlob(path, deps ?? realSoundDeps());
+    return;
+  }
+  try {
+    execFile("afplay", [path], { windowsHide: true }, (fehler) => {
       if (fehler) console.warn("Glasscockpit: Ton nicht abspielbar", fehler.message);
     });
   } catch (fehler) {

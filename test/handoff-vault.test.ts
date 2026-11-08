@@ -27,17 +27,25 @@ describe("readOpenHandoffs", () => {
       "P/B/Handoffs/2026-01-04 y.md": "---\nstatus: offen\n---\n",
       "P/C/C - PMO HUB.md": "---\nrepo: /x\n---\n",
     });
-    const r = await readOpenHandoffs(v, S, parse, "/Users/alex");
+    const r = await readOpenHandoffs(v, S, parse, "/Users/alex", "darwin");
     expect(r.items.map((i) => [i.project, i.repo, i.created])).toEqual([["B", null, "2026-01-04"], ["A", "/Users/alex/dev/a", "2026-01-02"]]);
+  });
+  it("win32: repo ~\\dev\\a wird unter dem Windows-Home aufgelöst", async () => {
+    const v = fake({
+      "P/A/A - PMO HUB.md": "---\nrepo: ~\\dev\\a\n---\n",
+      "P/A/Handoffs/2026-01-02 x.md": "---\nstatus: offen\n---\n",
+    });
+    const r = await readOpenHandoffs(v, S, parse, "C:\\Users\\x", "win32");
+    expect(r.items.map((i) => i.repo)).toEqual(["C:\\Users\\x\\dev\\a"]);
   });
   it("Ordner ohne HUB-Datei zählt nicht als Projekt", async () => {
     const v = fake({ "P/Z/Handoffs/2026-01-02 x.md": "---\nstatus: offen\n---\n" });
-    expect((await readOpenHandoffs(v, S, parse, "/Users/alex")).items).toEqual([]);
+    expect((await readOpenHandoffs(v, S, parse, "/Users/alex", "darwin")).items).toEqual([]);
   });
   it("nicht eingerichtet: liest nichts", async () => {
     const v = fake({ "P/A/A - PMO HUB.md": "---\n---\n" });
-    expect(await readOpenHandoffs(v, { ...S, hubsDir: "" }, parse, "/h")).toEqual({ items: [], errors: [] });
-    expect(await readOpenHandoffs(v, { ...S, handoffsDir: " " }, parse, "/h")).toEqual({ items: [], errors: [] });
+    expect(await readOpenHandoffs(v, { ...S, hubsDir: "" }, parse, "/h", "darwin")).toEqual({ items: [], errors: [] });
+    expect(await readOpenHandoffs(v, { ...S, handoffsDir: " " }, parse, "/h", "darwin")).toEqual({ items: [], errors: [] });
     expect(v.reads).toEqual([]);
   });
   it("nur .md im Handoff-Ordner, Fehler werden gesammelt", async () => {
@@ -46,7 +54,7 @@ describe("readOpenHandoffs", () => {
       "P/A/Handoffs/bild.png": "x",
       "P/A/Handoffs/kaputt.md": "ohne",
     });
-    const r = await readOpenHandoffs(v, S, parse, "/h");
+    const r = await readOpenHandoffs(v, S, parse, "/h", "darwin");
     expect(r.errors).toEqual(["Handoff ohne Frontmatter: P/A/Handoffs/kaputt.md"]);
     expect(v.reads).not.toContain("P/A/Handoffs/bild.png");
   });
@@ -59,7 +67,7 @@ describe("readOpenHandoffs", () => {
       "P/C/C - PMO HUB.md": "---\n---\n",
       "P/C/Handoffs/2026-01-05 z.md": "---\nstatus: offen\n---\n",
     }, ["P/A/Handoffs/2026-01-02 x.md", "P/C/C - PMO HUB.md"]);
-    const r = await readOpenHandoffs(v, S, parse, "/h");
+    const r = await readOpenHandoffs(v, S, parse, "/h", "darwin");
     expect(r.items.map((i) => i.project)).toEqual(["B"]);
     expect(r.errors).toHaveLength(2);
     expect(r.errors.join("\n")).toContain("P/A/Handoffs/2026-01-02 x.md");

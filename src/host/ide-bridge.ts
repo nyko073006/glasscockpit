@@ -8,6 +8,7 @@ import { type Debounced, createDebounce } from "../core/debounce";
 import { VIEW_TYPE_DIFF } from "../core/constants";
 import { clientForSession, sessionForClient } from "../core/ide-clients";
 import { atMentionParams } from "../core/ide-protocol";
+import type { Platform } from "../core/platform-path";
 import type { CockpitSettings } from "../core/settings";
 import { DiffTabs } from "./diff-tabs";
 import { DiffView } from "./diff-view";
@@ -26,6 +27,10 @@ export interface IdeBridgeDeps {
   /** Einstellungen, bei jeder Nutzung frisch gelesen. */
   settings: () => CockpitSettings;
   vaultBase: () => string | null;
+  /** Abend 42: Plattform der Pfade (Editor, Server, Diff-Ansicht) und der Prozesssuche. */
+  platform: Platform;
+  /** Abend 43: Vault-Pfade aller Dateien (nur win32 gesetzt), damit eine Notiz in der Schreibweise aus Obsidian geöffnet wird. */
+  vaultPaths?: () => readonly string[];
   /** Abend 33: Pfad (vault-relativ) ausgeschlossen? Bei jeder Meldung frisch gefragt; fehlt die Angabe, ist nichts ausgeschlossen. */
   excluded?: (vaultPath: string) => boolean;
   /** pid der PTY dieser Sitzung (undefiniert, wenn es keine gibt). */
@@ -37,10 +42,15 @@ export interface IdeBridgeDeps {
   attention: (sessionId: string) => void;
 }
 
-/** Eltern-pid über ps; null, wenn unbekannt. Nur der Rückfall, falls zwischen PTY und claude ein Prozess liegt. */
-function parentPid(pid: number): number | null {
+/**
+ * Eltern-pid über ps; null, wenn unbekannt. Nur der Rückfall, falls zwischen PTY und claude ein Prozess liegt. Unter Windows gibt es
+ * kein ps: Dort startet das nichts und liefert null; die Zuordnung klappt nur, wenn die PTY-pid die von claude ist (`claude.exe`).
+ * Bei `claude.cmd` ist sie die von cmd.exe, dann bleibt die Verbindung ohne Tab (bekannte Lücke, Abend 42).
+ */
+export function parentPid(pid: number, platform: Platform): number | null {
+  if (platform === "win32") return null;
   try {
-    const out = execFileSync("ps", ["-o", "ppid=", "-p", String(pid)], { encoding: "utf8", timeout: 1000 }).trim();
+    const out = execFileSync("ps", ["-o", "ppid=", "-p", String(pid)], { encoding: "utf8", timeout: 1000, windowsHide: true }).trim();
     return Number(out) > 0 ? Number(out) : null;
   } catch {
     return null;
@@ -57,6 +67,7 @@ export class IdeBridge {
   private readonly plugin: Plugin;
   private readonly app: App;
   private readonly deps: IdeBridgeDeps;
+  private readonly parentOf = (pid: number): number | null => parentPid(pid, this.deps.platform);
 
   constructor(plugin: Plugin, app: App, deps: IdeBridgeDeps) {
     this.plugin = plugin;
@@ -82,6 +93,8 @@ export class IdeBridge {
             return base ? [base] : [];
           },
           vaultBase: deps.vaultBase,
+          platform: deps.platform,
+          vaultPaths: deps.vaultPaths,
           handlers: { ...this.editor.handlers(), diff: this.diff.handlers() },
           diffEnabled: () => deps.settings().ideDiff,
           onClientClose: (clientId) => this.diff.closeClient(clientId),
@@ -91,7 +104,7 @@ export class IdeBridge {
           warn: (message) => console.warn(message),
         }),
     });
-    this.editor = new IdeEditor(app, deps.vaultBase, (params) => void this.server?.broadcast("selection_changed", params), (p) => deps.excluded?.(p) ?? false);
+    this.editor = new IdeEditor(app, deps.vaultBase, (params) => void this.server?.broadcast("selection_changed", params), (p) => deps.excluded?.(p) ?? false, deps.platform);
     this.debounced = createDebounce(() => this.editor.check(), IDE_SELECTION_DEBOUNCE_MS, {
       set: (callback, ms) => window.setTimeout(callback, ms),
       clear: (handle) => window.clearTimeout(handle as number),
@@ -112,6 +125,7 @@ export class IdeBridge {
               this.diff.viewClosed(id);
             },
             vaultBase: this.deps.vaultBase,
+            platform: this.deps.platform,
           }),
       );
     } catch (fehler) {
@@ -152,7 +166,7 @@ export class IdeBridge {
     if (!server || server.port === null) return "off";
     const target = this.editor.mention();
     if (!target) return "no-selection";
-    const client = clientForSession(server.clients(), this.deps.ptyPid(sessionId), parentPid);
+    const client = clientForSession(server.clients(), this.deps.ptyPid(sessionId), this.parentOf);
     if (!client) return "no-client";
     return server.send(client.id, "at_mentioned", atMentionParams(target.filePath, target.lineStart, target.lineEnd)) ? "ok" : "no-client";
   }
@@ -170,7 +184,7 @@ export class IdeBridge {
     if (clientId === null || !server) return;
     const client = server.clients().find((c) => c.id === clientId);
     if (!client) return;
-    const session = sessionForClient(client, this.deps.sessions(), parentPid);
+    const session = sessionForClient(client, this.deps.sessions(), this.parentOf);
     if (session) this.deps.attention(session);
   }
 

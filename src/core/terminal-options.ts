@@ -16,3 +16,12 @@ export function changedXtermOptions(current: Partial<XtermOptions>, o: TerminalO
   if (current.minimumContrastRatio !== next.minimumContrastRatio) out.minimumContrastRatio = next.minimumContrastRatio;
   return out;
 }
+
+/**
+ * `windowsPty` für xterm aus `os.release()` ("10.0.22631"): Der dritte Teil ist die Buildnummer, nach der xterm die
+ * Zeilenumbrüche von ConPTY richtig behandelt. Ist er keine Zahl, bleibt nur der Backend-Name.
+ */
+export function windowsPtyOption(release: string): { backend: "conpty"; buildNumber?: number } {
+  const third = release.split(".")[2] ?? "";
+  return /^\d+$/.test(third) ? { backend: "conpty", buildNumber: Number(third) } : { backend: "conpty" };
+}

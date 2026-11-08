@@ -1,5 +1,6 @@
 import { TFolder } from "obsidian";
 import { planExclusion, type ExclusionPlan, type VaultEntry } from "../core/exclusion";
+import type { Platform } from "../core/platform-path";
 
 // Abend 33: Obsidians ausgeschlossene Dateien aus <configDir>/app.json (Schlüssel userIgnoreFilters) und alle Vault-Pfade,
 // beim Start jeder Claude-Sitzung frisch gelesen. Unlesbar: Sitzung startet trotzdem, ohne Regeln, mit Warnzeile.
@@ -14,8 +15,9 @@ export async function readExclusion(
   vault: ExclusionVaultLike,
   vaultAbs: string,
   s: { claudeExclusion: boolean; claudeExclusionSandbox: boolean },
+  platform: Platform,
 ): Promise<ExclusionPlan> {
-  if (!s.claudeExclusion) return planExclusion({ enabled: false, sandbox: false, raw: undefined, entries: [], vaultAbs });
+  if (!s.claudeExclusion) return planExclusion({ enabled: false, sandbox: false, raw: undefined, entries: [], vaultAbs, platform });
   const configPath = `${vault.configDir}/app.json`;
   let raw: unknown;
   let failure: string | null = null;
@@ -30,5 +32,5 @@ export async function readExclusion(
   }
   // Die Wurzel ("/") bleibt drin: Ein Pfadanfang trifft "//" nie mit eigener Regel, Muster prüfen nur Dateien.
   const entries: VaultEntry[] = vault.getAllLoadedFiles().map((f) => ({ path: f.path, folder: f instanceof TFolder }));
-  return planExclusion({ enabled: true, sandbox: s.claudeExclusionSandbox, raw, entries, vaultAbs, failure });
+  return planExclusion({ enabled: true, sandbox: s.claudeExclusionSandbox, raw, entries, vaultAbs, failure, platform });
 }

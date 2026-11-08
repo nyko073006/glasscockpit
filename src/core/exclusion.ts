@@ -6,10 +6,12 @@
 // Ausnahme "?": gemessen mit claude 2.1.296 trifft weder "\?" noch "[?]" ein wörtliches "?", das unmaskierte "?" schon.
 // Es steht für genau ein Zeichen und kann deshalb höchstens zu viel sperren, nie zu wenig.
 
+import type { Platform } from "./platform-path";
+
 export type IgnoreFilter = { kind: "prefix" | "regex"; text: string; re: RegExp };
 export interface VaultEntry { path: string; folder: boolean }
 export interface ExclusionTargets { prefixes: string[]; folders: string[]; files: string[]; skipped: string[]; active: number }
-export interface ExclusionInput { enabled: boolean; sandbox: boolean; raw: unknown; entries: readonly VaultEntry[]; vaultAbs: string; failure?: string | null }
+export interface ExclusionInput { enabled: boolean; sandbox: boolean; raw: unknown; entries: readonly VaultEntry[]; vaultAbs: string; failure?: string | null; platform?: Platform }
 export interface ExclusionPlan { settings: Record<string, unknown>; notice: string | null; filters: IgnoreFilter[] }
 
 /** Mehr eigene Regeln je Eintrag sperren den Eintrag nicht (Startargument bleibt klein; Spec Abend 33, 13.10.2026). */
@@ -99,8 +101,24 @@ export function escapeGlob(s: string): string {
   return s.replace(GLOB_SPECIAL, "\\$&");
 }
 
-export function exclusionRules(vaultAbs: string, t: ExclusionTargets): string[] {
-  const root = vaultAbs.replace(/\/+$/, "");
+/** Meldung für einen Vault auf einem Netzwerkpfad: Claude normalisiert nur Laufwerkspfade (C:\Users -> /c/Users), für \\server\… gibt es keine Regel. */
+export const WIN_UNC_NOTICE = "Ausschluss unter Windows nur für Vaults auf einem Laufwerk (C:\\…), nicht auf einem Netzwerkpfad.";
+
+/**
+ * Vault-Pfad in der Form, die Claude unter Windows beim Abgleich sieht (code.claude.com permissions: C:\Users\alice -> /c/Users/alice):
+ * Laufwerk klein, Trenner "/", Rest unverändert, ohne Trenner am Ende. Alles ohne Laufwerksbuchstaben (UNC, "\x", "C:foo") gibt null.
+ */
+export function windowsRuleRoot(vaultAbs: string): string | null {
+  const m = /^([A-Za-z]):(?:[\\/]+(.*))?$/.exec(vaultAbs);
+  if (!m) return null;
+  const rest = (m[2] ?? "").split(/[\\/]+/).filter((part) => part !== "");
+  return ["/" + m[1].toLowerCase(), ...rest].join("/");
+}
+
+export function exclusionRules(vaultAbs: string, t: ExclusionTargets, platform: Platform = "darwin"): string[] {
+  // darwin: der Vault-Pfad beginnt mit "/", unter win32 ist die Wurzel "/c/…" (windowsRuleRoot), ohne Laufwerk gibt es keine Regeln.
+  const root = platform === "win32" ? windowsRuleRoot(vaultAbs) : vaultAbs.replace(/\/+$/, "");
+  if (root === null) return [];
   const abs = (rel: string) => escapeGlob(`${root}/${rel}`);
   const patterns: string[] = [];
   for (const p of t.prefixes) {
@@ -144,10 +162,16 @@ export function isExcluded(filters: readonly IgnoreFilter[], path: string): bool
 export function planExclusion(i: ExclusionInput): ExclusionPlan {
   if (!i.enabled) return { settings: {}, notice: null, filters: [] };
   if (i.failure) return { settings: {}, notice: exclusionNotice({ active: 0, skipped: [], errors: [], sandbox: false, failure: i.failure }), filters: [] };
+  const platform = i.platform ?? "darwin";
   const { filters, errors } = parseIgnoreFilters(i.raw);
+  // Vault auf einem Netzwerkpfad: keine Regel möglich. Ohne Einträge in der Liste gibt es nichts zu sperren und nichts zu melden.
+  if (platform === "win32" && windowsRuleRoot(i.vaultAbs) === null && (filters.length > 0 || errors.length > 0)) {
+    return { settings: {}, notice: WIN_UNC_NOTICE, filters };
+  }
   const targets = excludedTargets(filters, i.entries);
-  const rules = exclusionRules(i.vaultAbs, targets);
-  const sandbox = i.sandbox && rules.length > 0;
+  const rules = exclusionRules(i.vaultAbs, targets, platform);
+  // Unter Windows gibt es keine Sandbox (Claude Code beendet sich beim Start mit failIfUnavailable); der Block bleibt weg.
+  const sandbox = platform !== "win32" && i.sandbox && rules.length > 0;
   return {
     settings: exclusionSettings(rules, sandbox),
     notice: exclusionNotice({ active: targets.active, skipped: targets.skipped, errors, sandbox }),

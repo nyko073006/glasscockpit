@@ -33,11 +33,6 @@ export function newestOpen(project: string, repo: string | null, files: readonly
   return { item: best, errors };
 }
 
-export function expandHome(path: string, home: string): string {
-  if (path === "~") return home;
-  return path.startsWith("~/") ? `${home}${path.slice(1)}` : path;
-}
-
 export function sortHandoffs(items: readonly OpenHandoff[]): OpenHandoff[] {
   return [...items].sort((a, b) => (a.created === b.created ? a.project.localeCompare(b.project, "de") : a.created < b.created ? 1 : -1));
 }
