@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
-import { awaitRunning, fillHandoffPrompt, isoDay, markTakenUp, newestOpen, sortHandoffs, touchesHandoffs, type HandoffSource } from "../src/core/handoffs";
+import { awaitRunning, fillHandoffPrompt, isoDay, markDismissed, markTakenUp, newestOpen, sortHandoffs, touchesHandoffs, type HandoffSource } from "../src/core/handoffs";
 
 const doc = (fm: string, body = "Text"): string => `---\n${fm}\n---\n${body}\n`;
 const src = (name: string, fm: string): HandoffSource => ({ path: `P/Projekt A/Handoffs/${name}`, name, text: doc(fm) });
@@ -96,6 +96,29 @@ describe("markTakenUp", () => {
   });
   it("ohne Frontmatter: Fehler", () => {
     expect(markTakenUp("status: offen\n", "2026-01-05")).toEqual({ ok: false, reason: "Handoff ohne Frontmatter" });
+  });
+});
+
+describe("markDismissed (Nachtrag 43g)", () => {
+  it("setzt status: verworfen und verworfen: <Tag>, sonst bytegleich", () => {
+    const r = markDismissed("---\ntags: [handoff]\nstatus: offen\nerstellt: 2026-01-02\n---\nText\n", "2026-01-05");
+    expect(r).toEqual({ ok: true, content: "---\ntags: [handoff]\nstatus: verworfen\nverworfen: 2026-01-05\nerstellt: 2026-01-02\n---\nText\n" });
+  });
+  it("vorhandenes verworfen-Feld wird überschrieben, CRLF bleibt", () => {
+    const r = markDismissed("---\r\nstatus: offen\r\nverworfen:\r\n---\r\n", "2026-01-05");
+    expect(r).toEqual({ ok: true, content: "---\r\nstatus: verworfen\r\nverworfen: 2026-01-05\r\n---\r\n" });
+  });
+  it("nicht offen: Fehler", () => {
+    expect(markDismissed("---\nstatus: aufgenommen\n---\n", "2026-01-05")).toEqual({ ok: false, reason: "Handoff ist nicht offen" });
+  });
+  it("Ergebnis zählt nicht mehr als offen", () => {
+    const r = markDismissed("---\nstatus: offen\nerstellt: 2026-01-02\n---\n", "2026-01-05");
+    if (!r.ok) throw new Error(r.reason);
+    expect(newestOpen("P", null, [{ path: "h.md", name: "h.md", text: r.content }], parse).item).toBeNull();
+  });
+  it("aufgenommen-Feld bleibt unberührt", () => {
+    const r = markDismissed("---\nstatus: offen\naufgenommen:\n---\n", "2026-01-05");
+    expect(r).toEqual({ ok: true, content: "---\nstatus: verworfen\nverworfen: 2026-01-05\naufgenommen:\n---\n" });
   });
 });
 

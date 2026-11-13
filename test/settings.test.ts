@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyDependencies, DEFAULT_SETTINGS, dependencyReason, expandHome, invalidMessage, normalizeSetting, parseNumberInput, parseSettings, validateSetting } from "../src/core/settings";
-import { COCKPIT_CROPS, DEFAULT_COCKPIT_CROP, DEFAULT_HIDDEN_PROJECT_DIRS, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF } from "../src/core/constants";
+import { COCKPIT_CROPS, DEFAULT_COCKPIT_CROP, DEFAULT_HIDDEN_PROJECT_DIRS, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF, DEFAULT_TODAY_BRIEFING, DEFAULT_TASKS_ADD_HEADING, DEFAULT_REMINDERS_ENABLED, DEFAULT_REMINDERS_LISTS, DEFAULT_REMINDERS_OVERDUE, DEFAULT_REMINDERS_INTERVAL_MIN, TODAY_DONE_MAX } from "../src/core/constants";
 
 describe("parseSettings", () => {
   it("trimmt Textwerte beim Laden", () => {
@@ -60,6 +60,34 @@ describe("fixedPrompt (Abend 19f)", () => {
     const kaputt = parseSettings({ fixedPrompt: "ja" });
     expect(kaputt.settings.fixedPrompt).toBe(false);
     expect(kaputt.invalid).toContain("fixedPrompt");
+  });
+});
+
+describe("Weich scrollen (Nachtrag 43f)", () => {
+  it("Vorgaben: an, 1, 3", () => {
+    expect(DEFAULT_SETTINGS.smoothScroll).toBe(true);
+    expect(DEFAULT_SETTINGS.scrollSpeed).toBe(1);
+    expect(DEFAULT_SETTINGS.scrollMaxPerFrame).toBe(3);
+  });
+  it("scrollSpeed: Dezimalzahl im Bereich gilt, darunter nicht", () => {
+    expect(validateSetting("scrollSpeed", 2.5)).toBeNull();
+    expect(validateSetting("scrollSpeed", 0.05)).toBe("Zahl von 0.1 bis 5");
+  });
+  it("scrollMaxPerFrame: nur ganze Zahlen von 1 bis 20", () => {
+    expect(validateSetting("scrollMaxPerFrame", 2.5)).toBe("ganze Zahl von 1 bis 20");
+    expect(validateSetting("scrollMaxPerFrame", 21)).toBe("ganze Zahl von 1 bis 20");
+    expect(validateSetting("scrollMaxPerFrame", 20)).toBeNull();
+  });
+  it("Laden klemmt auf die Grenzen, auch Dezimalwerte", () => {
+    expect(parseSettings({ scrollSpeed: 9 }).settings.scrollSpeed).toBe(5);
+    expect(parseSettings({ scrollSpeed: 0 }).settings.scrollSpeed).toBe(0.1);
+    expect(parseSettings({ scrollSpeed: 0.05 }).settings.scrollSpeed).toBe(0.1);
+    expect(parseSettings({ scrollMaxPerFrame: 50 }).settings.scrollMaxPerFrame).toBe(20);
+  });
+  it("smoothScroll: Unsinn fällt auf die Vorgabe", () => {
+    const kaputt = parseSettings({ smoothScroll: "ja" });
+    expect(kaputt.settings.smoothScroll).toBe(true);
+    expect(kaputt.invalid).toContain("smoothScroll");
   });
 });
 
@@ -697,5 +725,57 @@ describe("hiddenProjectDirs (Nachtrag Abend 41)", () => {
   });
   it("normalizeSetting trimmt", () => {
     expect(normalizeSetting("hiddenProjectDirs", " a,b\t")).toBe("a,b");
+  });
+});
+
+describe("Einstellungen der Karte „Heute“ (Abend 44)", () => {
+  it("sechs Vorgaben, auch in DEFAULT_SETTINGS und beim Laden ohne Werte", () => {
+    expect([DEFAULT_TODAY_BRIEFING, DEFAULT_TASKS_ADD_HEADING, DEFAULT_REMINDERS_ENABLED, DEFAULT_REMINDERS_LISTS, DEFAULT_REMINDERS_OVERDUE, DEFAULT_REMINDERS_INTERVAL_MIN])
+      .toEqual([true, "Heute", false, "", true, 5]);
+    expect(TODAY_DONE_MAX).toBe(500);
+    const want = { todayBriefing: true, tasksAddHeading: "Heute", remindersEnabled: false, remindersLists: "", remindersOverdue: true, remindersIntervalMin: 5 };
+    expect(DEFAULT_SETTINGS).toMatchObject(want);
+    expect(parseSettings(undefined).settings).toMatchObject(want);
+    expect(parseSettings({}).settings).toMatchObject(want);
+  });
+
+  it("Schalter: nur an oder aus", () => {
+    for (const key of ["todayBriefing", "remindersEnabled", "remindersOverdue"] as const) {
+      expect(validateSetting(key, true)).toBeNull();
+      expect(validateSetting(key, false)).toBeNull();
+      for (const v of ["ja", 1, null, undefined]) expect(validateSetting(key, v), `${key} ${String(v)}`).toBe("muss an oder aus sein");
+    }
+  });
+
+  it("tasksAddHeading und remindersLists: eine Zeile, leer erlaubt", () => {
+    for (const key of ["tasksAddHeading", "remindersLists"] as const) {
+      expect(validateSetting(key, "")).toBeNull();
+      expect(validateSetting(key, "Arbeit, Privat")).toBeNull();
+      for (const v of ["a\nb", "a\rb", 5, null, undefined]) expect(validateSetting(key, v), `${key} ${JSON.stringify(v)}`).not.toBeNull();
+    }
+  });
+
+  it("remindersIntervalMin: ganze Zahl von 0 bis 1440", () => {
+    expect(validateSetting("remindersIntervalMin", 0)).toBeNull();
+    expect(validateSetting("remindersIntervalMin", 1440)).toBeNull();
+    expect(validateSetting("remindersIntervalMin", 1441)).toBe("ganze Zahl von 0 bis 1440");
+    expect(validateSetting("remindersIntervalMin", -1)).toBe("ganze Zahl von 0 bis 1440");
+    expect(validateSetting("remindersIntervalMin", 2.5)).toBe("ganze Zahl von 0 bis 1440");
+    expect(validateSetting("remindersIntervalMin", "5")).toBe("ganze Zahl von 0 bis 1440");
+  });
+
+  it("beim Laden: kaputte Werte fallen auf die Vorgabe, leer bleibt leer, Text getrimmt", () => {
+    const r = parseSettings({ todayBriefing: "ja", tasksAddHeading: "a\nb", remindersEnabled: 1, remindersLists: 5, remindersOverdue: null, remindersIntervalMin: "x" });
+    expect(r.settings).toMatchObject({ todayBriefing: true, tasksAddHeading: "Heute", remindersEnabled: false, remindersLists: "", remindersOverdue: true, remindersIntervalMin: 5 });
+    expect([...r.invalid].sort()).toEqual(["remindersEnabled", "remindersIntervalMin", "remindersLists", "remindersOverdue", "tasksAddHeading", "todayBriefing"]);
+    expect(parseSettings({ tasksAddHeading: "" }).settings.tasksAddHeading).toBe("");
+    expect(parseSettings({ tasksAddHeading: "  Heute  ", remindersLists: " Arbeit, Privat " }).settings).toMatchObject({ tasksAddHeading: "Heute", remindersLists: "Arbeit, Privat" });
+    // Ganze Zahl außerhalb: geklemmt wie bei den übrigen Abständen.
+    expect(parseSettings({ remindersIntervalMin: 5000 }).settings.remindersIntervalMin).toBe(1440);
+  });
+
+  it("normalizeSetting trimmt die beiden Textfelder", () => {
+    expect(normalizeSetting("tasksAddHeading", " Heute\t")).toBe("Heute");
+    expect(normalizeSetting("remindersLists", " Arbeit ")).toBe("Arbeit");
   });
 });

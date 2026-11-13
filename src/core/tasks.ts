@@ -8,10 +8,21 @@ export type TaskRow =
   | { kind: "task"; line: number; text: string; done: boolean; depth: number };
 
 /** Entfernt genau ein abschließendes \r (CRLF-Zeile). */
-const bare = (line: string): string => (line.endsWith("\r") ? line.slice(0, -1) : line);
+export const bare = (line: string): string => (line.endsWith("\r") ? line.slice(0, -1) : line);
 
-// Einrückung, Bullet (- * + oder 1. / 1)), Leerraum, [c] mit genau einem Zeichen, dann Leerraum-Zeichen und Text.
-const CHECKBOX = /^([ \t]*(?:[-*+]|\d+[.)])[ \t]+\[)([^\r\n])\](?: ([\s\S]*))?$/;
+/** Listen-Vorsatz als Regex-Quelle: Einrückung, Bullet (- * + oder 1. / 1)), Leerraum. */
+export const LIST_PREFIX = String.raw`[ \t]*(?:[-*+]|\d+[.)])[ \t]+`;
+
+/**
+ * Checkbox-Zeile: Gruppe 1 Vorsatz bis `[`, Gruppe 2 genau ein Zeichen, Gruppe 3 Text. `after` ist die Regex-Quelle für das
+ * Zeichen zwischen `]` und Text; die Aufgabenliste lässt dort nur ein Leerzeichen zu.
+ */
+export function checkboxRegex(after: string): RegExp {
+  return new RegExp(String.raw`^(${LIST_PREFIX}\[)([^\r\n])\](?:${after}([\s\S]*))?$`);
+}
+
+// Einrückung, Bullet (- * + oder 1. / 1)), Leerraum, [c] mit genau einem Zeichen, dann Leerzeichen und Text.
+const CHECKBOX = checkboxRegex(" ");
 
 interface Box { markAt: number; mark: string; text: string }
 

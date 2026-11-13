@@ -68,7 +68,8 @@ describe("Abend 38: Pfade mit Leerzeichen verkabelt", () => {
 
   it("die Hülle aus Abend 37 bleibt die einzige Anmeldung bei xterm: kein neuer Provider, kein neuer Weg", () => {
     const view = code(read("src/host/terminal-view.ts"));
-    expect(view.split("registerLinkProvider(").length - 1).toBe(2);
+    // Nachtrag 43h: dritter Provider (Weblinks), ebenfalls über die Hülle.
+    expect(view.split("registerLinkProvider(").length - 1).toBe(3);
     expect(code(read("src/host/terminal-pane.ts")).split("this.term.registerLinkProvider(").length - 1).toBe(1);
   });
 });

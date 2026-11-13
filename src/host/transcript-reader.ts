@@ -40,6 +40,8 @@ export interface TranscriptResult {
    * das Präfix leer ist oder nichts gelesen wurde. null heißt für den Aufrufer: den alten Wert behalten.
    */
   handoff: string | null;
+  /** Erstellzeit der Transkriptdatei (birthtimeMs), null wenn unbekannt (nicht endlich oder ≤ 0) oder nichts gelesen. */
+  startedAtMs: number | null;
 }
 
 /**
@@ -93,19 +95,21 @@ export class TranscriptReader {
    */
   async read(force = false, handoffPrefix = ""): Promise<TranscriptResult> {
     const path = await this.locate(force);
-    if (!path) return { changed: false, blocks: [], handoff: null };
+    if (!path) return { changed: false, blocks: [], handoff: null, startedAtMs: null };
     let next: FileStamp;
+    let startedAtMs: number | null = null;
     try {
       const st = await stat(path);
       next = { size: st.size, mtimeMs: st.mtimeMs };
+      startedAtMs = Number.isFinite(st.birthtimeMs) && st.birthtimeMs > 0 ? st.birthtimeMs : null;
     } catch {
       // Datei verschwunden: beim nächsten Poll neu suchen.
       const war = this.stamp !== null;
       this.path = null;
       this.stamp = null;
-      return { changed: war, blocks: [], handoff: null };
+      return { changed: war, blocks: [], handoff: null, startedAtMs: null };
     }
-    if (!force && !statChanged(this.stamp, next)) return { changed: false, blocks: [], handoff: null };
+    if (!force && !statChanged(this.stamp, next)) return { changed: false, blocks: [], handoff: null, startedAtMs: null };
     const text = await this.readTail(path, next.size);
     // Erst nach gelungenem Lesen: wirft readTail, bleibt der alte Stand, und der nächste Aufruf liest erneut (Abend 29).
     this.stamp = next;
@@ -114,7 +118,7 @@ export class TranscriptReader {
     this.basesCache = null;
     this.tasks.merge(scanBackgroundTasks(text));
     const answer = lastAnswerText(text);
-    return { changed: true, blocks: answer ? extractCodeBlocks(answer) : [], handoff: lastHandoffBlock(text, handoffPrefix) };
+    return { changed: true, blocks: answer ? extractCodeBlocks(answer) : [], handoff: lastHandoffBlock(text, handoffPrefix), startedAtMs };
   }
 
   /** force (Command) übergeht die Drosselung der Ordnersuche. */

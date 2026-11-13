@@ -4,7 +4,7 @@ English | [Deutsch](README.de.md)
 
 ![Cockpit view with example data](docs/images/cockpit.png)
 
-Glasscockpit is an Obsidian plugin that runs [Claude Code](https://code.claude.com) sessions as terminal tabs inside your vault. A dashboard shows usage limits, context size, tasks, vault status and GitHub search results, either as cards or as a cockpit picture. The photo above uses example data.
+Glasscockpit is an Obsidian plugin that runs [Claude Code](https://code.claude.com) sessions as terminal tabs inside your vault. A dashboard shows usage limits, context size, vault status and GitHub search results, either as cards or as a cockpit picture. Its "Heute" (today) card puts the points of today's briefing, due reminders from the macOS Reminders app (optional) and your task list into one list; points ticked there are ticked in the rendered briefing too, while the briefing file itself stays unchanged. The photo above uses example data.
 
 Glasscockpit was inspired by the Agentic OS plugin from skaile.de and is an independent rebuild with its own code.
 
@@ -61,7 +61,7 @@ Most vault-related settings start empty. Empty means "not set up", never an erro
 |---|---|
 | Projektordner | "Neue Sitzung" offers no project subfolders. |
 | Briefing-Ordner | No briefing card, no automatic `git pull`. |
-| Aufgabenliste | The task card shows "fehlt" with a button to create the file. The default name is `Cockpit Tasks.md`. |
+| Aufgabenliste | The "Heute" card shows "fehlt" with a button to create the file. The default name is `Cockpit Tasks.md`. |
 | Inbox-Ordner, Index-Datei, Ordner der Daily Notes | The vault panel shows "aus" for that line. |
 | Lint-Befehl | No lint button. |
 | Radare | No radar lamps. A radar is a name plus the path to a JSON state file you write yourself. |
@@ -176,6 +176,7 @@ This follows the disclosure rules of the Obsidian developer policies.
 - `git pull --ff-only` in the briefing folder, only if you set one (every 5 minutes by default, while a dashboard is open).
 - `git status` in your project folders, for the repo panel. No fetch.
 - On macOS: `afplay` for the alert sound, `xattr` for the quarantine flag, `ps` to find the parent process for the IDE bridge, `ioreg` for the idle time (Telegram).
+- On macOS, only if "Erinnerungen in „Heute“ (nur macOS)" is on (off by default): `/usr/bin/osascript` with AppleScript for the Reminders app. It reads the ID, name, list and due date of all open reminders in all lists; the "Heute" card shows only the due ones from the lists you chose. When you tick a reminder in the card, it marks it as completed, or open again. None of this is sent over the network. The name and ID of each reminder ticked in the cockpit are stored in the plugin's `data.json` inside your vault and stay there until you tick a reminder again on a later day, even if you turn the setting off; if you sync your vault, they are synced with it. Not on Windows.
 - On Windows: `powershell.exe` for the hooks; `pwsh.exe` or Windows PowerShell for shell tabs and as your shell; `cmd.exe` to start `claude.cmd`; `taskkill` when a session is ended by force; `tar.exe` to unpack the binaries. No `afplay`, `xattr`, `ps` or `ioreg`. The system programs (`powershell.exe`, `cmd.exe`, `taskkill`, `tar.exe`) are started from the Windows `System32` folder, not found through `PATH`. `pwsh.exe` is the exception: it is looked up in the `PATH` folders, and Windows PowerShell from `System32` is the fallback.
 
 **Reads outside the vault.**
@@ -193,7 +194,7 @@ This follows the disclosure rules of the Obsidian developer policies.
 - `npm run deploy:statusline` writes `~/.claude/statusline-command.sh`. You run that yourself.
 - `npm run deploy:hook` writes `~/.claude/hooks/clearable-banner.py`; you run that yourself too. The hook reads `~/.claude/cockpit/thresholds.json`, `sessions/*.json` and the session transcript, and appends a log to `~/.claude/hooks/clearable-banner.log`.
 
-**Writes inside the vault.** The plugin's `data.json` (settings, session list), the folder `native/darwin-<arch>/` (on Windows `native/win32-<arch>/`) inside the plugin folder when you press "Binärdateien laden" (plus a temporary folder `.native-download-*` there while it runs, removed afterwards), the task file when you press "Anlegen" or tick a task, and the result of `git pull` in the briefing folder. On Windows also `.sessions/<id>.settings.json` in the plugin folder, one settings file per Claude session. The plugin removes these files when the session is stopped and when it loads and unloads. After a crash they stay until the next start.
+**Writes inside the vault.** The plugin's `data.json` (settings, session list, the briefing points ticked in the "Heute" card or in the briefing, and the ticked reminders; each of the two lists stays until you tick an item of the same kind again on a later day), the folder `native/darwin-<arch>/` (on Windows `native/win32-<arch>/`) inside the plugin folder when you press "Binärdateien laden" (plus a temporary folder `.native-download-*` there while it runs, removed afterwards), the task file when you press "Anlegen", tick a task or add one in the "Heute" card, and the result of `git pull` in the briefing folder. On Windows also `.sessions/<id>.settings.json` in the plugin folder, one settings file per Claude session. The plugin removes these files when the session is stopped and when it loads and unloads. After a crash they stay until the next start.
 
 **Network.**
 - GitHub search (`api.github.com/search/repositories`) for the Research card, without a token. It sends your search lines from the settings and nothing else. Without a token GitHub allows 10 searches per minute.

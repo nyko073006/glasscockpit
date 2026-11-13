@@ -132,6 +132,9 @@ export const DEFAULT_SKILL_BUTTONS = 12;
 // (modify, changed), die zu einem Neuladen zusammenlaufen; und die Liste „zuletzt benutzt“ in data.json bleibt
 // begrenzt, damit die Datei nicht ohne Ende wächst (die Zahl der Knöpfe ist die Einstellung skillButtons, max. 30).
 export const TASKS_RELOAD_DEBOUNCE_MS = 300;
+// Karte „Heute“ (Abend 44): Nach einem angenommenen Mausklick auf eine Zeile verwirft die Karte weitere Mausklicks auf Zeilen
+// so lange. Schützt vor dem zweiten Klick eines Doppelklicks auf die nachgerückte Zeile, lässt zügiges Abhaken nacheinander zu.
+export const TODAY_CLICK_GUARD_MS = 350;
 export const RECENT_SKILLS_MAX = 30;
 
 // Cockpit-Ansicht (Abend 15). Vorgabe der Einstellung „Dashboard-Ansicht“ (Abschnitt „Dashboard“): cockpit = Bild mit
@@ -205,6 +208,10 @@ export const DEFAULT_FILE_LINKS_SPACES = true;
 // Klick auf /clear (Abend 35): an heißt, ein freistehendes „/clear“ im Terminal einer Claude- oder Agent-Sitzung ist ein Link; ein
 // Klick schreibt „/clear “ (ohne Enter) in die Eingabezeile. Shell-Sitzungen haben nie einen.
 export const DEFAULT_CLEAR_LINK = true;
+// Nachtrag 43j: Klick auf /clear fragt nach, wenn die Übergabe der Sitzung offen ist (Lampe rot). Die Lampe selbst zeigt immer.
+export const DEFAULT_CHECK_BEFORE_CLEAR = true;
+// Nachtrag 43h: Web-URLs (http, https) im Terminal per Cmd+Klick (Windows: Ctrl+Klick) im Standardbrowser öffnen.
+export const DEFAULT_WEB_LINKS = true;
 // Datei-Viewer als Code-Editor (Abend 32): Die Vorschlagsliste öffnet beim Tippen von selbst; aus heißt nur per Ctrl+Leertaste.
 export const DEFAULT_FILE_VIEWER_AUTOCOMPLETE = true;
 // Markdown-Farben im Datei-Viewer (Nachtrag 43b): .md-Dateien werden gefärbt (Text, Code, Befehle, Überschriften, Links, Marker,
@@ -271,6 +278,18 @@ export const DEFAULT_CLEARABLE_MIN_PROMPTS = 2;
 export const DEFAULT_TOKENS_DAY_MEDIAN = 800000;
 export const DEFAULT_TOKENS_DAY_P90 = 4500000;
 export const DEFAULT_FOCUS_HEADING = "Heute dran";
+// Karte „Heute“ (Abend 44): Briefing-Punkte an, neue Aufgaben unter dieser Überschrift der Aufgabenliste (leer = Dateiende),
+// Erinnerungen aus (nur macOS), Listen leer = alle, Überfällige an, Abstand in Minuten (0 = nur beim Öffnen und per Knopf).
+export const DEFAULT_TODAY_BRIEFING = true;
+export const DEFAULT_TASKS_ADD_HEADING = "Heute";
+export const DEFAULT_REMINDERS_ENABLED = false;
+export const DEFAULT_REMINDERS_LISTS = "";
+export const DEFAULT_REMINDERS_OVERDUE = true;
+export const DEFAULT_REMINDERS_INTERVAL_MIN = 5;
+// Zeitlimit eines osascript-Aufrufs der Erinnerungen (Stapelabfrage gemessen rund 4 s).
+export const REMINDERS_TIMEOUT_MS = 20000;
+// Höchstens so viele Einträge je Tag im Erledigt-Stand (briefingDone.keys, remindersDone.items) der data.json.
+export const TODAY_DONE_MAX = 500;
 // Leer = nicht eingerichtet (Abend 21): inboxDir, indexFile, dailyDir.
 export const DEFAULT_INBOX_DIR = "";
 // Handoffs (Abend 19h): Leer = nicht eingerichtet. hubsDir im Vault, handoffsDir je Projektordner.
@@ -297,3 +316,17 @@ export const THRESHOLDS_FILE = "~/.claude/cockpit/thresholds.json";
 export const SESSION_FILES_DIR = "~/.claude/cockpit/sessions";
 export const RADAR_MAX_ROWS = 5;
 export const RADAR_NAME_MAX = 18;
+
+// Weich scrollen (Nachtrag 43f): Vorgaben der drei Einstellungen. Tempo ist ein Faktor auf den Weg des Rads (1 = Weg 1:1),
+// das Höchsttempo begrenzt die Zeilen je Bild (Bremse bei schnellen Wischen).
+export const DEFAULT_SMOOTH_SCROLL = true;
+export const DEFAULT_SCROLL_SPEED = 1;
+export const DEFAULT_SCROLL_MAX_PER_FRAME = 3;
+// Raststufen (Nachtrag 43f, Messung 29.10.2026): Ein Mausrad liefert einzelne, weit getrennte Ereignisse. Kommt ein Ereignis nach
+// mindestens WHEEL_NOTCH_PAUSE_MS Pause und ist es klein, zählt es eine ganze Zeile statt seines Bruchteils. Im Pixelmodus muss es
+// dafür mindestens WHEEL_NOTCH_MIN_PX groß sein, sonst wäre der erste Ausschlag eines Trackpads schon eine Raststufe.
+// Messwerte (29.10.2026): langsame Raststufen 12 bis 13 px nach mindestens 105 ms Pause (eine nach 30 ms); große Mausereignisse
+// 102 bis 309 px nach höchstens 98 ms; ein Trackpad-Wisch beginnt nach der Pause mit 1 bis 3 px und hat innerhalb des Wischs nie mehr
+// als 60 ms Abstand. Deshalb 80 ms zwischen 60 und 105 ms und 8 px zwischen 3 und 12 px.
+export const WHEEL_NOTCH_PAUSE_MS = 80;
+export const WHEEL_NOTCH_MIN_PX = 8;

@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  formatAge, formatRemaining, localDayStart, localDayString, outputTokensToday, parseUsageSnapshot, splitComplete,
+  dropDeadFiveHour, formatAge, formatRemaining, localDayStart, localDayString, outputTokensToday, parseUsageSnapshot, splitComplete,
   TokenCounter, type TokenCounterDeps, TokenTally, type TokenCount, tokensFileContent,
-  TranscriptScanner, type TranscriptFs, usagePollDue, usageView,
+  RESET_TEXT, TranscriptScanner, type TranscriptFs, type UsageSnapshot, usagePollDue, usageView,
 } from "../src/core/usage";
 
 // Lokale Zeit: Tests rechnen mit new Date(j, m, t, ...) und hängen nicht an der Zeitzone der Maschine.
@@ -114,6 +114,62 @@ describe("usageView", () => {
   });
   it("ohne written_at: Alter ab observed_at", () => {
     expect(usageView(snap(null, [23, NOW_S + 3600, NOW_S - 300]), NOW.getTime()).ageSec).toBe(300);
+  });
+});
+
+describe("dropDeadFiveHour (Nachtrag 44a): abgelaufenes 5h-Fenster ohne Nachfolger", () => {
+  /** 5h-Fenster und Woche; observedAt der Woche nur, wenn angegeben. */
+  const stand = (five: { resetsAt: number; observedAt?: number } | null, weekObserved?: number): UsageSnapshot => ({
+    writtenAt: null,
+    windows: {
+      ...(five ? { five_hour: { usedPercentage: 12, ...five } } : {}),
+      seven_day: { usedPercentage: 30, resetsAt: 1794900000, ...(weekObserved === undefined ? {} : { observedAt: weekObserved }) },
+    },
+  });
+  const JETZT = 1794400000;
+  const ab = (s: UsageSnapshot, jetzt = JETZT) => dropDeadFiveHour(s, jetzt * 1000).noFiveHour;
+
+  it("Fall aus der Spec: Woche nach dem 5h-Reset beobachtet, 5h fällt weg, Eingabe bleibt unverändert", () => {
+    const ein = stand({ resetsAt: 1793408400, observedAt: 1793392317 }, 1794397212);
+    const woche = ein.windows.seven_day;
+    const r = dropDeadFiveHour(ein, JETZT * 1000);
+    expect(r.noFiveHour).toBe(true);
+    expect(r.snapshot.windows.five_hour).toBeUndefined();
+    expect(r.snapshot.windows.seven_day).toEqual({ usedPercentage: 30, resetsAt: 1794900000, observedAt: 1794397212 });
+    expect(r.snapshot.windows.seven_day).toBe(woche);
+    expect(ein.windows.five_hour).toEqual({ usedPercentage: 12, resetsAt: 1793408400, observedAt: 1793392317 });
+  });
+
+  it("Gegenfall: Reset vor 10 Minuten, Woche davor beobachtet: bleibt, Zeile „zurückgesetzt“", () => {
+    const ein = stand({ resetsAt: JETZT - 600 }, JETZT - 900);
+    const r = dropDeadFiveHour(ein, JETZT * 1000);
+    expect(r.noFiveHour).toBe(false);
+    expect(r.snapshot).toBe(ein);
+    const five = usageView(r.snapshot, JETZT * 1000).rows.find((row) => row.key === "five_hour");
+    expect(five?.text).toBe(RESET_TEXT);
+  });
+
+  it("Grenzen: gleiche Zeit wie der Reset und mehr als 60 s Zukunft greifen nicht, genau 60 s schon", () => {
+    const R = JETZT - 3600;
+    expect(ab(stand({ resetsAt: R }, R))).toBe(false);
+    expect(ab(stand({ resetsAt: R }, R + 1))).toBe(true);
+    expect(ab(stand({ resetsAt: R }, JETZT + 61))).toBe(false);
+    expect(ab(stand({ resetsAt: R }, JETZT + 60))).toBe(true);
+  });
+
+  it("Grenzen: ohne observedAt der Woche, laufendes 5h-Fenster, ohne 5h-Fenster und ohne Woche greift nichts", () => {
+    expect(ab(stand({ resetsAt: JETZT - 3600 }))).toBe(false);
+    // läuft noch 30 s, die Woche ist (im erlaubten Vorlauf) danach beobachtet: trotzdem nicht
+    expect(ab(stand({ resetsAt: JETZT + 30 }, JETZT + 60))).toBe(false);
+    expect(ab(stand({ resetsAt: JETZT }, JETZT + 30))).toBe(true);
+    expect(ab(stand(null, JETZT))).toBe(false);
+    const ohneWoche: UsageSnapshot = { writtenAt: null, windows: { five_hour: { usedPercentage: 12, resetsAt: JETZT - 3600 } } };
+    expect(ab(ohneWoche)).toBe(false);
+  });
+
+  it("kein Rückgriff auf writtenAt: ein frisches writtenAt allein lässt das Fenster stehen", () => {
+    const ein = { ...stand({ resetsAt: JETZT - 3600 }), writtenAt: JETZT };
+    expect(ab(ein)).toBe(false);
   });
 });
 

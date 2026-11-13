@@ -1,4 +1,5 @@
 import type { CockpitFeed, RadarFeedEntry } from "./cockpit-feed";
+import type { HandoffCheck } from "./handoff-check";
 import type { OpenHandoff } from "./handoffs";
 import type { RadarFileLamp } from "./radar-lamp";
 import { RADAR_SLOTS } from "./constants";
@@ -13,6 +14,7 @@ import type { CounterState } from "./usage";
  */
 export interface FeedParts {
   handoffs: OpenHandoff[];
+  handoffCheck: HandoffCheck | null;
   sessions: CockpitFeed["sessions"];
   /** Jüngste Sitzung aus RecentSessions mit ihrer Claude-ID (Schlüssel der Sitzungsdatei). */
   active: { id: string; name: string; claudeId: string } | null;
@@ -46,6 +48,7 @@ export function composeFeed(p: FeedParts): CockpitFeed {
     telegramOn: telegramOn(p.settings),
     soundOn: soundOn(p.settings),
     handoffs: p.handoffs,
+    handoffCheck: p.handoffCheck,
   };
 }
 

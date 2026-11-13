@@ -35,7 +35,7 @@ describe("radarShorts: Kürzel sind innerhalb der sichtbaren Radare eindeutig", 
 describe("fieldValues: Lint-Taste nur mit lintCommand", () => {
   const fs = { contextWarn: 150_000, contextHandoff: 175_000, tokensDayMedian: 340_000, tokensDayP90: 870_000, lintAfterDays: 7 };
   const feed: CockpitFeed = {
-    sessions: [], active: null, handoffs: [], tokensToday: null, focus: [], vault: null, repos: null, day: null,
+    sessions: [], active: null, handoffs: [], handoffCheck: null, tokensToday: null, focus: [], vault: null, repos: null, day: null,
     unset: { projects: false, briefings: false, inbox: false, index: false, daily: false },
     radars: [], effort: "high", telegramOn: false, soundOn: false,
   };

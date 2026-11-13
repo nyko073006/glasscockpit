@@ -255,3 +255,14 @@ describe("Nachtrag 43b: Markdown-Farben verkabelt", () => {
     expect(tab).toContain("Beginnt Text in Backticks mit einem dieser Wörter (oder mit $ oder ./), färbt das Fenster ihn als Befehl, sonst als Code. Wörter durch Leerzeichen getrennt. Wirkt beim nächsten Öffnen.");
   });
 });
+
+// Nachtrag 43j, Befund der Abnahme: Die Rückfrage „Trotzdem clearen?“ listet die Lücken je Zeile; ein <p> ohne pre-line
+// verschluckte die Umbrüche, mehrere Lücken liefen in einer Zeile ineinander. Das Aussehen prüft die Abnahme.
+describe("Nachtrag 43j: ChoiceModal behält Zeilenumbrüche", () => {
+  it("Text im Absatz mit eigener Klasse, die Klasse setzt white-space: pre-line", () => {
+    const modal = read("src/host/file-viewer-modal.ts");
+    const open = modal.slice(modal.indexOf("export class ChoiceModal"), modal.indexOf('cls: "modal-button-container"'));
+    expect(open).toMatch(/createEl\("p", \{ text: this\.message, cls: `\$\{CSS_PREFIX\}choice-message` \}\)/);
+    expect(read("src/styles.css")).toMatch(/\.cockpit-choice-message \{\s*white-space: pre-line;\s*\}/);
+  });
+});

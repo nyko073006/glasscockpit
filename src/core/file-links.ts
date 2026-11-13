@@ -609,3 +609,36 @@ export function linkModifierDown(event: { metaKey: boolean; ctrlKey: boolean; al
 export function lineSeparatorOf(text: string): "\n" | "\r\n" {
   return text.includes("\r\n") ? "\r\n" : "\n";
 }
+
+/** Nachtrag 43h: Eine Web-URL im Terminal; start inklusiv, end exklusiv (Index im Text, wie bei den Pfadkandidaten). */
+export interface UrlRange { start: number; end: number; url: string }
+
+// Nur http und https (kein file:, javascript: usw.), nicht als Wortteil (`xhttps://`). Leerraum, Anführungszeichen (auch typografische)
+// und spitze Klammern beenden die URL.
+const URL_TOKEN = /(?<![\p{L}\p{N}])https?:\/\/[^\s<>"'`„“”‚‘’]+/giu;
+const URL_SCHEME = /^https?:\/\//i;
+const URL_TRAILING = /[.,;:!?]$/;
+const CLOSERS: Record<string, string> = { ")": "(", "]": "[", "}": "{" };
+
+/** Satzzeichen hinten weg, schließende Klammern nur, wenn sie in der URL keine öffnende haben (`…/Test_(Begriff)` bleibt). */
+function trimUrl(url: string): string {
+  for (;;) {
+    if (URL_TRAILING.test(url)) { url = url.slice(0, -1); continue; }
+    const last = url.slice(-1);
+    const open = CLOSERS[last];
+    if (open && url.split(open).length - 1 < url.split(last).length - 1) { url = url.slice(0, -1); continue; }
+    return url;
+  }
+}
+
+/** Alle Web-URLs (http, https) der Zeile, aufsteigend. Ob sie geöffnet werden, entscheidet der host (Einstellung, Taste). */
+export function urlRanges(text: string): UrlRange[] {
+  const result: UrlRange[] = [];
+  for (const match of text.matchAll(URL_TOKEN)) {
+    const start = match.index ?? 0;
+    const url = trimUrl(match[0]);
+    if (url.replace(URL_SCHEME, "") === "") continue;
+    result.push({ start, end: start + url.length, url });
+  }
+  return result;
+}

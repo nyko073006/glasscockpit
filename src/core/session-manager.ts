@@ -37,6 +37,8 @@ export interface ManagerOptions {
 export interface SessionMeta {
   kind: "shell" | "claude";
   title: string;
+  /** Weich scrollen (Nachtrag 43f): die Sitzung startete mit eigener Rad-Behandlung; fehlt der Schlüssel, ist sie aus. */
+  smoothScroll?: boolean;
 }
 
 export interface SessionSpec {

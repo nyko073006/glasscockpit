@@ -156,7 +156,7 @@ describe("Instrumente", () => {
     const el = q(".cockpit-panel-tasks");
     expect(el.getAttribute("role")).toBe("button");
     expect(el.getAttribute("tabindex")).toBe("0");
-    expect(el.getAttribute("aria-label")).toContain("Aufgaben");
+    expect(el.getAttribute("aria-label")).toContain("Heute");
   });
 });
 

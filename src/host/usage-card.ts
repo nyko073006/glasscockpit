@@ -3,7 +3,7 @@ import type { ItemView } from "obsidian";
 import { USAGE_SNAPSHOT_FILE } from "../core/constants";
 import { Observable } from "../core/observable";
 import { expandHome } from "../core/settings";
-import { parseUsageSnapshot, type TokenCounter, type UsageSnapshot, usageView } from "../core/usage";
+import { dropDeadFiveHour, parseUsageSnapshot, type TokenCounter, type UsageSnapshot, usageView } from "../core/usage";
 import { hostPlatform } from "./host-platform";
 import { readSnapshotFile, type SnapshotRead } from "./usage-fs";
 
@@ -80,7 +80,9 @@ export class UsageCard {
       if (parsed === null) {
         body.createDiv({ text: "Schnappschuss nicht lesbar: kein gültiges JSON", cls: "cockpit-hint cockpit-usage-error" });
       } else {
-        const view = usageView(parsed, Date.now());
+        const now = Date.now();
+        // Nachtrag 44a: abgelaufenes 5h-Fenster ohne Nachfolger zeigt keine Zeile
+        const view = usageView(dropDeadFiveHour(parsed, now).snapshot, now);
         date.setText(`Stand ${view.ageText}`);
         if (view.rows.length === 0) body.createDiv({ text: "Keine Limits im Schnappschuss.", cls: "cockpit-hint" });
         for (const row of view.rows) {

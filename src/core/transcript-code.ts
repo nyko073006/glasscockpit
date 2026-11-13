@@ -103,7 +103,7 @@ export function extractCodeBlocks(markdown: string): CodeBlock[] {
 }
 
 /** Beginnt die erste nichtleere Zeile des Codes (führende Leerzeichen ignoriert) mit prefix? */
-function beginntMit(code: string, prefix: string): boolean {
+export function beginntMit(code: string, prefix: string): boolean {
   const erste = code.split("\n").find((z) => z.trim() !== "");
   return erste !== undefined && erste.trimStart().startsWith(prefix);
 }

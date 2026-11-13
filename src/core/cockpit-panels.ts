@@ -5,9 +5,10 @@
  * Alle Maße sind am zugeschnittenen Bild `assets/cockpit-bg.jpg` (1536 × 1942) gemessen und stehen in Prozent
  * der vollen Bühne, auch in der Ansicht „zugeschnitten“: Der Ausschnitt `VIEW_CROP` ist ein Fenster darüber, kein neues Bild.
  * Die Polygone stehen in Prozent der jeweiligen Fläche (ihrer Umrandung) und schneiden den Inhalt
- * passend zu den schrägen Flächen zu; gemessen aus der grauen Maske (Deckung der Polygone mit der Maske über 98 %).
+ * passend zu den schrägen Flächen zu; gemessen aus der grauen Maske (Deckung der Polygone mit der Maske über 98 %, Ausnahme die Fläche handoff mit 0,9747).
  */
 import type { CockpitFeed } from "./cockpit-feed";
+import { type HandoffCheck, NO_SESSION_CHECK } from "./handoff-check";
 import { formatCount, topRepos } from "./day-stats";
 import { EFFORT_STEPS, RADAR_SLOTS } from "./constants";
 import type { EffortStep } from "./effort";
@@ -17,8 +18,8 @@ import type { PullSnapshot } from "./pull-state";
 import { type ResearchCache, newIds, parseSearches, pruneSections } from "./research";
 import type { CockpitCrop } from "./settings";
 import { type RadarLamp, lampOf, radarRows } from "./session-radar";
-import { type TaskRow, displayText } from "./tasks";
-import { type UsageSnapshot, usageView } from "./usage";
+import { displayText } from "./tasks";
+import { dropDeadFiveHour, type UsageSnapshot, usageView } from "./usage";
 import { UNSET_SETTING_LABEL, UNSET_SHORT, UNSET_TEXT, isUnset, radarShorts, unsetHint } from "./unset";
 import { indexAgeDays, indexStale, localDayKey } from "./vault-state";
 
@@ -117,7 +118,7 @@ export const PANELS: readonly PanelGeometry[] = [
  * Bühne, Polygon und Textrechteck in Prozent des Rects wie bei `PanelGeometry`. `coverage` ist die gemessene Deckung (Schnitt durch
  * Vereinigung von Polygon und Fläche im Bild), `circle` ist bei den Rundinstrumenten die Kreisform im Rect (Mitte und Radius in Prozent).
  */
-export type FieldId = "radar" | "focus" | "gaugeLeft" | "gaugeRight" | "vault" | "repos" | "radars" | "effort" | "telegram" | "sound" | "loc" | "commits" | "newSession";
+export type FieldId = "radar" | "focus" | "gaugeLeft" | "gaugeRight" | "vault" | "repos" | "radars" | "effort" | "telegram" | "sound" | "loc" | "commits" | "handoff" | "newSession";
 export interface FieldGeometry extends Omit<PanelGeometry, "id"> {
   id: FieldId;
   circle?: { cx: number; cy: number; r: number };
@@ -157,6 +158,8 @@ export const FIELDS: readonly FieldGeometry[] = [
   // LOC und Commits heute, rechte Konsole über dem OUT-Ring: zwei kleine Schlitze übereinander (x 1157 bis 1198, y 1140 bis 1197 und x 1157 bis 1206, y 1212 bis 1273; zum Ring bleiben 20 px frei). Messung: scripts/measure-fields.py, Startpunkte (1178, 1170) und (1181, 1240).
   { id: "loc", rect: pct(1157.1, 1140.1, 40.8, 56.8), polygon: [[0, 0], [0, 100], [100, 100], [92.64, 38.77], [73.01, 12.33], [58.28, 0]], content: { x: 9.51, y: 20.93, w: 56.44, h: 72.25 }, coverage: 0.9918 },
   { id: "commits", rect: pct(1157.1, 1212.1, 48.8, 60.8), polygon: [[0, 0], [0, 96.71], [4.1, 100], [97.95, 100], [100, 82.3], [87.69, 1.65]], content: { x: 7.95, y: 8.02, w: 71.79, h: 82.3 }, coverage: 0.9851 },
+  // Übergabe-Lampe (43j), linke Konsole über dem CTX-Ring: schmaler Schlitz, Spiegel von LOC/COM (x 329 bis 380, y 1140 bis 1279). Messung: scripts/measure-fields.py, Startpunkt (354, 1210), höchstens 8 Ecken; Deckung 0,9747 (unter 0,98, auch mit mehr Ecken unverändert).
+  { id: "handoff", rect: pct(329.1, 1140.1, 50.8, 138.8), polygon: [[98.03, 0], [51.23, 0], [25.62, 15.14], [0, 94.41], [1.97, 100], [100, 99.28]], content: { x: 33.25, y: 17.93, w: 57.14, h: 78.56 }, coverage: 0.9747 },
   { id: "newSession", rect: pct(699.1, 1498.1, 115.8, 82.8), polygon: [[4.32, 27.79], [0, 49.55], [0.86, 64.95], [4.32, 75.83], [11.23, 83.08], [24.84, 89.12], [31.97, 100], [80.99, 100], [81.86, 88.22], [84.45, 79.76], [97.41, 62.54], [100, 54.08], [100, 31.42], [95.68, 16.92], [88.77, 7.25], [75.81, 1.21], [49.24, 0], [37.15, 3.63], [14.69, 15.71], [7.78, 21.75]], content: { x: 21.49, y: 17.98, w: 57.88, h: 64.05 }, coverage: 0.992 },
 ];
 
@@ -174,6 +177,7 @@ export const FIELD_TITLES: Record<FieldId, string> = {
   sound: "Ton",
   loc: "LOC heute",
   commits: "Commits heute",
+  handoff: "Übergabe",
   newSession: "Neue Sitzung",
 };
 
@@ -181,7 +185,7 @@ export const FIELD_TITLES: Record<FieldId, string> = {
 export const PANEL_TITLES: Record<PanelId, string> = {
   briefing: "Briefing",
   usage: "Usage",
-  tasks: "Aufgaben",
+  tasks: "Heute",
   research: "Research",
   system: "System",
   "lamp-pull": "Pull",
@@ -231,7 +235,8 @@ export interface PanelValues {
 }
 
 export type BriefingInput = { kind: "missing" } | { kind: "unset" } | { kind: "ok"; date: string | null };
-export type TasksInput = { kind: "missing" } | { kind: "ok"; rows: TaskRow[] };
+/** Stand der Karte „Heute“: offene Punkte als Rohtext (Briefing, Erinnerungen, Aufgaben), Gesamtzahl, ob die Aufgabenliste fehlt. */
+export type TasksInput = { open: string[]; total: number; tasksMissing: boolean };
 /** Alles, was die Instrumente brauchen; jeweils der Stand, den auch die vollen Karten halten (null = lädt noch). */
 export interface CockpitInputs {
   now: number;
@@ -288,8 +293,10 @@ function briefingValues(b: BriefingInput | null, now: number): Instrument {
 function usageValues(u: CockpitInputs["usage"], now: number): Instrument {
   const gray = (line: string) => plain("–", [line], "gray");
   if (u.snapshot === null) return gray("kein Stand");
-  const five = usageView(u.snapshot, now).rows.find((r) => r.key === "five_hour");
-  if (five === undefined) return gray("kein 5h-Stand");
+  const live = dropDeadFiveHour(u.snapshot, now);
+  const five = usageView(live.snapshot, now).rows.find((r) => r.key === "five_hour");
+  // Nachtrag 44a: abgelaufenes 5h-Fenster ohne Nachfolger heißt, der Plan hat keins
+  if (five === undefined) return gray(live.noFiveHour ? "kein 5h-Limit" : "kein 5h-Stand");
   if (five.expired || five.percent === null) return gray("zurückgesetzt");
   return plain(`${five.percent} %`, [`noch ${remainingClock(five.remainingSec ?? 0)}`], ampel(five.percent));
 }
@@ -298,7 +305,7 @@ function usageValues(u: CockpitInputs["usage"], now: number): Instrument {
 function weekValues(u: CockpitInputs["usage"], now: number): Instrument {
   const empty = (line: string): Instrument => ({ big: "–", lines: [line], tone: "gray", bar: 0 });
   if (u.snapshot === null) return empty("kein Stand");
-  const row = usageView(u.snapshot, now).rows.find((r) => r.key === "seven_day");
+  const row = usageView(dropDeadFiveHour(u.snapshot, now).snapshot, now).rows.find((r) => r.key === "seven_day");
   if (row === undefined) return empty("kein Wochenstand");
   if (row.expired || row.percent === null) return empty("zurückgesetzt");
   return { big: `${row.percent} %`, lines: [`Reset ${weekClock(row.remainingSec ?? 0)}`], tone: ampel(row.percent), bar: row.percent };
@@ -312,7 +319,7 @@ const WARN_WINDOWS: ReadonlyArray<[string, string]> = [["five_hour", "5h"], ["se
  */
 function warningValues(u: CockpitInputs["usage"], now: number): Instrument {
   if (u.snapshot === null) return plain("", ["kein Stand"], "gray");
-  const rows = usageView(u.snapshot, now).rows;
+  const rows = usageView(dropDeadFiveHour(u.snapshot, now).snapshot, now).rows;
   const lines: string[] = [];
   let tone: Tone = "green";
   for (const [key, short] of WARN_WINDOWS) {
@@ -328,11 +335,10 @@ function warningValues(u: CockpitInputs["usage"], now: number): Instrument {
 
 function tasksValues(t: TasksInput | null): Instrument {
   if (t === null) return loading();
-  if (t.kind === "missing") return { ...plain("–", ["fehlt"], "gray"), hint: "Aufgabenliste fehlt" };
-  const tasks = t.rows.flatMap((r) => (r.kind === "task" ? [r] : []));
-  const open = tasks.filter((r) => !r.done);
-  if (open.length === 0) return plain("0", [tasks.length === 0 ? "keine Aufgaben" : "alles erledigt"]);
-  return plain(String(open.length), open.slice(0, LIST_MAX).map((r) => clip(displayText(r.text), LINE_MAX)));
+  // „fehlt“ nur, wenn auch Briefing und Erinnerungen nichts liefern; sonst zählen ihre Punkte.
+  if (t.tasksMissing && t.total === 0) return { ...plain("–", ["fehlt"], "gray"), hint: "Aufgabenliste fehlt" };
+  if (t.open.length === 0) return plain("0", [t.total === 0 ? "keine Aufgaben" : "alles erledigt"]);
+  return plain(String(t.open.length), t.open.slice(0, LIST_MAX).map((text) => clip(displayText(text), LINE_MAX)));
 }
 
 function researchValues(c: ResearchCache | null): Instrument {
@@ -418,6 +424,8 @@ export interface FieldValues {
   sound: { on: boolean };
   loc: DayField;
   commits: DayField;
+  /** Übergabe-Lampe: Check der aktiven Sitzung, ohne Sitzung `NO_SESSION_CHECK`. */
+  handoff: HandoffCheck;
   /** Feld „Neue Sitzung“: `hint` = „<n> offen“ (offene Handoffs), leer bei 0. */
   newSession: { hint: string };
 }
@@ -572,6 +580,7 @@ export function fieldValues(feed: CockpitFeed, settings: FieldSettings, now: num
     sound: { on: feed.soundOn },
     loc: dayField(feed.day, "loc", feed.unset.projects),
     commits: dayField(feed.day, "commits", feed.unset.projects),
+    handoff: feed.handoffCheck ?? NO_SESSION_CHECK,
     newSession: { hint: feed.handoffs.length > 0 ? `${feed.handoffs.length} offen` : "" },
   };
 }

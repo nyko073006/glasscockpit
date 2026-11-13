@@ -91,7 +91,7 @@ const EDGES: readonly Edge[] = ["n", "s", "e", "w", "ne", "nw", "se", "sw"];
 const mb = (bytes: number): string => (bytes / 1024 / 1024).toLocaleString("de-DE", { maximumFractionDigits: 1 });
 
 /** Rückfrage mit eigenen Knöpfen; der erste ist der hervorgehobene. */
-class ChoiceModal extends Modal {
+export class ChoiceModal extends Modal {
   private readonly message: string;
   private readonly choices: Array<{ label: string; warning?: boolean; action: () => void }>;
 
@@ -103,7 +103,8 @@ class ChoiceModal extends Modal {
   }
 
   onOpen(): void {
-    this.contentEl.createEl("p", { text: this.message });
+    // Umbrüche im Text bleiben stehen (pre-line), etwa eine Lücke je Zeile in der Rückfrage vor /clear (Nachtrag 43j).
+    this.contentEl.createEl("p", { text: this.message, cls: `${CSS_PREFIX}choice-message` });
     const row = this.contentEl.createDiv({ cls: "modal-button-container" });
     this.choices.forEach((choice, i) => {
       const button = row.createEl("button", { text: choice.label, cls: choice.warning ? "mod-warning" : i === 0 ? "mod-cta" : "" });

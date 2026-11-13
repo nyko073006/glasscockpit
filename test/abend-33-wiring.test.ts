@@ -12,7 +12,7 @@ describe("Abend 33: Verkabelung", () => {
     expect(main).toMatch(/this\.exclusionFilters = plan\.filters/);
     expect(main).toMatch(/store\.onSettingsChange\(\(\) => void this\.exclusionFor\(store\.settings\(\)\)\)/);
     expect(main).toMatch(/readExclusion\(this\.app\.vault, this\.vaultPath\(\), s, hostPlatform\(\)\)/);
-    expect(read("src/host/launcher.ts")).toContain("hookSettings(start.exclusion?.settings)");
+    expect(read("src/host/launcher.ts")).toContain("hookSettings({ ...start.exclusion?.settings, ...smooth.settings })");
   });
   it("IDE-Brücke: Editor bekommt den Ausschluss, main prüft Einstellung und Filter bei jeder Meldung", () => {
     expect(read("src/host/ide-bridge.ts")).toMatch(/new IdeEditor\([^;]*deps\.excluded/);

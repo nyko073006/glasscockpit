@@ -36,6 +36,8 @@ ZIELE = [
     ("sound", (337, 1462), None, 8, "polygon"),
     ("loc", (1178, 1170), None, 8, "polygon"),
     ("commits", (1181, 1240), None, 8, "polygon"),
+    # Übergabe-Lampe (43j): schmaler Schlitz links über dem CTX-Ring, Spiegel der LOC/COM-Schlitze (Messbereich x 327 bis 381, y 1139 bis 1280, Startpunkt (354, 1210))
+    ("handoff", (354, 1210), None, 8, "polygon"),
     # Knauf des Schalthebels (a18e): dunkle Innenfläche des Kopfes, unten bei y 1580 gekappt (darunter der schmale Schaft)
     ("newSession", (755, 1540), 1580, 20, "polygon"),
 ]

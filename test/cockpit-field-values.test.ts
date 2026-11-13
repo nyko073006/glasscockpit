@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { type CockpitFeed } from "../src/core/cockpit-feed";
 import { fieldValues } from "../src/core/cockpit-panels";
+import { NO_SESSION_CHECK, type HandoffCheck } from "../src/core/handoff-check";
 import type { RadarInput } from "../src/core/session-radar";
 
 // Werte der neuen Flächen (Abend 18, Darstellung), reine Logik.
@@ -14,7 +15,7 @@ const sess = (o: Partial<RadarInput> & { id: string }): RadarInput => ({
 });
 const feed = (o: Partial<CockpitFeed> = {}): CockpitFeed => ({
   sessions: [], active: null, tokensToday: null, focus: [], vault: null, repos: null,
-  radars: [{ name: "Projekt-Monitor", lamp: "green" }, { name: "AV-Lager-Radar", lamp: "gray" }], unset: { projects: false, briefings: false, inbox: false, index: false, daily: false }, effort: "high", telegramOn: true, soundOn: true, day: null, handoffs: [], ...o,
+  radars: [{ name: "Projekt-Monitor", lamp: "green" }, { name: "AV-Lager-Radar", lamp: "gray" }], unset: { projects: false, briefings: false, inbox: false, index: false, daily: false }, effort: "high", telegramOn: true, soundOn: true, day: null, handoffs: [], handoffCheck: null, ...o,
 });
 const file = (tokens: number) => ({ sessionId: "s", contextTokens: tokens, usedPercentage: 50, model: "opus", writtenAt: NOW / 1000 - 120 });
 const active = (tokens: number) => ({ id: "a", name: "Haupt", file: file(tokens) });
@@ -240,5 +241,15 @@ describe("Feld Neue Sitzung (Abend 19h)", () => {
   });
   it("ohne offene Handoffs kein Hinweis", () => {
     expect(fieldValues(feed({ handoffs: [] }), settings, NOW).newSession).toEqual({ hint: "" });
+  });
+});
+
+describe("fieldValues: Übergabe (43j)", () => {
+  const rot: HandoffCheck = { tone: "red", gaps: ["Git: ungespeicherte Änderungen"], lines: ["Handoff: ok", "Git: ungespeicherte Änderungen"], tooltip: "Übergabe: nicht bereit" };
+  it("ohne Check (null) der Wert „keine aktive Sitzung“", () => {
+    expect(fieldValues(feed({ handoffCheck: null }), settings, NOW).handoff).toBe(NO_SESSION_CHECK);
+  });
+  it("mit rotem Check derselbe Wert unverändert", () => {
+    expect(fieldValues(feed({ handoffCheck: rot }), settings, NOW).handoff).toBe(rot);
   });
 });

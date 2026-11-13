@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { ON_WINDOWS } from "./helpers/platform";
 
@@ -97,5 +97,14 @@ describe.skipIf(ON_WINDOWS)("npm run deploy:hook", () => {
     expect(existsSync(ziel)).toBe(true);
     expect(readFileSync(ziel, "utf8")).toBe(readFileSync(HOOK, "utf8"));
     expect(statSync(ziel).mode & 0o111).not.toBe(0);
+  });
+
+  it("Nachtrag 43i: kopiert clear-sicherung.py bytegleich und ausführbar daneben", () => {
+    const ziel = join(temp(), "hooks", "clearable-banner.py");
+    const r = spawnSync(process.execPath, [DEPLOY, ziel], { encoding: "utf8" });
+    expect(r.status).toBe(0);
+    const zweiter = join(dirname(ziel), "clear-sicherung.py");
+    expect(readFileSync(zweiter, "utf8")).toBe(readFileSync(resolve(__dirname, "..", "hooks", "clear-sicherung.py"), "utf8"));
+    expect(statSync(zweiter).mode & 0o111).not.toBe(0);
   });
 });

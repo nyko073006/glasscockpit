@@ -25,6 +25,8 @@ import { expandHome } from "./core/settings";
 import { isUnset } from "./core/unset";
 import { closeAllBanners } from "./host/attention-alert";
 import { openCockpitSettings } from "./host/open-settings";
+import { readHandoffCheck } from "./host/handoff-check";
+import type { HandoffCheck } from "./core/handoff-check";
 import { HandoffKeeper } from "./core/transcript-poll";
 import { TokenCounter, TranscriptScanner } from "./core/usage";
 import { ViewTracker } from "./core/view-tracker";
@@ -41,12 +43,13 @@ import { listGitRepos, runGitDayLog, runGitIdentity, runGitStatus } from "./host
 import { createTasksFile } from "./host/tasks-card";
 import { nodeDiscoveryFs } from "./host/discovery-fs";
 import { PullController } from "./host/git-pull";
+import { RemindersController } from "./host/reminders";
 import { IdeBridge } from "./host/ide-bridge";
 import { Launcher, type SpawnPlan } from "./host/launcher";
 import { LaunchModal } from "./host/launch-modal";
 import { CockpitSettingTab } from "./host/settings-tab";
 import { type SessionChoice, handoffChoices } from "./core/new-session";
-import { awaitRunning, isoDay, markTakenUp, touchesHandoffs } from "./core/handoffs";
+import { awaitRunning, isoDay, markDismissed, markTakenUp, touchesHandoffs } from "./core/handoffs";
 import { NewSessionModal } from "./host/new-session-modal";
 import { createLastUsed } from "./host/last-used";
 import { withPathDirs } from "./core/platform-path";
@@ -87,6 +90,8 @@ export default class GlasscockpitPlugin extends Plugin {
   // Letzter Handoff-Block je Cockpit-Sitzung (Abend 19b): Schlüssel ist die Cockpit-id, nicht die Claude-ID, damit der Knopf /clear übersteht.
   // Nur im Speicher: weg beim Neuladen von Obsidian, nicht beim Beenden oder Neustart einer Sitzung (auch nach „frisch starten“ soll der Block noch zu haben sein).
   private readonly handoffs = new HandoffKeeper();
+  /** Feed neu rechnen (gesetzt in onload); Tab-Wechsel und Claude-ID-Wechsel stoßen so die Übergabe-Lampe an. */
+  private feedRefresh: (() => void) | null = null;
   private readonly recent = new RecentSessions();
   // Limit ohne Lücke: Plätze für Starts, die noch auf Login-Shell und Transkript-Suche warten.
   private readonly slots = new StartSlots();
@@ -259,6 +264,7 @@ export default class GlasscockpitPlugin extends Plugin {
           },
           adoptClaudeId: (sessionId, claudeId) => store.setClaudeSessionId(sessionId, claudeId),
           handoffs: this.handoffs,
+          handoffCheck: (sessionId) => this.handoffCheckFor(sessionId),
           openPath: (target, refocus) => void openTerminalPath(target, {
             platform,
             vaultBase: () => {
@@ -288,6 +294,14 @@ export default class GlasscockpitPlugin extends Plugin {
       // Repo-Ampel (Abend 18) im Takt des Pulls, kein zweiter Takt; der Pull läuft nur bei offenem Dashboard.
       afterPull: () => { void repoScan.run(); void dayScan.run(); void feedSource.refresh(); },
     });
+    // Karte „Heute“ (Abend 44): Erinnerungen-Zustand und Takt gehören dem Plugin wie der Pull, eine Instanz für alle Dashboards.
+    const reminders = new RemindersController({
+      settings: () => store.settings(),
+      onSettingsChange: (cb) => store.onSettingsChange(cb),
+      platform,
+      now: () => Date.now(),
+    });
+    this.register(() => reminders.dispose());
     // Ein Zähler für das ganze Plugin, ab dem Laden, unabhängig vom Dashboard. Schreibt die Tagessumme für die
     // Statuszeile (writeTokensFile, bei jedem Lauf frisch aus dem Store); Schreibfehler gehen nur in die Konsole.
     const scanner = new TranscriptScanner(transcriptFs(expandHome(TRANSCRIPTS_DIR, home, platform)));
@@ -337,6 +351,7 @@ export default class GlasscockpitPlugin extends Plugin {
         for (const e of r.errors) console.warn(`Glasscockpit: ${e}`);
         return r.items;
       },
+      handoffCheck: () => { const id = this.activeSessionId(); return id ? this.handoffCheckFor(id) : Promise.resolve(null); },
       readRadar: (path, now) => readRadarFile(path, now),
       home,
       platform,
@@ -350,6 +365,10 @@ export default class GlasscockpitPlugin extends Plugin {
       radarKey = key;
       void feedSource.refresh();
     }));
+    // Übergabe-Lampe (43j): neue aktive Sitzung (touchLeaf) oder neue Claude-ID (/clear, /resume) sofort neu rechnen, nicht erst im Takt.
+    this.feedRefresh = () => void feedSource.refresh();
+    this.register(() => { this.feedRefresh = null; });
+    this.register(store.onChange(() => this.feedRefresh?.()));
     this.register(repoScan.subscribe(() => feedSource.changed()));
     this.register(dayScan.subscribe(() => feedSource.changed()));
     this.register(counter.subscribe(() => { if (pull.hasDashboard()) void feedSource.refresh(); }));
@@ -381,6 +400,12 @@ export default class GlasscockpitPlugin extends Plugin {
           actions: this.feedActions(store),
           onFeedChange: (cb) => feedSource.subscribe(cb),
           feedOpened: () => void feedSource.refresh(),
+          reminders,
+          briefingDone: (today) => store.briefingDone(today),
+          setBriefingDone: (today, key, done) => store.setBriefingDone(today, key, done),
+          remindersDone: (today) => store.remindersDone(today),
+          setReminderDone: (today, item, done) => store.setReminderDone(today, item, done),
+          onTodayChange: (cb) => store.onTodayChange(cb),
         }),
     );
     this.register(() => {
@@ -391,8 +416,8 @@ export default class GlasscockpitPlugin extends Plugin {
       store.setDashboardAtUnload(this.dashboardArea());
       void store.flush();
     });
-    // Der Takt läuft immer, pull.tick() tut nur etwas, solange ein Dashboard offen ist.
-    this.registerInterval(window.setInterval(() => pull.tick(), PULL_TICK_MS));
+    // Der Takt läuft immer, pull.tick() und reminders.tick() tun nur etwas, solange ein Dashboard offen ist.
+    this.registerInterval(window.setInterval(() => { pull.tick(); reminders.tick(); }, PULL_TICK_MS));
 
     this.addSettingTab(new CockpitSettingTab(this.app, this, store, hostPlatform()));
 
@@ -673,6 +698,19 @@ export default class GlasscockpitPlugin extends Plugin {
     return radarInputs(sessions, this.activity);
   }
 
+  /** Übergabe-Check einer Cockpit-Sitzung (Lampe, später Rückfrage vor /clear); null bei unbekannter oder Shell-Sitzung. */
+  private async handoffCheckFor(sessionId: string): Promise<HandoffCheck | null> {
+    const record = this.store?.get(sessionId);
+    if (!record || record.kind === "shell" || !this.store) return null;
+    const s = this.store.settings();
+    const platform = hostPlatform();
+    const env = withPathDirs(process.env, await (this.launcher?.pathDirs() ?? Promise.resolve([])), platform);
+    return readHandoffCheck({
+      current: this.handoffs.current(sessionId), claudeId: claudeIdOf(record), cwd: record.cwd, prefix: s.handoffPrefix,
+      home: homedir(), vaultBase: vaultBasePath(this.app), dailyDir: s.dailyDir, now: new Date(), env,
+    });
+  }
+
   /** Jüngste Sitzung aus RecentSessions für den Feed (Claude-ID ist der Schlüssel der Sitzungsdatei). */
   private activeFeedSession(): { id: string; name: string; claudeId: string } | null {
     const id = this.activeSessionId();
@@ -732,7 +770,24 @@ export default class GlasscockpitPlugin extends Plugin {
         if (choice.handoff) { void this.takeUpHandoff(choice, choice.handoff); return; }
         void this.createSession({ cwd: choice.cwd, baseName: choice.baseName, kind: "claude" });
       },
+      dismiss: (choice) => this.dismissHandoff(choice),
     }).open();
+  }
+
+  /** Nachtrag 43g: Handoff aus dem Dialog wegmachen; der Zähler „<n> offen“ folgt über das modify-Ereignis. */
+  private async dismissHandoff(choice: SessionChoice): Promise<boolean> {
+    const path = choice.handoff?.path;
+    if (!path) return false;
+    if (this.handoffsInFlight.has(path)) { new Notice("Glasscockpit: Handoff wird gerade aufgenommen."); return false; }
+    const file = this.app.vault.getFileByPath(path);
+    if (!file) { new Notice(`Glasscockpit: Handoff nicht gefunden: ${path}`); return false; }
+    try {
+      await this.app.vault.process(file, (data) => { const m = markDismissed(data, isoDay(new Date())); if (!m.ok) throw new Error(m.reason); return m.content; });
+      return true;
+    } catch (e) {
+      new Notice(`Glasscockpit: Handoff nicht weggemacht: ${e instanceof Error ? e.message : String(e)}`);
+      return false;
+    }
   }
 
   /** Abend 19h: Sitzung mit Startnachricht starten; erst wenn sie läuft, den Handoff als aufgenommen markieren. */
@@ -1006,7 +1061,7 @@ export default class GlasscockpitPlugin extends Plugin {
     }
     let plan: SpawnPlan;
     try {
-      plan = await launcher.plan(record, { ...start, resumeConversations: store.settings().resumeConversations, fullscreen: store.settings().fixedPrompt, effort: store.settings().nextEffort, skipPermissions: store.settings().skipPermissions, windowsShell: store.settings().windowsShell, exclusion: await this.exclusionFor(store.settings()) });
+      plan = await launcher.plan(record, { ...start, resumeConversations: store.settings().resumeConversations, fullscreen: store.settings().fixedPrompt, smoothScroll: store.settings().smoothScroll, effort: store.settings().nextEffort, skipPermissions: store.settings().skipPermissions, windowsShell: store.settings().windowsShell, exclusion: await this.exclusionFor(store.settings()) });
     } catch (fehler) {
       reservation.release();
       throw fehler;
@@ -1025,7 +1080,10 @@ export default class GlasscockpitPlugin extends Plugin {
     const view = leaf?.view;
     if (!(view instanceof TerminalView)) return;
     const id = view.currentSessionId();
-    if (id) this.recent.touch(id);
+    if (id) {
+      this.recent.touch(id);
+      this.feedRefresh?.();
+    }
   }
 
   /** Aktive Sitzung: die jüngste, die noch einen Tab hat. */

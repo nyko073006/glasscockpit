@@ -210,6 +210,17 @@ body.theme-light.cockpit-tab-shadow .workspace-split.mod-root .workspace-tab-hea
   user-select: text;
 }
 
+/* Abhaken im heutigen Briefing (Abend 44): Stand aus der data.json, die Datei bleibt unverändert. */
+.cockpit-briefing-point > input[type="checkbox"]:not(:disabled),
+.cockpit-briefing-point > p > input[type="checkbox"]:not(:disabled) {
+  cursor: pointer;
+}
+
+.cockpit-briefing-point.cockpit-briefing-done {
+  text-decoration: line-through;
+  color: var(--text-faint);
+}
+
 /* Karte Aufgaben (Abend 10). */
 .cockpit-tasks-head {
   cursor: default;
@@ -274,6 +285,108 @@ body.theme-light.cockpit-tab-shadow .workspace-split.mod-root .workspace-tab-hea
 
 .cockpit-task-done .cockpit-task-box {
   color: var(--text-faint);
+}
+
+/* Karte „Heute“ (Abend 44): Eingabezeile, Quellen, Erinnerungen, Bereich „Erledigt“. */
+.cockpit-tasks-head .cockpit-progress {
+  /* Bei 280 px Kartenbreite schrumpft der Balken, statt den Knopf „↻“ abzuschneiden. */
+  flex: 0 1 120px;
+  min-width: 32px;
+}
+
+.cockpit-tasks-head .cockpit-card-title,
+.cockpit-tasks-head .cockpit-today-refresh {
+  flex: 0 0 auto;
+}
+
+.cockpit-today-add {
+  padding: 0 12px 8px;
+}
+
+.cockpit-today-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.cockpit-today-missing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.cockpit-today-missing[hidden],
+.cockpit-tasks-head > [hidden] {
+  /* Obsidians button-Regel setzt display und schlüge sonst das hidden-Attribut. */
+  display: none;
+}
+
+.cockpit-today-source {
+  margin-top: 8px;
+  font-size: var(--font-ui-smaller);
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cockpit-today-source:first-child {
+  margin-top: 0;
+}
+
+.cockpit-task-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cockpit-today-since {
+  flex: 0 0 auto;
+  margin-left: auto;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-warning);
+}
+
+.cockpit-task:focus-visible,
+.cockpit-task a:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+.cockpit-task-busy {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.cockpit-task-locked {
+  cursor: default;
+}
+
+.cockpit-task-locked:hover {
+  background: none;
+}
+
+.cockpit-today-done-toggle {
+  margin-top: 8px;
+  padding: 2px 6px;
+  height: auto;
+  background: none;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.cockpit-today-done-toggle:hover {
+  color: var(--text-normal);
+}
+
+.cockpit-today-done-toggle:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 1px;
+}
+
+.cockpit-today-done {
+  margin-top: 4px;
 }
 
 /* Karte Skills (Abend 10). */
@@ -1145,6 +1258,35 @@ body.theme-light.cockpit-tab-shadow .workspace-split.mod-root .workspace-tab-hea
   white-space: nowrap;
 }
 
+/* Übergabe-Lampe (43j): schmaler Schlitz über dem CTX-Ring (etwa 1,9cqw breit, 7cqw hoch). Kreis oben in der Ampelfarbe, darunter „ÜBERGABE“ gedreht, liest von unten nach oben. */
+.cockpit-stage .cockpit-field-handoff .cockpit-field-content {
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5cqw;
+  overflow: visible;
+}
+
+.cockpit-stage .cockpit-handoff-lamp {
+  flex: none;
+  box-sizing: border-box;
+  width: 1.1cqw;
+  height: 1.1cqw;
+  border-radius: 50%;
+  background: var(--tone);
+  box-shadow: 0 0 0.6cqw var(--tone);
+}
+
+.cockpit-stage .cockpit-handoff-label {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.7cqw;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--tone);
+  opacity: 0.8;
+}
+
 /* Radare (19b): der schmale Streifen der Konsole rechts neben der Repo-Tafel (etwa 4,4 cqw breit, 14 cqw hoch): zwei Kontrollleuchten übereinander, Punkt über dem Kürzel. */
 .cockpit-stage .cockpit-field-radars .cockpit-field-content {
   align-items: center;
@@ -1561,6 +1703,10 @@ body.theme-light.cockpit-tab-shadow .workspace-split.mod-root .workspace-tab-hea
 .cockpit-radars-unset { color: var(--text-muted); overflow: hidden; white-space: nowrap; }
 /* Radar-Feld ohne Radare (Abend 21.3): kurzes „aus“ in der Größe der Radar-Kürzel, der volle Hinweis steht im title. */
 .cockpit-stage .cockpit-radars-unset { font-size: 1.3cqw; line-height: 1; font-style: normal; text-align: center; }
+/* Rückfragen (ChoiceModal): Umbrüche im Text bleiben stehen, etwa eine Lücke je Zeile vor /clear (Nachtrag 43j). */
+.cockpit-choice-message {
+  white-space: pre-line;
+}
 /* Datei-Viewer (Abend 27): Fenster über Obsidian mit Rohtext-Editor. Die Farben des Editors setzt das Editor-Theme im Code. */
 /* Nachtrag 41d: Lage und Größe setzt der Code als Inline-Stil (left/top/width/height aus startRect, Verschieben, Größe ändern); das Fenster liegt absolut im Container, Obsidians Zentrierung, Rand und Höchstmaße gelten nicht mehr. */
 .cockpit-file-viewer {
@@ -1608,3 +1754,18 @@ body.theme-dark .cockpit-file-viewer {
 .cockpit-file-viewer-img { margin: auto; flex: none; width: var(--cockpit-image-width, auto); height: var(--cockpit-image-height, auto); max-width: none; image-rendering: auto; }
 .cockpit-file-viewer-hint { color: var(--text-muted); padding: var(--size-4-4) 0; }
 .cockpit-file-viewer-actions { display: flex; gap: var(--size-4-2); padding-top: var(--size-4-2); }
+
+/* Nachtrag 43g: x zum Wegmachen offener Handoffs im Dialog „Wo soll claude starten?“ */
+.cockpit-handoff-item {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+}
+.cockpit-handoff-item > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.cockpit-handoff-dismiss {
+  flex: 0 0 auto;
+  margin-left: auto;
+}

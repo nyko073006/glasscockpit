@@ -1,8 +1,8 @@
 import { asError } from "./as-error";
-import { SAVE_DEBOUNCE_MS } from "./constants";
+import { SAVE_DEBOUNCE_MS, TODAY_DONE_MAX } from "./constants";
 import {
   addSession, pruneUnused, removeSession, renameSession, setClaudeId,
-  type Change, type CockpitData, type DashboardMemo, type SessionRecord,
+  type BriefingDone, type Change, type CockpitData, type DashboardMemo, type ReminderDone, type RemindersDone, type SessionRecord,
 } from "./session-model";
 import { pushRecent } from "./recents";
 import { DEFAULT_SETTINGS, applyDependencies, dependencyReason, normalizeSetting, validateSetting, type CockpitSettings } from "./settings";
@@ -22,7 +22,10 @@ export class SessionStore {
   private recents: string[];
   private openList: string[];
   private dashboardMemo: DashboardMemo;
+  private briefingState: BriefingDone | null;
+  private remindersState: RemindersDone | null;
   private readonly recentsListeners = new Set<() => void>();
+  private readonly todayListeners = new Set<() => void>();
   private readonly changeListeners = new Set<(id: string | null) => void>();
   private readonly settingsListeners = new Set<(s: CockpitSettings) => void>();
   private timer: unknown = null;
@@ -50,6 +53,8 @@ export class SessionStore {
     this.recents = [...initial.recentSkills];
     this.openList = [...initial.openAtUnload];
     this.dashboardMemo = initial.dashboardAtUnload;
+    this.briefingState = initial.briefingDone === null ? null : { date: initial.briefingDone.date, keys: [...initial.briefingDone.keys] };
+    this.remindersState = initial.remindersDone === null ? null : { date: initial.remindersDone.date, items: initial.remindersDone.items.map((i) => ({ ...i })) };
   }
 
   recentSkills(): string[] { return [...this.recents]; }
@@ -62,6 +67,41 @@ export class SessionStore {
   onRecentsChange(cb: () => void): () => void {
     this.recentsListeners.add(cb);
     return () => { this.recentsListeners.delete(cb); };
+  }
+  /** Abgehakte Briefing-Punkte von `today` (JJJJ-MM-TT, vom Host); ein Stand von einem anderen Tag gilt nicht. */
+  briefingDone(today: string): string[] {
+    return this.briefingState !== null && this.briefingState.date === today ? [...this.briefingState.keys] : [];
+  }
+  /**
+   * Briefing-Punkt abhaken oder zurücknehmen. Ein Stand von einem anderen Tag wird verworfen. Gleicher Zielzustand
+   * schreibt und meldet nichts (Doppelklick); sonst entprellt speichern und onTodayChange melden.
+   */
+  setBriefingDone(today: string, key: string, done: boolean): void {
+    const keys = this.briefingDone(today);
+    if (keys.includes(key) === done) return;
+    if (done && keys.length >= TODAY_DONE_MAX) return;
+    this.briefingState = { date: today, keys: done ? [...keys, key] : keys.filter((k) => k !== key) };
+    this.todayChanged();
+  }
+  /** Abgehakte Erinnerungen von `today`; ein Stand von einem anderen Tag gilt nicht. */
+  remindersDone(today: string): ReminderDone[] {
+    return this.remindersState !== null && this.remindersState.date === today ? this.remindersState.items.map((i) => ({ ...i })) : [];
+  }
+  /** Wie setBriefingDone, verglichen und entfernt wird nach `id`. */
+  setReminderDone(today: string, item: ReminderDone, done: boolean): void {
+    const items = this.remindersDone(today);
+    if (items.some((i) => i.id === item.id) === done) return;
+    if (done && items.length >= TODAY_DONE_MAX) return;
+    this.remindersState = { date: today, items: done ? [...items, { id: item.id, name: item.name }] : items.filter((i) => i.id !== item.id) };
+    this.todayChanged();
+  }
+  onTodayChange(cb: () => void): () => void {
+    this.todayListeners.add(cb);
+    return () => { this.todayListeners.delete(cb); };
+  }
+  private todayChanged(): void {
+    this.schedule();
+    for (const cb of [...this.todayListeners]) cb();
   }
   openAtUnload(): string[] { return [...this.openList]; }
   /** Merkzettel der offenen Tabs (Abend 19c). Gleiche Liste: kein Speichern. */
@@ -170,7 +210,10 @@ export class SessionStore {
 
   private write(): void {
     this.dirty = false;
-    const data: CockpitData = { schemaVersion: 1, sessions: [...this.sessions], settings: { ...this.current }, recentSkills: [...this.recents], openAtUnload: [...this.openList], dashboardAtUnload: this.dashboardMemo === null ? null : { ...this.dashboardMemo } };
+    const data: CockpitData = { schemaVersion: 1, sessions: [...this.sessions], settings: { ...this.current }, recentSkills: [...this.recents], openAtUnload: [...this.openList], dashboardAtUnload: this.dashboardMemo === null ? null : { ...this.dashboardMemo }, 
+      briefingDone: this.briefingState === null ? null : { date: this.briefingState.date, keys: [...this.briefingState.keys] },
+      remindersDone: this.remindersState === null ? null : { date: this.remindersState.date, items: this.remindersState.items.map((i) => ({ ...i })) },
+    };
     // Sofort aufrufen (nicht erst in einem Promise-Schritt); inflight sammelt nur, worauf flush wartet.
     let result: Promise<void>;
     try {

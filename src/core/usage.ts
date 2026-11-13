@@ -109,6 +109,32 @@ export function usageView(snapshot: UsageSnapshot, nowMs: number): UsageViewMode
   return { rows, ageSec, ageText: formatAge(ageSec) };
 }
 
+/** Sekunden, um die die Beobachtung der Woche in der Zukunft liegen darf (wie `OBS_SLACK` der Statuszeile). */
+const OBS_SLACK_SEC = 60;
+
+/**
+ * Nachtrag 44a: Ein abgelaufenes 5h-Fenster ohne Nachfolger gilt als nicht vorhanden. Seit einem Planwechsel liefert
+ * Claude Code kein 5h-Fenster mehr, `usage.json` behält das alte für immer. Greift, wenn das 5h-Fenster abgelaufen ist
+ * und die Woche danach beobachtet wurde (`observedAt` höchstens jetzt plus 60 s und später als der 5h-Reset): Dann
+ * käme ein neues 5h-Fenster mit, gäbe es eins. Kein Rückgriff auf `writtenAt` (erneuert jeder Tab). Eingabe bleibt
+ * unverändert, die Datei wird nie geschrieben. Gleichlautend im vierten jq-Aufruf von statusline-command.sh.
+ */
+export function dropDeadFiveHour(snapshot: UsageSnapshot, nowMs: number): { snapshot: UsageSnapshot; noFiveHour: boolean } {
+  const nowSec = nowMs / 1000;
+  const five = snapshot.windows.five_hour;
+  const seven = snapshot.windows.seven_day;
+  const dead =
+    five !== undefined &&
+    five.resetsAt <= nowSec &&
+    seven?.observedAt !== undefined &&
+    seven.observedAt <= nowSec + OBS_SLACK_SEC &&
+    seven.observedAt > five.resetsAt;
+  if (!dead) return { snapshot, noFiveHour: false };
+  const windows = { ...snapshot.windows };
+  delete windows.five_hour;
+  return { snapshot: { ...snapshot, windows }, noFiveHour: true };
+}
+
 /** `tokensSub`: der Teil von `tokens`, der aus Sub-Agent-Zeilen stammt (Datei unter /subagents/ oder isSidechain). */
 export interface TokenCount { tokens: number; tokensSub: number; skipped: number; lines: number }
 

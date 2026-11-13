@@ -34,7 +34,7 @@ describe("Ablehnungen sind Errors", () => {
   it("SessionStore: wirft save synchron einen Text, bekommt onSaveError einen Error mit diesem Text", async () => {
     const seen: unknown[] = [];
     const save = (): Promise<void> => { throw "voll" as unknown as Error; };
-    const store = new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null }, save, new FakeTimers(), 300, (f) => seen.push(f));
+    const store = new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null }, save, new FakeTimers(), 300, (f) => seen.push(f));
     store.add({ id: "a", name: "a", kind: "shell", cwd: "/", createdAt: 1 } as never);
     await store.flush();
     expect(seen[0]).toBeInstanceOf(Error);

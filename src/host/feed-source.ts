@@ -1,5 +1,6 @@
 import { composeFeed, ownSessionFiles } from "../core/feed-compose";
 import type { CockpitFeed } from "../core/cockpit-feed";
+import type { HandoffCheck } from "../core/handoff-check";
 import type { OpenHandoff } from "../core/handoffs";
 import type { RadarFileLamp } from "../core/radar-lamp";
 import type { SessionFile } from "../core/session-file";
@@ -25,6 +26,8 @@ export interface FeedSourceDeps {
   readVault: (s: CockpitSettings, now: Date) => Promise<NonNullable<CockpitFeed["vault"]>>;
   readFocus: (s: CockpitSettings, now: Date) => Promise<string[]>;
   readHandoffs: (s: CockpitSettings) => Promise<OpenHandoff[]>;
+  /** Übergabe-Check der aktiven Sitzung (null: keine oder Shell-Sitzung). */
+  handoffCheck: () => Promise<HandoffCheck | null>;
   readRadar: (path: string, nowMs: number) => Promise<RadarFileLamp>;
   /** Home für `~` in den Radar-Pfaden. */
   home?: string;
@@ -46,6 +49,7 @@ export class CockpitFeedSource {
   private vault: CockpitFeed["vault"] = null;
   private focus: string[] = [];
   private handoffs: OpenHandoff[] = [];
+  private handoffCheck: HandoffCheck | null = null;
   private radarLamps = new Map<string, RadarFileLamp>();
   private running: Promise<void> | null = null;
   private readonly subscribers = new Set<() => void>();
@@ -64,6 +68,7 @@ export class CockpitFeedSource {
       focus: this.focus,
       vault: this.vault,
       handoffs: this.handoffs,
+      handoffCheck: this.handoffCheck,
       repos: d.repos(),
       day: d.day(),
       radarLamps: this.radarLamps,
@@ -106,11 +111,12 @@ export class CockpitFeedSource {
     };
     // Nur eingerichtete Radare lesen (leerer Pfad: nichts lesen, die Lampe heißt dann „unset“, siehe composeRadars).
     const radarFiles = s.radars.slice(0, RADAR_SLOTS).map((r) => r.stateFile).filter((f) => !isUnset(f));
-    const [files, vault, focus, handoffs, lamps] = await Promise.all([
+    const [files, vault, focus, handoffs, check, lamps] = await Promise.all([
       safe("Sitzungsdateien", () => d.readSessionFiles(d.ownClaudeIds(), nowMs), new Map<string, SessionFile>()),
       safe("Vault-Lage", () => d.readVault(s, now), null),
       safe("Tagesfokus", () => d.readFocus(s, now), [] as string[]),
       safe("Handoffs", () => d.readHandoffs(s), this.handoffs),
+      safe("Übergabe-Check", () => d.handoffCheck(), null),
       Promise.all(radarFiles.map((f) => safe(`Radar ${f}`, () => d.readRadar(expandHome(f, home, d.platform), nowMs), "red"))),
     ]);
     // Eigene IDs zur Sicherheit noch einmal filtern: Der Leser kennt sie, die Quelle verlässt sich nicht darauf.
@@ -118,6 +124,7 @@ export class CockpitFeedSource {
     this.vault = vault;
     this.focus = focus;
     this.handoffs = handoffs;
+    this.handoffCheck = check;
     this.radarLamps = new Map(radarFiles.map((f, i) => [f, lamps[i]]));
     this.notify();
   }

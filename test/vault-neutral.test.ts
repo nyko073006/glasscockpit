@@ -150,7 +150,7 @@ describe("composeRadars", () => {
 });
 
 const teile = (over: Partial<FeedParts> = {}): FeedParts => ({
-  handoffs: [], sessions: [], active: null, sessionFiles: new Map(), tokens: null, focus: [], vault: null, repos: null, day: null, radarLamps: new Map(),
+  handoffs: [], handoffCheck: null, sessions: [], active: null, sessionFiles: new Map(), tokens: null, focus: [], vault: null, repos: null, day: null, radarLamps: new Map(),
   settings: { ...DEFAULT_SETTINGS }, ...over,
 });
 
@@ -177,7 +177,7 @@ const NOW = new Date(2026, 9, 6, 12, 0, 0).getTime();
 const fs = { contextWarn: 150_000, contextHandoff: 175_000, tokensDayMedian: 340_000, tokensDayP90: 870_000, lintAfterDays: 7, lintCommand: "/lint" };
 const gesetzt = { projects: false, briefings: false, inbox: false, index: false, daily: false };
 const feed = (o: Partial<CockpitFeed> = {}): CockpitFeed => ({
-  sessions: [], active: null, handoffs: [], tokensToday: null, focus: [], vault: null, repos: null, day: null, unset: gesetzt,
+  sessions: [], active: null, handoffs: [], handoffCheck: null, tokensToday: null, focus: [], vault: null, repos: null, day: null, unset: gesetzt,
   radars: [], effort: "high", telegramOn: false, soundOn: false, ...o,
 });
 

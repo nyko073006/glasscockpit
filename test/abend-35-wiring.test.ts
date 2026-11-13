@@ -26,13 +26,16 @@ describe("Abend 35: Klick auf /clear verkabelt", () => {
     const file = view.indexOf("new FileLinkProvider(");
     expect(file).toBeGreaterThanOrEqual(0);
     expect(start).toBeGreaterThan(file);
-    // Nur zwei Provider, keiner dazwischen.
-    expect(view.split("registerLinkProvider(").length - 1).toBe(2);
+    // Drei Provider (Nachtrag 43h: Weblinks als letzter), keiner zwischen Pfaden und /clear.
+    expect(view.split("registerLinkProvider(").length - 1).toBe(3);
+    expect(view.indexOf("new UrlLinkProvider(")).toBeGreaterThan(start);
   });
 
   it("der Klick schreibt über das SessionHandle dieser View und fokussiert, nie über das Ziel der jüngsten Sitzung (Kommentare zählen nicht)", () => {
     expect(start).toBeGreaterThanOrEqual(0);
-    expect(block).toMatch(/insert: \(\) => \{\s*this\.handle\?\.write\(CLEAR_INSERT\);\s*this\.pane\?\.focus\(\);\s*\}/);
+    expect(block).toMatch(/const insert = \(\): void => \{\s*this\.handle\?\.write\(CLEAR_INSERT\);\s*this\.pane\?\.focus\(\);\s*\};/);
+    // Nachtrag 43j: der Klick läuft über den Wächter, mit der View-eigenen Laufzustand und der frisch gelesenen Einstellung.
+    expect(block).toMatch(/guardedClearInsert\(\{[\s\S]*?enabled: \(\) => this\.deps\.settings\(\)\.checkBeforeClear,[\s\S]*?\}, this\.clearGuard\);/);
     expect(block).not.toMatch(/sendToActive|deliver/);
     expect(view).toMatch(/import \{ CLEAR_INSERT \} from "\.\.\/core\/clear-link";/);
   });

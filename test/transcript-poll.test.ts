@@ -161,6 +161,37 @@ describe("HandoffKeeper (Wert je Cockpit-Sitzung, nicht je Claude-ID)", () => {
   });
 });
 
+describe("HandoffKeeper.keepCurrent (Block der laufenden Claude-ID)", () => {
+  it("der erste Aufruf übernimmt Block und Start", () => {
+    const k = new HandoffKeeper();
+    expect(k.current("c1")).toBeNull();
+    expect(k.keepCurrent("c1", "id1", "Handoff: a", 100)).toEqual({ claudeId: "id1", block: "Handoff: a", startedAtMs: 100 });
+    expect(k.current("c1")).toEqual({ claudeId: "id1", block: "Handoff: a", startedAtMs: 100 });
+  });
+  it("gleiche ID, found null: Block und Start bleiben", () => {
+    const k = new HandoffKeeper();
+    k.keepCurrent("c1", "id1", "Handoff: a", 100);
+    expect(k.keepCurrent("c1", "id1", null, null)).toEqual({ claudeId: "id1", block: "Handoff: a", startedAtMs: 100 });
+  });
+  it("gleiche ID, neuer Block ersetzt", () => {
+    const k = new HandoffKeeper();
+    k.keepCurrent("c1", "id1", "Handoff: a", 100);
+    expect(k.keepCurrent("c1", "id1", "Handoff: b", 100).block).toBe("Handoff: b");
+  });
+  it("neue ID ohne Block: block null, nicht der alte", () => {
+    const k = new HandoffKeeper();
+    k.keepCurrent("c1", "id1", "Handoff: a", 100);
+    expect(k.keepCurrent("c1", "id2", null, 900)).toEqual({ claudeId: "id2", block: null, startedAtMs: 900 });
+  });
+  it("get liefert nach dem Wechsel weiter den alten Block", () => {
+    const k = new HandoffKeeper();
+    k.keep("c1", "Handoff: a");
+    k.keepCurrent("c1", "id1", "Handoff: a", 100);
+    k.keepCurrent("c1", "id2", null, 900);
+    expect(k.get("c1")).toBe("Handoff: a");
+  });
+});
+
 describe("Sitzungswechsel nach /clear: Cockpit-id bleibt, das Claude-Transkript wechselt", () => {
   const antwort = (id: string, t: string) => JSON.stringify({ type: "assistant", message: { id, content: [{ type: "text", text: t }] } });
   const block = (code: string) => "```\n" + code + "\n```";

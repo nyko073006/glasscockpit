@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   type BufferLineLike, bufferRowOf, candidatesWithQuotes, cdTargets, type CellRow, exceedsLimit, extendCandidates, formatBytes, IMAGE_MIME, imageInfo, imageMime, isRelativePath, lineSeparatorOf, linkBases,
   linkModifierDown, logicalLine, looksBinary, MAX_PATH_PROBES, MAX_PATH_WORDS, mergeRecent, opensOnClick, pathCandidates, plainLeftClick, ProbeBudget,
-  quotedCandidates, resolveCandidatePath, resolveViaBases, saveDecision, toolPaths, vaultRelative, WORD_SEAM_ROWS, wordLine,
+  quotedCandidates, resolveCandidatePath, resolveViaBases, saveDecision, toolPaths, urlRanges, vaultRelative, WORD_SEAM_ROWS, wordLine,
 } from "../src/core/file-links";
 import { modKeyName } from "../src/core/keymap";
 
@@ -1146,5 +1146,26 @@ describe("Bildtypen (Nachtrag 43c)", () => {
   it("imageInfo", () => {
     expect(imageInfo(375, 812, 245760, false)).toBe("375 \u00d7 812 px \u00b7 240 KB");
     expect(imageInfo(300, 150, 900, true)).toBe("SVG \u00b7 900 B");
+  });
+});
+
+describe("urlRanges (Nachtrag 43h: Weblinks)", () => {
+  const urls = (line: string) => urlRanges(line).map((r) => { expect(line.slice(r.start, r.end)).toBe(r.url); return r.url; });
+  it("findet http und https mitten im Text", () => {
+    expect(urls("Siehe https://example.com/a?b=1#c und http://x.de")).toEqual(["https://example.com/a?b=1#c", "http://x.de"]);
+  });
+  it("Satzzeichen am Ende gehören nicht dazu", () => {
+    expect(urls("Link: https://example.com/pfad.")).toEqual(["https://example.com/pfad"]);
+    expect(urls("(https://example.com/x), danach")).toEqual(["https://example.com/x"]);
+    expect(urls("„https://example.com/x“")).toEqual(["https://example.com/x"]);
+  });
+  it("Klammern im Pfad bleiben, wenn sie ausgeglichen sind", () => {
+    expect(urls("https://de.wikipedia.org/wiki/Test_(Begriff) ok")).toEqual(["https://de.wikipedia.org/wiki/Test_(Begriff)"]);
+  });
+  it("Anführungszeichen und spitze Klammern beenden die URL", () => {
+    expect(urls('href="https://a.de/x" <https://b.de/y>')).toEqual(["https://a.de/x", "https://b.de/y"]);
+  });
+  it("Gegentest: andere Schemata, nacktes Schema und Wortteile zählen nicht", () => {
+    expect(urls("ftp://a.de file:///etc/x javascript:alert(1) https:// xhttps://a.de")).toEqual([]);
   });
 });

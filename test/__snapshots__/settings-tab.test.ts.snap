@@ -147,6 +147,60 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "control": "extra",
   },
   {
+    "name": "Weich scrollen",
+  },
+  {
+    "desc": "An: Im Vollbild (Eingabezeile fest) nimmt das Cockpit Trackpad und Mausrad selbst an. Der Verlauf folgt dem Finger Zeile für Zeile, eine einzelne Raststufe bewegt eine Zeile, schnelles Scrollen wird gebremst. Claudes eigene Beschleunigung ist in diesen Sitzungen aus. Einschalten wirkt für neu gestartete Sitzungen. Ausschalten gibt das Scrollen sofort an das Terminal zurück, Claudes eigene Beschleunigung kommt erst nach einem Neustart der Sitzung wieder. Aus: wie bisher.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Scrolltempo",
+  },
+  {
+    "desc": "Zeilen je Zellhöhe Fingerweg (0.1 bis 5). 2 scrollt doppelt so weit. Wirkt sofort.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "inputStep": "0.1",
+  },
+  {
+    "value": "1",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Höchsttempo je Bild",
+  },
+  {
+    "desc": "Höchstens so viele Zeilen je Bildwechsel (1 bis 20); was ein schneller Wisch darüber hinaus bringt, verfällt. Wirkt sofort.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "3",
+  },
+  {
+    "control": "extra",
+  },
+  {
     "name": "Rechteabfragen überspringen",
   },
   {
@@ -409,6 +463,36 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
   },
   {
     "desc": "Ein Klick auf /clear im Terminal einer Claude-Sitzung schreibt es in die Eingabezeile. Enter drückst du selbst.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Vor /clear prüfen",
+  },
+  {
+    "desc": "Klick auf /clear fragt nach, wenn Handoff, Daily Note oder Git der Sitzung noch offen sind (Lampe Übergabe rot).",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Weblinks per Cmd+Klick öffnen",
+  },
+  {
+    "desc": "An: Adressen mit http:// oder https:// im Terminal öffnen per Cmd+Klick im Standardbrowser. Ein einfacher Klick markiert weiter Text. Wirkt sofort.",
   },
   {
     "control": "toggle",
@@ -1062,6 +1146,99 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "control": "extra",
   },
   {
+    "name": "Überschrift für neue Aufgaben",
+  },
+  {
+    "desc": "Neue Aufgaben aus der Karte „Heute“ landen als letzter Punkt unter dieser Überschrift der Aufgabenliste. Fehlt sie oder ist das Feld leer: am Dateiende.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "Heute",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Briefing-Punkte in „Heute“",
+  },
+  {
+    "desc": "An: Die Punkte unter der Überschrift der Tagespunkte und alle Checkboxen im heutigen Briefing stehen in der Karte „Heute“ und lassen sich dort und im Briefing abhaken. Das Briefing selbst wird nie geändert.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Erinnerungen in „Heute“ (nur macOS)",
+  },
+  {
+    "desc": "An: Offene Erinnerungen der App „Erinnerungen“, fällig heute oder früher, stehen in der Karte „Heute“; Abhaken setzt sie in der App auf erledigt. Liest per AppleScript, macOS fragt beim ersten Mal nach der Freigabe.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": false,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Listen der Erinnerungen",
+  },
+  {
+    "desc": "Namen der Listen, mit Komma getrennt. Leer = alle.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "value": "",
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Überfällige Erinnerungen zeigen",
+  },
+  {
+    "desc": "Aus: nur Erinnerungen, die heute fällig sind.",
+  },
+  {
+    "control": "toggle",
+  },
+  {
+    "value": true,
+  },
+  {
+    "control": "extra",
+  },
+  {
+    "name": "Erinnerungen-Abstand (Minuten)",
+  },
+  {
+    "desc": "So oft liest die Karte die Erinnerungen, solange ein Dashboard offen ist (0 bis 1440). 0 = nur beim Öffnen und per Knopf.",
+  },
+  {
+    "control": "text",
+  },
+  {
+    "inputType": "number",
+  },
+  {
+    "value": "5",
+  },
+  {
+    "control": "extra",
+  },
+  {
     "name": "Zahl der Skill-Knöpfe",
   },
   {
@@ -1221,10 +1398,10 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "control": "extra",
   },
   {
-    "name": "Überschrift des Tagesfokus",
+    "name": "Überschrift der Tagespunkte",
   },
   {
-    "desc": "Die ersten zwei Punkte unter dieser Überschrift im heutigen Briefing zeigt die Kanzel. Eine Zeile.",
+    "desc": "Die Punkte unter dieser Überschrift im heutigen Briefing stehen in der Karte „Heute“; die ersten zwei zeigt die Kanzel. Eine Zeile.",
   },
   {
     "control": "text",

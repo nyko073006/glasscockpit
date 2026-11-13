@@ -62,7 +62,7 @@ export interface CockpitLayout {
 const CARD_ORDER: readonly CardId[] = ["pull", "briefing", "usage", "tasks", "skills", "research"];
 
 const CARD_TITLES: Record<CardId, string> = {
-  pull: "Pull", briefing: "Briefing", usage: "Usage", tasks: "Aufgaben", skills: "Skills", research: "Research",
+  pull: "Pull", briefing: "Briefing", usage: "Usage", tasks: "Heute", skills: "Skills", research: "Research",
 };
 
 function el<K extends keyof HTMLElementTagNameMap>(doc: Document, tag: K, cls: string, text?: string): HTMLElementTagNameMap[K] {
@@ -288,6 +288,8 @@ export function createCockpitLayout(opts: CockpitLayoutOptions): CockpitLayout {
   makeButton("vault", "Vault vergrößern", () => zoomField("vault"));
   makeButton("repos", "Repos vergrößern", () => zoomField("repos"));
   makeButton("radars", "Radare vergrößern", () => zoomField("radars"));
+  // Übergabe-Lampe (43j): Klick, Enter und Leertaste öffnen den Zoom; aria-label setzt das Update (Tooltip des Checks; kein title, siehe Tooltips).
+  makeButton("handoff", null, () => zoomField("handoff"));
   // Knauf des Schalthebels (a18e): grünes Plus, Klick, Enter und Leertaste öffnen den Dialog „Neue Sitzung“.
   makeButton("newSession", "Neue Sitzung", () => actions?.newSession());
   F("newSession").content.replaceChildren(el(doc, "div", "cockpit-newsession-plus", "+"));
@@ -455,6 +457,13 @@ export function createCockpitLayout(opts: CockpitLayoutOptions): CockpitLayout {
       });
     }
 
+    // Übergabe-Lampe: Ton und Tooltip folgen dem Check der aktiven Sitzung; neu gezeichnet nur bei geändertem Ton oder Tooltip.
+    redraw("handoff", [v.handoff.tone, v.handoff.tooltip], () => {
+      setFieldTone("handoff", v.handoff.tone);
+      F("handoff").clip.setAttribute("aria-label", v.handoff.tooltip);
+      F("handoff").content.replaceChildren(el(doc, "div", "cockpit-handoff-lamp"), el(doc, "div", "cockpit-handoff-label", "ÜBERGABE"));
+    });
+
     // Offener Zoom: nur bei geändertem Stand neu füllen.
     if (fieldZoomId !== null && zoomBody !== null) {
       const body = zoomBody;
@@ -474,6 +483,7 @@ export function createCockpitLayout(opts: CockpitLayoutOptions): CockpitLayout {
       case "vault": return v.vault;
       case "repos": return v.repos;
       case "radars": return v.radars;
+      case "handoff": return [v.handoff.tone, v.handoff.lines];
       default: return null;
     }
   }
@@ -551,6 +561,12 @@ export function createCockpitLayout(opts: CockpitLayoutOptions): CockpitLayout {
         if (v.radars.hint !== null) body.append(el(doc, "div", "cockpit-zoom-hint", v.radars.hint), openSettingsButton());
         for (const l of v.radars.lamps) body.append(row(`cockpit-zoom-radar cockpit-tone-${l.tone}`, el(doc, "span", "cockpit-radar-lamp-dot"), el(doc, "span", "cockpit-zoom-radar-name", l.label), el(doc, "span", "cockpit-zoom-radar-text", l.text)));
         break;
+      case "handoff": {
+        const sec = el(doc, "div", `cockpit-zoom-gauge cockpit-tone-${v.handoff.tone}`);
+        sec.append(...v.handoff.lines.map((l) => el(doc, "div", "cockpit-zoom-line cockpit-handoff-line", l)));
+        body.append(sec);
+        break;
+      }
       default:
         break;
     }

@@ -45,6 +45,7 @@ Vor Arbeit an einem Modul den zugehörigen Abschnitt in `docs/module.md` lesen. 
 - Launcher: `core/discovery.ts, host/discovery-fs.ts, core/frontmatter.ts`. Details: docs/module.md#launcher
 - Dashboard: `host/dashboard-view.ts, host/internal-link.ts, core/briefings.ts`. Details: docs/module.md#dashboard
 - Tasks und Skill-Karte: `host/tasks-card.ts, core/tasks.ts, host/skills-card.ts`. Details: docs/module.md#tasks-und-skill-karte
+- Heute-Karte: `host/tasks-card.ts, core/today.ts, core/focus.ts, host/reminders.ts, host/briefing-checks.ts`. Details: docs/module.md#heute-karte
 - Härtung: `core/claude-start.ts`. Details: docs/module.md#härtung
 - Telegram: `host/telegram-send.ts, host/idle-time.ts, host/telegram-notify.ts`. Details: docs/module.md#telegram
 - Usage-Karte: `host/usage-card.ts, host/usage-fs.ts, core/usage.ts`. Details: docs/module.md#usage-karte
@@ -74,6 +75,7 @@ Vor Arbeit an einem Modul den zugehörigen Abschnitt in `docs/module.md` lesen. 
 - Stille Zwischenstände: `core/background-tasks.ts`. Details: docs/module.md#stille-zwischenstände
 - Klick auf /clear: `core/clear-link.ts, host/clear-link.ts`. Details: docs/module.md#klick-auf-clear
 - Link-Wächter: `core/link-guard.ts, host/link-guard.ts`. Details: docs/module.md#link-wächter
+- Weich scrollen: `core/smooth-wheel.ts, host/smooth-wheel.ts, host/terminal-pane.ts`. Details: docs/module.md#weich-scrollen
 - Windows-Fundament: `core/kill-escalation.ts, core/platform-path.ts, core/shell.ts`. Details: docs/module.md#windows-fundament
 - Windows-Prozess und Eingabe: `host/settings-files.ts, core/cmd-shim.ts, host/win-kill.ts`. Details: docs/module.md#windows-prozess-und-eingabe
 - Windows-Abschluss: `core/settings.ts, core/constants.ts, core/platform-path.ts`. Details: docs/module.md#windows-abschluss

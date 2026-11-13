@@ -1,12 +1,14 @@
 #!/bin/bash
 # Claude Code Statusline (Glasscockpit, Abend 13)
-# Zeile 1: Modell | Kontext (gelb ab 150k, rot mit HANDOFF ab 175k) | 5h-Fenster mit Restzeit | Output-Tokens heute mit Anteil der Sub-Agents (" · Sub 63 %", nur wenn output_tokens_sub eine Zahl ist)
-# Zeile 2 (gedimmt): Wochenbalken, verstrichene Zeit der Woche, Empfehlung (Tempo-Regel)
+# Zeile 1: Modell mit Effort (" · xhigh", nur wenn effort.level geliefert wird) | Kontext (gelb ab 150k, rot mit HANDOFF ab 175k) | 5h-Fenster mit Restzeit | Output-Tokens heute mit Anteil der Sub-Agents (" · Sub 63 %", nur wenn output_tokens_sub eine Zahl ist)
+# Zeile 2 (gedimmt): Wochenbalken, verstrichene Zeit der Woche, Hinweis (5h fast voll, sonst Tempo-Regel: "zu schnell" oder "im Plan")
 # Anzeige in einem jq-Aufruf. Tests: test/statusline.test.ts
 # Abend 18: schreibt je Sitzung <COCKPIT_DIR>/sessions/<session_id>.json (Kontext fuers Cockpit)
 # und liest optional <COCKPIT_DIR>/thresholds.json (Kontext-Schwellen aus den Cockpit-Einstellungen).
 # Nachtrag 43d: der eigene Stand der Limits wird je Fenster mit usage.json zusammengefuehrt (neueres Fenster, sonst hoeherer Wert); Anzeige und Datei rechnen mit demselben Stand.
 # Nachtrag 43e: Beobachtungszeit je Sitzung aus dem Merker cost.total_api_duration_ms; im selben Fenster gilt der hoehere Wert, ausser die juengere Beobachtung liegt mindestens DROP_MIN Punkte darunter.
+# Nachtrag 44a: ein abgelaufenes 5h-Fenster, nach dessen Reset die Woche beobachtet wurde, zeigt die Anzeige nicht mehr (usage.json bleibt, wie sie ist).
+# Nachtrag 44c: Effort hinter dem Modell; der Tempo-Hinweis nennt keine Hebel mehr, nur noch "zu schnell".
 
 # Schwellen
 PCT_YELLOW=70          # Ampel: ab hier gelb
@@ -181,7 +183,7 @@ echo "$input" | jq -j \
   --argjson py "$PCT_YELLOW" --argjson pr "$PCT_RED" \
   --argjson ctx_warn_std "$CTX_WARN" --argjson ctx_handoff_std "$CTX_HANDOFF" \
   --argjson margin "$TEMPO_MARGIN" --argjson five_warn "$FIVE_HOUR_WARN" \
-  --argjson stale "$TOKENS_STALE" '
+  --argjson stale "$TOKENS_STALE" --argjson obs_slack "$OBS_SLACK" '
   # Jeder Code setzt vorn zurueck (0;), sonst laeuft eine Farbe in den naechsten Teil weiter
   def dim: "\u001b[0;2m";
   def rs: "\u001b[0m";
@@ -215,8 +217,14 @@ echo "$input" | jq -j \
 
   # zusammengefuehrter Stand (Nachtrag 43d); ohne ihn (leer) der eigene
   | (($ml | try fromjson catch null) // .rate_limits) as $rl
-  | ($rl.five_hour // null) as $f
+  | ($rl.five_hour // null) as $f0
   | ($rl.seven_day // null) as $w
+  # Nachtrag 44a, gleichlautend mit dropDeadFiveHour (src/core/usage.ts): abgelaufenes 5h-Fenster ohne Nachfolger
+  # gilt als nicht vorhanden, wenn die Woche nach seinem Reset beobachtet wurde (observed_at hoechstens jetzt + OBS_SLACK)
+  | (if ($f0 | type) == "object" and ($f0.resets_at | type) == "number" and $f0.resets_at <= $now
+        and ($w | type) == "object" and ($w.observed_at | type) == "number"
+        and $w.observed_at <= $now + $obs_slack and $w.observed_at > $f0.resets_at
+     then null else $f0 end) as $f
   | (if ($f | type) == "object" and ($f.used_percentage | type) == "number" and ($f.resets_at | type) == "number"
      then ($f.used_percentage | round) else null end) as $fp
   | (if $fp == null then null else ($f.resets_at - $now) end) as $frest
@@ -234,7 +242,13 @@ echo "$input" | jq -j \
              then " (vor " + alter($now - $t.written_at) + ")" else "" end)
      else "" end) as $heute
 
-  | (dim + "\(.model.display_name // "?") │ " + $ctx + $five + $heute + rs) as $zeile1
+  # Nachtrag 44c: Effort der Sitzung hinter dem Modell, wenn Claude Code ihn liefert (effort.level, gemessen 2.1.322).
+  # Nur ein kurzes Wort aus Buchstaben, Ziffern, "_" und "-", sonst nichts (kein Steuerzeichen ins Terminal).
+  | (if (.effort | type) == "object" and (.effort.level | type) == "string"
+        and (.effort.level | test("\\A[A-Za-z0-9_-]{1,16}\\z"))
+     then " · " + .effort.level else "" end) as $effort
+
+  | (dim + "\(.model.display_name // "?")" + $effort + " │ " + $ctx + $five + $heute + rs) as $zeile1
 
   | (if ($w | type) == "object" and ($w.used_percentage | type) == "number" and ($w.resets_at | type) == "number"
      then
@@ -245,7 +259,7 @@ echo "$input" | jq -j \
             | (($wp / 10 | round) | clamp(0; 10)) as $n
             | (([range($n) | "▓"] | join("")) + ([range(10 - $n) | "░"] | join(""))) as $balken
             | (if $fp != null and $frest > 0 and $fp >= $five_warn then red + "5h fast voll, kurz warten" + dim
-               elif ($wp - $zp) > $margin then yellow + "zu schnell: kein xhigh, Sonnet-Agents, früher übergeben" + dim
+               elif ($wp - $zp) > $margin then yellow + "zu schnell" + dim
                else "im Plan" end) as $rat
             | dim + "Woche \($balken) " + ampel($wp) + "\($wp)%" + dim + " · Zeit \($zp)% · " + $rat + rs
           end)

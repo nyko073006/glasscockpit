@@ -38,7 +38,9 @@ interface Limits {
 
 const UUID = "90ef2efe-1234-4abc-8def-0123456789ab";
 
-function eingabe(opts: { kontext?: number; limits?: Limits | null; sessionId?: unknown; api?: number } = {}): string {
+function eingabe(
+  opts: { kontext?: number; limits?: Limits | null; sessionId?: unknown; api?: number; effort?: unknown } = {},
+): string {
   const kontext = opts.kontext ?? 82_000;
   const o: Record<string, unknown> = {
     model: { display_name: "Opus 5.5" },
@@ -54,6 +56,8 @@ function eingabe(opts: { kontext?: number; limits?: Limits | null; sessionId?: u
   if (opts.sessionId !== undefined) o.session_id = opts.sessionId;
   // Merker (Nachtrag 43e): aufsummierte Wartezeit auf API-Antworten in ms
   if (opts.api !== undefined) o.cost = { total_api_duration_ms: opts.api };
+  // Effort der Sitzung (Nachtrag 44c): Claude Code liefert { level: "xhigh" } (gemessen 2.1.322)
+  if (opts.effort !== undefined) o.effort = opts.effort;
   const l = opts.limits;
   if (l) {
     const rl: Record<string, unknown> = {};
@@ -173,6 +177,39 @@ describe.skipIf(ON_WINDOWS)("Statuszeile: Zeile 1 und 2", () => {
     expect(r.plain).toBe("Opus 5.5 │ 82k (41%)");
   });
 
+  describe("Nachtrag 44c: Effort hinter dem Modell", () => {
+    it("effort.level geliefert: steht mit „ · “ hinter dem Modell", () => {
+      expect(lauf(eingabe({ effort: { level: "xhigh" } })).plain).toBe("Opus 5.5 · xhigh │ 82k (41%)");
+      expect(lauf(eingabe({ effort: { level: "medium" } })).plain).toBe("Opus 5.5 · medium │ 82k (41%)");
+    });
+
+    it("mit Limits: der Rest der Zeile bleibt, wie er war", () => {
+      const r = lauf(eingabe({ effort: { level: "max" }, limits: { five: fuenf(42), week: woche(38, 43) } }));
+      expect(r.zeilen).toEqual([
+        "Opus 5.5 · max │ 82k (41%) │ 5h 42% · noch 2:13",
+        "Woche ▓▓▓▓░░░░░░ 38% · Zeit 43% · im Plan",
+      ]);
+    });
+
+    it("kein brauchbarer Wert: Zeile wie ohne Effort", () => {
+      const ohne = "Opus 5.5 │ 82k (41%)";
+      for (const effort of [null, "xhigh", 3, {}, { level: null }, { level: 3 }, { level: "" }, { level: "x high" }]) {
+        expect(lauf(eingabe({ effort })).plain, JSON.stringify(effort)).toBe(ohne);
+      }
+      // Steuerzeichen kämen sonst ungefiltert ins Terminal
+      expect(lauf(eingabe({ effort: { level: "\u001b[31mrot" } })).out).not.toContain("rot");
+      expect(lauf(eingabe({ effort: { level: "a".repeat(17) } })).plain).toBe(ohne);
+    });
+
+    it("die Sitzungsdatei bleibt ohne Effort (das Cockpit liest ihn nicht)", () => {
+      const r = lauf(eingabe({ sessionId: UUID, effort: { level: "xhigh" } }));
+      expect(Object.keys(sitzung(r)).sort()).toEqual(
+        ["api_at", "api_ms", "context_tokens", "model", "session_id", "used_percentage", "written_at"].sort(),
+      );
+      expect(sitzung(r).model).toBe("Opus 5.5");
+    });
+  });
+
   it("beide Fenster: Zeile 1 mit 5h und Restzeit, Zeile 2 mit Wochenbalken", () => {
     const r = lauf(eingabe({ limits: { five: fuenf(42), week: woche(38, 43) } }), { tokens: heute(340_000) });
     expect(r.zeilen).toEqual([
@@ -204,6 +241,37 @@ describe.skipIf(ON_WINDOWS)("Statuszeile: Zeile 1 und 2", () => {
     expect(r.zeilen[1]).toContain("im Plan");
   });
 
+  describe("Nachtrag 44a: abgelaufenes 5h-Fenster ohne Nachfolger", () => {
+    const JETZT = 1794400000;
+    /** Eingabe nur mit der Woche (Claude Code liefert kein 5h-Fenster mehr), usage.json mit beiden Fenstern. */
+    const fall = (fiveReset: number, weekObserved: number) =>
+      lauf(eingabe({ limits: { week: { pct: 30, resets: 1794900000 } } }), {
+        now: JETZT,
+        usage: {
+          written_at: JETZT - 10,
+          rate_limits: {
+            five_hour: { used_percentage: 95, resets_at: fiveReset, observed_at: fiveReset - 16083 },
+            seven_day: { used_percentage: 30, resets_at: 1794900000, observed_at: weekObserved },
+          },
+        },
+      });
+    it("Woche nach dem 5h-Reset beobachtet: kein 5h-Teil, Wochenzeile bleibt", () => {
+      const r = fall(1793408400, 1794397212);
+      expect(r.plain).not.toContain("5h");
+      expect(r.zeilen[0]).toBe("Opus 5.5 │ 82k (41%)");
+      expect(r.zeilen[1]).toContain("Woche");
+    });
+    it("Reset vor 10 Minuten, Woche davor beobachtet: „5h zurückgesetzt“ wie bisher", () => {
+      expect(fall(JETZT - 600, JETZT - 900).zeilen[0]).toContain("5h zurückgesetzt");
+    });
+    it("Grenzen gleichlautend mit dem Kern: gleiche Zeit nein, 60 s Zukunft ja, 61 s nein", () => {
+      const R = JETZT - 3600;
+      expect(fall(R, R).plain).toContain("5h zurückgesetzt");
+      expect(fall(R, JETZT + 60).plain).not.toContain("5h");
+      expect(fall(R, JETZT + 61).plain).toContain("5h zurückgesetzt");
+    });
+  });
+
   it("5h genau jetzt erreicht zählt als zurückgesetzt", () => {
     const r = lauf(eingabe({ limits: { five: { pct: 50, resets: NOW } } }));
     expect(r.zeilen[0]).toContain("zurückgesetzt");
@@ -227,9 +295,11 @@ describe.skipIf(ON_WINDOWS)("Statuszeile: Zeile 1 und 2", () => {
 
 // Windows: Skript läuft in bash und braucht jq (Inventur H13)
 describe.skipIf(ON_WINDOWS)("Statuszeile: Empfehlung", () => {
-  it("Tempo vorn (Verbrauch 60 %, Zeit 43 %): nennt die Hebel", () => {
+  // Nachtrag 44c: nur noch Hinweis, kein Ratschlag (die Hebel „kein xhigh, Sonnet-Agents“ gelten nicht mehr)
+  it("Tempo vorn (Verbrauch 60 %, Zeit 43 %): meldet es ohne Ratschlag", () => {
     const r = lauf(eingabe({ limits: { five: fuenf(10), week: woche(60, 43) } }));
-    expect(r.zeilen[1]).toBe("Woche ▓▓▓▓▓▓░░░░ 60% · Zeit 43% · zu schnell: kein xhigh, Sonnet-Agents, früher übergeben");
+    expect(r.zeilen[1]).toBe("Woche ▓▓▓▓▓▓░░░░ 60% · Zeit 43% · zu schnell");
+    expect(r.out).toContain(`${GELB}zu schnell`);
   });
 
   it("Grenze: genau TEMPO_MARGIN (10 Punkte) vorn ist noch im Plan, 11 nicht", () => {
@@ -244,7 +314,7 @@ describe.skipIf(ON_WINDOWS)("Statuszeile: Empfehlung", () => {
   it("5h fast voll hat Vorrang vor Tempo", () => {
     const r = lauf(eingabe({ limits: { five: fuenf(95), week: woche(60, 43) } }));
     expect(r.zeilen[1]).toContain("5h fast voll");
-    expect(r.zeilen[1]).not.toContain("kein xhigh");
+    expect(r.zeilen[1]).not.toContain("zu schnell");
   });
 
   it("Grenze FIVE_HOUR_WARN: 89 nicht, 90 ja", () => {
@@ -471,7 +541,7 @@ describe("Statuszeile: Schnappschuss-Block und Laufzeit", () => {
     const echtes = spawnSync("bash", ["-c", "command -v jq"], { encoding: "utf8" }).stdout.trim();
     writeFileSync(join(bin, "jq"), `#!/bin/bash\necho x >> "${log}"\nexec "${echtes}" "$@"\n`);
     chmodSync(join(bin, "jq"), 0o755);
-    const zaehle = (stdin: string, vorige?: object) => {
+    const zaehle = (stdin: string, vorige?: object, usage?: object, now = NOW) => {
       rmSync(log, { force: true });
       const dir = temp();
       const home = temp();
@@ -479,10 +549,14 @@ describe("Statuszeile: Schnappschuss-Block und Laufzeit", () => {
         mkdirSync(join(dir, "sessions"));
         writeFileSync(join(dir, "sessions", `${UUID}.json`), JSON.stringify(vorige));
       }
+      if (usage) {
+        mkdirSync(join(home, ".claude", "cockpit"), { recursive: true });
+        writeFileSync(join(home, ".claude", "cockpit", "usage.json"), JSON.stringify(usage));
+      }
       spawnSync("bash", [SKRIPT], {
         input: stdin,
         encoding: "utf8",
-        env: { PATH: `${bin}:${process.env.PATH}`, HOME: home, TZ: "Europe/Berlin", COCKPIT_NOW: String(NOW), COCKPIT_DIR: dir },
+        env: { PATH: `${bin}:${process.env.PATH}`, HOME: home, TZ: "Europe/Berlin", COCKPIT_NOW: String(now), COCKPIT_DIR: dir },
       });
       return readFileSync(log, "utf8").trim().split("\n").length;
     };
@@ -493,6 +567,15 @@ describe("Statuszeile: Schnappschuss-Block und Laufzeit", () => {
     // mit gültiger session_id, voriger Sitzungsdatei und rate_limits: Kopf, Sitzungsdatei, Zusammenführen, Statuszeile
     const mitVoriger = eingabe({ sessionId: UUID, api: 5000, limits: { five: fuenf(42), week: woche(38, 43) } });
     expect(zaehle(mitVoriger, vorher(1000, NOW - 60))).toBe(4);
+    // Nachtrag 44a: abgelaufenes 5h-Fenster ohne Nachfolger kostet keinen eigenen Aufruf
+    const totesFenster = {
+      written_at: 1794399990,
+      rate_limits: {
+        five_hour: { used_percentage: 95, resets_at: 1793408400, observed_at: 1793392317 },
+        seven_day: { used_percentage: 30, resets_at: 1794900000, observed_at: 1794397212 },
+      },
+    };
+    expect(zaehle(eingabe({ limits: { week: { pct: 30, resets: 1794900000 } } }), undefined, totesFenster, 1794400000)).toBe(4);
   });
 });
 

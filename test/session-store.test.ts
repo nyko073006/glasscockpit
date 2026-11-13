@@ -3,12 +3,13 @@ import { SessionStore } from "../src/core/session-store";
 import type { CockpitData, SessionRecord } from "../src/core/session-model";
 import { DEFAULT_SETTINGS, validateSetting } from "../src/core/settings";
 import { FakeTimers } from "./helpers/fakes";
+import { TODAY_DONE_MAX } from "../src/core/constants";
 
 const rec = (id: string, name = "claude"): SessionRecord => ({ id, name, kind: "claude", cwd: "/v", createdAt: "t" });
 function setup(initial: SessionRecord[] = []) {
   const saves: CockpitData[] = [];
   const timers = new FakeTimers();
-  const store = new SessionStore({ schemaVersion: 1, sessions: initial, settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null }, async (d) => { saves.push(d); }, timers, 300);
+  const store = new SessionStore({ schemaVersion: 1, sessions: initial, settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null }, async (d) => { saves.push(d); }, timers, 300);
   return { store, saves, timers };
 }
 
@@ -28,7 +29,7 @@ describe("SessionStore: zuletzt benutzte Skills", () => {
     expect(store.recentSkills()).toHaveLength(30);
   });
   it("Anfangswert aus den Daten, recentSkills() gibt eine Kopie", () => {
-    const store = new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: ["x", "y"], openAtUnload: [], dashboardAtUnload: null }, async () => {}, new FakeTimers(), 300);
+    const store = new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: ["x", "y"], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null }, async () => {}, new FakeTimers(), 300);
     expect(store.recentSkills()).toEqual(["x", "y"]);
     store.recentSkills().push("z");
     expect(store.recentSkills()).toEqual(["x", "y"]);
@@ -217,7 +218,7 @@ describe("SessionStore", () => {
     store.add(rec("a")); timers.advance(200); store.add(rec("b")); timers.advance(299);
     expect(saves).toHaveLength(0);
     timers.advance(1);
-    expect(saves).toEqual([{ schemaVersion: 1, sessions: [rec("a"), rec("b")], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null }]);
+    expect(saves).toEqual([{ schemaVersion: 1, sessions: [rec("a"), rec("b")], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null }]);
   });
   it("speichert nie ohne Änderung", () => {
     const { store, saves, timers } = setup([rec("a")]);
@@ -240,7 +241,7 @@ describe("SessionStore", () => {
   });
   it("Speicherfehler geht an onSaveError", async () => {
     const fehler: unknown[] = [];
-    const store = new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null }, async () => { throw new Error("voll"); }, new FakeTimers(), 300, (f) => fehler.push(f));
+    const store = new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null }, async () => { throw new Error("voll"); }, new FakeTimers(), 300, (f) => fehler.push(f));
     store.add(rec("a")); await store.flush();
     expect(String(fehler[0])).toMatch(/voll/);
   });
@@ -304,7 +305,7 @@ describe("SessionStore: Claude-ID (Abend 11)", () => {
 
 describe("SessionStore: Merkzettel openAtUnload (Abend 19c)", () => {
   it("Anfangswert aus den Daten, openAtUnload() gibt eine Kopie", () => {
-    const store = new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: ["a", "b"], dashboardAtUnload: null }, async () => {}, new FakeTimers(), 300);
+    const store = new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: ["a", "b"], dashboardAtUnload: null, briefingDone: null, remindersDone: null }, async () => {}, new FakeTimers(), 300);
     expect(store.openAtUnload()).toEqual(["a", "b"]);
     store.openAtUnload().push("z");
     expect(store.openAtUnload()).toEqual(["a", "b"]);
@@ -319,7 +320,7 @@ describe("SessionStore: Merkzettel openAtUnload (Abend 19c)", () => {
   it("Leeren nach dem Laden wird entprellt gespeichert; gleiche Liste speichert nichts", () => {
     const saves: CockpitData[] = [];
     const timers = new FakeTimers();
-    const store = new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: ["a"], dashboardAtUnload: null }, async (d) => { saves.push(d); }, timers, 300);
+    const store = new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: ["a"], dashboardAtUnload: null, briefingDone: null, remindersDone: null }, async (d) => { saves.push(d); }, timers, 300);
     store.setOpenAtUnload(["a"]);
     timers.advance(300);
     expect(saves).toHaveLength(0);
@@ -338,7 +339,7 @@ describe("SessionStore: Merkzettel openAtUnload (Abend 19c)", () => {
 
 describe("SessionStore: Merkzettel dashboardAtUnload (Abend 19e)", () => {
   const withMemo = (memo: CockpitData["dashboardAtUnload"], saves: CockpitData[], timers: FakeTimers) =>
-    new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: memo }, async (d) => { saves.push(d); }, timers, 300);
+    new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: memo, briefingDone: null, remindersDone: null }, async (d) => { saves.push(d); }, timers, 300);
 
   it("Anfangswert aus den Daten, dashboardAtUnload() gibt eine Kopie", () => {
     const store = withMemo({ area: "left" }, [], new FakeTimers());
@@ -378,5 +379,133 @@ describe("SessionStore: Merkzettel dashboardAtUnload (Abend 19e)", () => {
     store.add(rec("a"));
     timers.advance(300);
     expect(saves.at(-1)?.dashboardAtUnload).toEqual({ area: "right" });
+  });
+});
+
+describe("SessionStore: Erledigt-Stand der Karte „Heute“ (Abend 44)", () => {
+  const withDone = (briefingDone: CockpitData["briefingDone"], remindersDone: CockpitData["remindersDone"], saves: CockpitData[] = [], timers = new FakeTimers()) =>
+    new SessionStore({ schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone, remindersDone }, async (d) => { saves.push(d); }, timers, 300);
+
+  it("Briefing: abhaken, Listener einmal, entprellt gespeichert; gleicher Zielzustand schreibt und meldet nichts", () => {
+    const { store, saves, timers } = setup();
+    let n = 0;
+    store.onTodayChange(() => n++);
+    store.setBriefingDone("2026-11-11", "a", true);
+    expect(store.briefingDone("2026-11-11")).toEqual(["a"]);
+    expect(n).toBe(1);
+    expect(saves).toHaveLength(0);
+    timers.advance(300);
+    expect(saves).toHaveLength(1);
+    expect(saves[0].briefingDone).toEqual({ date: "2026-11-11", keys: ["a"] });
+    // Doppelklick-Schutz: derselbe Aufruf noch einmal ändert nichts.
+    store.setBriefingDone("2026-11-11", "a", true);
+    timers.advance(300);
+    expect(n).toBe(1);
+    expect(saves).toHaveLength(1);
+    // Zurücknehmen eines nicht abgehakten Punkts ist auch kein Schreiben.
+    store.setBriefingDone("2026-11-11", "z", false);
+    timers.advance(300);
+    expect(n).toBe(1);
+    expect(saves).toHaveLength(1);
+  });
+
+  it("Briefing: zurücknehmen entfernt den Schlüssel und meldet", () => {
+    const { store, saves, timers } = setup();
+    let n = 0;
+    store.onTodayChange(() => n++);
+    store.setBriefingDone("2026-11-11", "a", true);
+    store.setBriefingDone("2026-11-11", "b", true);
+    store.setBriefingDone("2026-11-11", "a", false);
+    expect(store.briefingDone("2026-11-11")).toEqual(["b"]);
+    expect(n).toBe(3);
+    timers.advance(300);
+    expect(saves.at(-1)?.briefingDone).toEqual({ date: "2026-11-11", keys: ["b"] });
+  });
+
+  it("Briefing: Tageswechsel liefert leer, der nächste Haken beginnt neu mit dem neuen Tag", () => {
+    const saves: CockpitData[] = [];
+    const timers = new FakeTimers();
+    const store = withDone({ date: "2026-11-11", keys: ["a"] }, null, saves, timers);
+    expect(store.briefingDone("2026-11-11")).toEqual(["a"]);
+    expect(store.briefingDone("2026-11-12")).toEqual([]);
+    store.setBriefingDone("2026-11-12", "b", true);
+    timers.advance(300);
+    expect(saves.at(-1)?.briefingDone).toEqual({ date: "2026-11-12", keys: ["b"] });
+    expect(store.briefingDone("2026-11-11")).toEqual([]);
+  });
+
+  it("Briefing: Zurücknehmen an einem neuen Tag ist kein Schreiben (der alte Stand zählt nicht)", () => {
+    const saves: CockpitData[] = [];
+    const timers = new FakeTimers();
+    const store = withDone({ date: "2026-11-11", keys: ["a"] }, null, saves, timers);
+    let n = 0;
+    store.onTodayChange(() => n++);
+    store.setBriefingDone("2026-11-12", "a", false);
+    timers.advance(300);
+    expect(n).toBe(0);
+    expect(saves).toHaveLength(0);
+  });
+
+  it("Briefing: höchstens TODAY_DONE_MAX Schlüssel", () => {
+    const { store } = setup();
+    for (let i = 0; i < TODAY_DONE_MAX + 5; i++) store.setBriefingDone("2026-11-11", `k${i}`, true);
+    expect(store.briefingDone("2026-11-11")).toHaveLength(TODAY_DONE_MAX);
+  });
+
+  it("Erinnerungen: abhaken, doppelt, zurücknehmen nach id, Tageswechsel", () => {
+    const { store, saves, timers } = setup();
+    let n = 0;
+    store.onTodayChange(() => n++);
+    store.setReminderDone("2026-11-11", { id: "r1", name: "Arbeit" }, true);
+    expect(store.remindersDone("2026-11-11")).toEqual([{ id: "r1", name: "Arbeit" }]);
+    expect(n).toBe(1);
+    timers.advance(300);
+    expect(saves).toHaveLength(1);
+    expect(saves[0].remindersDone).toEqual({ date: "2026-11-11", items: [{ id: "r1", name: "Arbeit" }] });
+    // Gleiche id noch einmal (auch mit anderem Namen): kein Schreiben, keine Meldung.
+    store.setReminderDone("2026-11-11", { id: "r1", name: "Arbeit neu" }, true);
+    timers.advance(300);
+    expect(n).toBe(1);
+    expect(saves).toHaveLength(1);
+    store.setReminderDone("2026-11-11", { id: "r2", name: "Privat" }, true);
+    // Zurücknehmen geht nach id, der Name zählt nicht.
+    store.setReminderDone("2026-11-11", { id: "r1", name: "egal" }, false);
+    expect(store.remindersDone("2026-11-11")).toEqual([{ id: "r2", name: "Privat" }]);
+    expect(n).toBe(3);
+    store.setReminderDone("2026-11-11", { id: "r1", name: "egal" }, false);
+    expect(n).toBe(3);
+    timers.advance(300);
+    expect(saves.at(-1)?.remindersDone).toEqual({ date: "2026-11-11", items: [{ id: "r2", name: "Privat" }] });
+    // Tageswechsel.
+    expect(store.remindersDone("2026-11-12")).toEqual([]);
+    store.setReminderDone("2026-11-12", { id: "r3", name: "Privat" }, true);
+    timers.advance(300);
+    expect(saves.at(-1)?.remindersDone).toEqual({ date: "2026-11-12", items: [{ id: "r3", name: "Privat" }] });
+  });
+
+  it("Anfangswert aus den Daten, Getter geben Kopien", () => {
+    const store = withDone({ date: "2026-11-11", keys: ["a"] }, { date: "2026-11-11", items: [{ id: "r1", name: "Arbeit" }] });
+    expect(store.briefingDone("2026-11-11")).toEqual(["a"]);
+    expect(store.remindersDone("2026-11-11")).toEqual([{ id: "r1", name: "Arbeit" }]);
+    store.briefingDone("2026-11-11").push("x");
+    const items = store.remindersDone("2026-11-11");
+    items[0]!.name = "geändert";
+    items.push({ id: "r9", name: "x" });
+    expect(store.briefingDone("2026-11-11")).toEqual(["a"]);
+    expect(store.remindersDone("2026-11-11")).toEqual([{ id: "r1", name: "Arbeit" }]);
+  });
+
+  it("Abmelden wirkt; andere Speicherungen tragen beide Felder mit", () => {
+    const { store, saves, timers } = setup();
+    let n = 0;
+    const off = store.onTodayChange(() => n++);
+    store.setBriefingDone("2026-11-11", "a", true);
+    off();
+    store.setReminderDone("2026-11-11", { id: "r1", name: "Arbeit" }, true);
+    expect(n).toBe(1);
+    store.add(rec("s"));
+    timers.advance(300);
+    expect(saves.at(-1)?.briefingDone).toEqual({ date: "2026-11-11", keys: ["a"] });
+    expect(saves.at(-1)?.remindersDone).toEqual({ date: "2026-11-11", items: [{ id: "r1", name: "Arbeit" }] });
   });
 });

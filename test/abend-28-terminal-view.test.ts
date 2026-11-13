@@ -98,7 +98,7 @@ function aufbau(overrides: Partial<CockpitSettings> = {}, mitLeser = true, recor
     telegram: vi.fn(),
     activity: { record: vi.fn(), markSeen: vi.fn(), lastSignal: vi.fn(() => undefined) },
     alertGate: vi.fn(() => true),
-    handoffs: { keep: vi.fn(), get: vi.fn(() => null) },
+    handoffs: { keep: vi.fn(), keepCurrent: vi.fn(), get: vi.fn(() => null) },
   };
   const leaf = { updateHeader: vi.fn(), tabHeaderEl: { toggleClass: vi.fn(), setAttr: vi.fn() } };
   const view = new TerminalView(leaf as never, deps as unknown as TerminalDeps);
@@ -162,6 +162,20 @@ describe("Abend 28 (Verhalten der View): Antwortende bei laufenden Hintergrundau
       await fertig(deps);
       still(deps, intern);
     }
+  });
+
+  it("ein Read gibt Leser-ID und Sitzungsstart an keepCurrent weiter (Übergabe-Lampe)", async () => {
+    await schreibe([JSON.stringify({ type: "assistant", message: { id: "m", content: [{ type: "text", text: "fertig" }] } })]);
+    const { deps, intern } = aufbau();
+    intern.onAttention("done");
+    await fertig(deps);
+    const aufrufe = (deps.handoffs.keepCurrent as ReturnType<typeof vi.fn>).mock.calls;
+    expect(aufrufe).toHaveLength(1);
+    const [sitzung, claudeId, block, start] = aufrufe[0];
+    expect([sitzung, claudeId, block]).toEqual([COCKPIT_ID, ID, null]);
+    // Erstellzeit der Datei: Zahl > 0 (macOS) oder null (unbekannt), nie NaN
+    expect(start === null || (Number.isFinite(start) && start > 0)).toBe(true);
+    if (process.platform === "darwin") expect(start).toBeGreaterThan(0);
   });
 
   it("done ohne Hintergrundaufgaben: meldet wie bisher (Telegram, Ton, Banner, Markierung)", async () => {

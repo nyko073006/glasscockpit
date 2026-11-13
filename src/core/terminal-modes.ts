@@ -27,6 +27,11 @@ export class ModeTracker {
     this.carry = OPEN_TAIL.exec(text)?.[0] ?? "";
   }
 
+  /** Ist der Modus gerade eingeschaltet? */
+  isOn(mode: (typeof TRACKED_MODES)[number]): boolean {
+    return this.on.has(mode);
+  }
+
   /** Eingeschaltete Modi als Sequenzen, für eine frische xterm-Instanz (dort ist alles aus). */
   prelude(): string {
     return TRACKED_MODES.filter((mode) => this.on.has(mode)).map((mode) => `\x1b[?${mode}h`).join("");

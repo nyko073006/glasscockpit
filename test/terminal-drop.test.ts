@@ -46,9 +46,12 @@ vi.mock("../src/host/terminal-pane", () => ({
     registerLinkProvider() {
       return () => {};
     }
+    attachSmoothWheel() {
+      return () => {};
+    }
   },
 }));
-vi.mock("../src/host/file-links", () => ({ FileLinkProvider: class {} }));
+vi.mock("../src/host/file-links", () => ({ FileLinkProvider: class {}, UrlLinkProvider: class {} }));
 vi.mock("../src/host/file-viewer-fs", () => ({ isDirSync: () => false, isFileSync: () => false }));
 vi.mock("../src/host/rename-modal", () => ({ RenameModal: class {} }));
 

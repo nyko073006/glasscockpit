@@ -5,15 +5,20 @@ import type { CockpitFeed, CockpitFeedActions } from "../core/cockpit-feed";
 import { type BriefingInput, type CockpitInputs, type TasksInput, researchForPanel } from "../core/cockpit-panels";
 import { BRIEFING_RELOAD_DEBOUNCE_MS, VIEW_TYPE_DASHBOARD } from "../core/constants";
 import { createDebounce } from "../core/debounce";
+import { markBriefing, scanBriefing } from "../core/focus";
+import { briefingLoadKey, todayBriefingPath } from "../core/today";
 import { Observable } from "../core/observable";
 import { formatPullStatus, type PullSnapshot } from "../core/pull-state";
+import type { ReminderDone } from "../core/session-model";
 import type { CockpitSettings } from "../core/settings";
 import { OPEN_SETTINGS_TEXT, UNSET_TEXT, isUnset, unsetHint } from "../core/unset";
-import type { TokenCounter } from "../core/usage";
+import { type TokenCounter, localDayString } from "../core/usage";
 import type { LaunchEntry } from "../core/discovery";
+import { type RenderedBriefing, renderBriefingWithChecks } from "./briefing-checks";
 import { DashboardLayoutController } from "./dashboard-layout-controller";
 import type { PullController } from "./git-pull";
 import { handleInternalLinks } from "./internal-link";
+import type { RemindersController } from "./reminders";
 import { ResearchCard } from "./research-card";
 import { SkillsCard } from "./skills-card";
 import { TasksCard } from "./tasks-card";
@@ -46,6 +51,14 @@ export interface DashboardDeps {
   onFeedChange: (cb: () => void) => () => void;
   /** Das Dashboard ging auf: Plugin liest die Dateien der neuen Flächen einmal frisch. */
   feedOpened: () => void;
+  /** Karte „Heute“ (Abend 44): Erledigt-Stand des Tages im Store, Abo auf seine Änderungen. */
+  briefingDone: (today: string) => string[];
+  setBriefingDone: (today: string, key: string, done: boolean) => void;
+  remindersDone: (today: string) => ReminderDone[];
+  setReminderDone: (today: string, item: ReminderDone, done: boolean) => void;
+  onTodayChange: (cb: () => void) => () => void;
+  /** Erinnerungen-Zustand und Takt, gehört dem Plugin (eine Instanz für alle Dashboards). */
+  reminders: RemindersController;
 }
 
 type Listing = { kind: "ok"; days: string[] } | { kind: "missing" } | { kind: "unset" };
@@ -61,11 +74,19 @@ const clock = (ms: number): string =>
 export class DashboardView extends ItemView {
   private readonly deps: DashboardDeps;
   private expanded = false;
+  /** Bereich „Erledigt“ der Karte „Heute“ aufgeklappt; steht im View-State. */
+  private doneOpen = false;
+  /** dashboardOpened beim Erinnerungen-Controller ist gemeldet; onClose meldet das Schließen genau dann. */
+  private remindersCounted = false;
   private listing: Listing = { kind: "ok", days: [] };
   private selected: string | null = null;
-  private loadedDir: string | null = null;
+  /** Einstellungen, mit denen die Briefing-Karte zuletzt geladen hat (briefingLoadKey); eine Änderung lädt neu. */
+  private loadedKey: string | null = null;
+  /** Hinweis über dem Briefing-Text, wenn das Abhaken nicht zugeordnet werden konnte (null: keiner). */
+  private briefingHint: string | null = null;
   private generation = 0;
-  private renderComponent: Component | null = null;
+  /** Baut das zuletzt gezeigte Render-Ergebnis ab (seine Kind-Component), null: keins. */
+  private renderDispose: (() => void) | null = null;
   private reload: ReturnType<typeof createDebounce> | null = null;
   private statusEl: HTMLElement | null = null;
   private pullButton: HTMLButtonElement | null = null;
@@ -100,11 +121,16 @@ export class DashboardView extends ItemView {
   }
 
   getState(): Record<string, unknown> {
-    return { ...super.getState(), expanded: this.expanded };
+    return { ...super.getState(), expanded: this.expanded, doneOpen: this.doneOpen };
   }
 
   async setState(state: unknown, result: ViewStateResult): Promise<void> {
     await super.setState(state, result);
+    const doneOpen = (state as { doneOpen?: unknown } | null)?.doneOpen === true;
+    if (doneOpen !== this.doneOpen) {
+      this.doneOpen = doneOpen;
+      this.tasks?.redraw();
+    }
     const expanded = (state as { expanded?: unknown } | null)?.expanded === true;
     if (expanded === this.expanded) return;
     this.expanded = expanded;
@@ -129,11 +155,23 @@ export class DashboardView extends ItemView {
     this.pullSettingsButton.hidden = true;
     this.pullSettingsButton.addEventListener("click", () => this.deps.actions.openSettings());
     this.cardEl = root.createDiv({ cls: "cockpit-card" });
-    // Unter der Briefing-Karte: Usage, Aufgaben, Skills, zuletzt Research.
+    // Unter der Briefing-Karte: Usage, Heute, Skills, zuletzt Research.
     this.usage = new UsageCard(this, root.createDiv({ cls: "cockpit-card" }), { counter: this.deps.counter });
     this.tasks = new TasksCard(this, root.createDiv({ cls: "cockpit-card" }), {
       settings: this.deps.settings,
       onSettingsChange: this.deps.onSettingsChange,
+      now: () => new Date(),
+      briefingDone: this.deps.briefingDone,
+      setBriefingDone: this.deps.setBriefingDone,
+      remindersDone: this.deps.remindersDone,
+      setReminderDone: this.deps.setReminderDone,
+      onTodayChange: this.deps.onTodayChange,
+      reminders: this.deps.reminders,
+      doneOpen: () => this.doneOpen,
+      setDoneOpen: (open) => {
+        this.doneOpen = open;
+        this.app.workspace.requestSaveLayout();
+      },
     });
     this.skillsCard = new SkillsCard(this, root.createDiv({ cls: "cockpit-card" }), {
       settings: this.deps.settings,
@@ -167,9 +205,15 @@ export class DashboardView extends ItemView {
       trigger(f.path);
       trigger(oldPath);
     }));
-    // Anderer Briefing-Ordner: neu laden, ohne auf ein Vault-Ereignis zu warten.
+    // Anderer Briefing-Ordner, Schalter der Briefing-Punkte oder Überschrift: neu laden, ohne auf ein Vault-Ereignis zu warten.
     this.register(this.deps.onSettingsChange((s) => {
-      if (s.briefingsDir !== this.loadedDir) this.reload?.();
+      if (briefingLoadKey(s) !== this.loadedKey) this.reload?.();
+    }));
+    // Erledigt-Stand des Tages geändert (feuert nur bei setBriefingDone und setReminderDone, nicht beim Tageswechsel): Haken
+    // neu zeichnen, entprellt. Der eigene Klick lädt sofort (onToggle). Der Tausch des gerenderten Elements läuft synchron;
+    // die Scrollposition soll dabei erhalten bleiben, in Obsidian noch nicht gemessen.
+    this.register(this.deps.onTodayChange(() => {
+      if (this.expanded) this.reload?.();
     }));
 
     const off = this.deps.pull.state.subscribe((s) => this.showPull(s));
@@ -219,28 +263,38 @@ export class DashboardView extends ItemView {
     });
     this.layoutCtl.start();
     this.deps.pull.dashboardOpened();
+    this.deps.reminders.dashboardOpened();
+    this.remindersCounted = true;
     this.deps.feedOpened();
     await this.loadBriefings();
   }
 
   async onClose(): Promise<void> {
-    this.opened = false;
-    this.reload?.cancel();
-    this.reload = null;
-    this.usage?.stop();
-    this.tasks?.stop();
-    this.skillsCard?.stop();
-    this.research?.stop();
-    // Die Cockpit-Bühne schließt einen offenen Zoom und gibt die Karten zurück, ehe sie weg ist.
-    this.layoutCtl?.destroy();
-    this.layoutCtl = null;
-    this.usage = null;
-    this.tasks = null;
-    this.skillsCard = null;
-    this.research = null;
-    this.generation++;
-    this.unloadRender();
-    this.deps.pull.dashboardClosed();
+    try {
+      this.opened = false;
+      this.reload?.cancel();
+      this.reload = null;
+      this.usage?.stop();
+      this.tasks?.stop();
+      this.skillsCard?.stop();
+      this.research?.stop();
+      // Die Cockpit-Bühne schließt einen offenen Zoom und gibt die Karten zurück, ehe sie weg ist.
+      this.layoutCtl?.destroy();
+      this.layoutCtl = null;
+      this.usage = null;
+      this.tasks = null;
+      this.skillsCard = null;
+      this.research = null;
+      this.generation++;
+      this.unloadRender();
+      this.deps.pull.dashboardClosed();
+    } finally {
+      // Paarig zu dashboardOpened, auch wenn oben etwas wirft; nie ohne vorheriges Öffnen (onOpen kann davor gescheitert sein).
+      if (this.remindersCounted) {
+        this.remindersCounted = false;
+        this.deps.reminders.dashboardClosed();
+      }
+    }
   }
 
   /** Kanzel-Klick (Action openBriefing): Zoom auf die Briefing-Karte, in der Liste die Karte aufklappen. */
@@ -255,7 +309,8 @@ export class DashboardView extends ItemView {
   /** Alles, was die Instrumente brauchen, aus den Ständen der Karten (kein eigener Lader). */
   private cockpitInputs(): CockpitInputs {
     const tasks = this.tasks?.data.get() ?? null;
-    const tasksInput: TasksInput | null = tasks === null ? null : tasks.kind === "missing" ? { kind: "missing" } : { kind: "ok", rows: tasks.rows };
+    const tasksInput: TasksInput | null =
+      tasks === null ? null : { open: tasks.today.openTexts, total: tasks.today.total, tasksMissing: tasks.today.tasksMissing };
     return {
       now: Date.now(),
       briefing: this.briefing.get(),
@@ -275,8 +330,8 @@ export class DashboardView extends ItemView {
   }
 
   private unloadRender(): void {
-    if (this.renderComponent) this.removeChild(this.renderComponent);
-    this.renderComponent = null;
+    this.renderDispose?.();
+    this.renderDispose = null;
   }
 
   /** Liste frisch aus dem Vault; gelesen und gerendert wird nur aufgeklappt. Nur das jüngste Ergebnis zählt. */
@@ -284,7 +339,7 @@ export class DashboardView extends ItemView {
     if (!this.opened) return;
     const gen = ++this.generation;
     const dir = this.deps.settings().briefingsDir;
-    this.loadedDir = dir;
+    this.loadedKey = briefingLoadKey(this.deps.settings());
     // Leerer Pfad nie lesen: getFolderByPath("") ist die Vault-Wurzel.
     const unset = isUnset(dir);
     const folder = unset ? null : this.app.vault.getFolderByPath(dir);
@@ -302,8 +357,7 @@ export class DashboardView extends ItemView {
     this.listing = { kind: "ok", days };
     this.selected = pickSelection(days, this.selected, wasNewest);
 
-    let rendered: HTMLElement | null = null;
-    let component: Component | null = null;
+    let shown: (RenderedBriefing & { hint?: string | null }) | null = null;
     // Gelesen und gerendert wird nur aufgeklappt. Das Instrument der Cockpit-Ansicht zeigt nur das Datum (seit 19b ohne Überschrift) und liest nie.
     if (this.expanded && this.selected !== null) {
       const file = this.app.vault.getFileByPath(`${dir}/${this.selected}.md`);
@@ -315,26 +369,55 @@ export class DashboardView extends ItemView {
           text = `Datei nicht lesbar: ${fehler instanceof Error ? fehler.message : String(fehler)}`;
         }
         if (gen !== this.generation) return;
-        // In ein eigenes Element rendern, getauscht wird erst, wenn dieses Ergebnis noch das jüngste ist.
-        rendered = createDiv({ cls: "cockpit-briefing-text markdown-rendered" });
-        component = new Component();
-        this.addChild(component);
-        await MarkdownRenderer.render(this.app, text, rendered, file.path, component);
-        // Obsidians Renderer setzt a.internal-link mit data-href, hängt aber keinen Klick-Handler an: geöffnet wird hier (Klick und Mittelklick), in einem neuen Tab.
-        handleInternalLinks(this.app, rendered, {
-          ziel: (e) => (e.target as HTMLElement | null)?.closest("a.internal-link")?.getAttribute("data-href") || null,
-          quelle: () => file.path,
-        });
+        const s = this.deps.settings();
+        const today = localDayString(new Date());
+        const todayPath = todayBriefingPath(s, today);
+        const render = (markdown: string) => this.renderMarkdown(markdown, file.path);
+        // Abend 44: Nur das Briefing von heute bekommt Checkboxen mit dem Erledigt-Stand aus dem Store (data.json); die Datei
+        // bleibt unverändert, markBriefing ändert nur den Text, der gerendert wird. Ältere Tage bleiben, wie sie sind.
+        if (todayPath === file.path) {
+          const doneKeys = new Set(this.deps.briefingDone(today));
+          const scan = scanBriefing(text, s.focusHeading);
+          shown = await renderBriefingWithChecks({
+            text,
+            marked: markBriefing(text, scan, doneKeys),
+            boxes: scan.boxes,
+            done: doneKeys,
+            render,
+            // Der Setzer meldet synchron onTodayChange und stößt die Entprellung an: verwerfen und sofort laden.
+            onToggle: (key, done) => {
+              this.deps.setBriefingDone(today, key, done);
+              this.reload?.cancel();
+              void this.loadBriefings();
+            },
+            stale: () => gen !== this.generation,
+          });
+        } else shown = await render(text);
         if (gen !== this.generation) {
-          this.removeChild(component);
+          shown.dispose();
           return;
         }
       }
     }
     this.unloadRender();
-    this.renderComponent = component;
-    this.renderCard(rendered);
+    this.renderDispose = shown?.dispose ?? null;
+    this.briefingHint = shown?.hint ?? null;
+    this.renderCard(shown?.el ?? null);
     this.briefing.set({ kind: "ok", date: this.selected });
+  }
+
+  /** Rendert in ein eigenes Element mit eigener Kind-Component; getauscht wird erst, wenn das Ergebnis noch das jüngste ist. */
+  private async renderMarkdown(text: string, path: string): Promise<RenderedBriefing> {
+    const rendered = createDiv({ cls: "cockpit-briefing-text markdown-rendered" });
+    const component = new Component();
+    this.addChild(component);
+    await MarkdownRenderer.render(this.app, text, rendered, path, component);
+    // Obsidians Renderer setzt a.internal-link mit data-href, hängt aber keinen Klick-Handler an: geöffnet wird hier (Klick und Mittelklick), in einem neuen Tab.
+    handleInternalLinks(this.app, rendered, {
+      ziel: (e) => (e.target as HTMLElement | null)?.closest("a.internal-link")?.getAttribute("data-href") || null,
+      quelle: () => path,
+    });
+    return { el: rendered, dispose: () => this.removeChild(component) };
   }
 
   private renderCard(content: HTMLElement | null = null): void {
@@ -381,6 +464,7 @@ export class DashboardView extends ItemView {
       this.selected = select.value;
       void this.loadBriefings();
     });
+    if (content && this.briefingHint) body.createDiv({ cls: "cockpit-hint", text: this.briefingHint });
     if (content) body.append(content);
   }
 }

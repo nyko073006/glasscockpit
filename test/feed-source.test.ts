@@ -24,6 +24,7 @@ function rig(over: Partial<FeedSourceDeps> = {}) {
     readVault: async () => { reads.vault++; return { inbox: ["01 Inbox/a.md"], indexGeneratedAt: 5, dailyToday: true }; },
     readFocus: async () => { reads.focus++; return ["Eins"]; },
     readHandoffs: async () => [],
+    handoffCheck: async () => null,
     readRadar: async (path) => { reads.radar++; return path.includes("projekt") ? "green" : "red"; },
     log: (m) => logs.push(m),
     ...over,
@@ -32,6 +33,18 @@ function rig(over: Partial<FeedSourceDeps> = {}) {
 }
 
 describe("CockpitFeedSource", () => {
+  it("Übergabe-Check: nach refresh() im Feed, bei Ausnahme null mit Log", async () => {
+    const check = { tone: "green" as const, gaps: [], lines: ["✓ Git sauber"], tooltip: "Übergabe: bereit für /clear" };
+    const ok = rig({ handoffCheck: async () => check });
+    expect(ok.source.feed().handoffCheck).toBeNull();
+    await ok.source.refresh();
+    expect(ok.source.feed().handoffCheck).toEqual(check);
+    const kaputt = rig({ handoffCheck: async () => { throw new Error("boom"); } });
+    await kaputt.source.refresh();
+    expect(kaputt.source.feed().handoffCheck).toBeNull();
+    expect(kaputt.logs.some((l) => l.includes("Übergabe-Check"))).toBe(true);
+  });
+
   it("vor dem ersten Lesen: nicht Gelesenes null oder leer, Lebendes (Sitzungen, Tokens, Einstellungen) schon da", () => {
     const { source, live } = rig();
     live.sessions = [{ id: "c1", name: "claude 1", cwd: "/x", running: true, failed: false, signal: null, signalAt: null, seen: false }];

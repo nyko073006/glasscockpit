@@ -258,16 +258,8 @@ function inputs(o: Partial<CockpitInputs> = {}): CockpitInputs {
         },
       },
     },
-    tasks: {
-      kind: "ok",
-      rows: [
-        { kind: "heading", line: 0, level: 1, text: "Heute" },
-        { kind: "task", line: 2, text: "Erste", done: false, depth: 0 },
-        { kind: "task", line: 3, text: "Zweite [[Ziel|Alias]]", done: false, depth: 0 },
-        { kind: "task", line: 4, text: "Erledigt", done: true, depth: 0 },
-        { kind: "task", line: 5, text: "Dritte", done: false, depth: 1 },
-      ],
-    },
+    // Offene Punkte der Karte „Heute“ (Briefing, Erinnerungen, Aufgaben) als Rohtext, dazu ein erledigter.
+    tasks: { open: ["Erste", "Zweite [[Ziel|Alias]]", "Dritte"], total: 4, tasksMissing: false },
     research: cache([repo(1, "alpha"), repo(2, "beta"), repo(3, "gamma")], [3]),
     pull: { status: "ok", at: NOW, error: null },
     ...o,
@@ -319,6 +311,37 @@ describe("panelValues: Usage (19b: nur das 5h-Fenster)", () => {
     const v = panelValues(inputs({ usage: { snapshot: { writtenAt: null, windows: { seven_day: { usedPercentage: 50, resetsAt: NOW / 1000 + 86400 } } } } }), clock).usage;
     expect(v).toEqual({ big: "–", lines: ["kein 5h-Stand"], tone: "gray" });
   });
+  describe("Nachtrag 44a: abgelaufenes 5h-Fenster ohne Nachfolger", () => {
+    const JETZT = 1794400000;
+    const mit = (fiveReset: number, weekObserved: number) =>
+      inputs({
+        now: JETZT * 1000,
+        usage: {
+          snapshot: {
+            writtenAt: null,
+            windows: {
+              five_hour: { usedPercentage: 95, resetsAt: fiveReset, observedAt: fiveReset - 16083 },
+              seven_day: { usedPercentage: 30, resetsAt: 1794900000, observedAt: weekObserved },
+            },
+          },
+        },
+      });
+    it("Woche nach dem 5h-Reset beobachtet: grau, „kein 5h-Limit“; die Woche bleibt", () => {
+      const v = panelValues(mit(1793408400, 1794397212), clock);
+      expect(v.usage).toEqual({ big: "–", lines: ["kein 5h-Limit"], tone: "gray" });
+      expect(v.week.big).toBe("30 %");
+    });
+    it("Reset vor 10 Minuten, Woche davor beobachtet: „zurückgesetzt“ wie bisher", () => {
+      expect(panelValues(mit(JETZT - 600, JETZT - 900), clock).usage).toEqual({ big: "–", lines: ["zurückgesetzt"], tone: "gray" });
+    });
+    it("ohne 5h-Fenster im Schnappschuss bleibt es bei „kein 5h-Stand“", () => {
+      const v = panelValues(
+        inputs({ now: JETZT * 1000, usage: { snapshot: { writtenAt: null, windows: { seven_day: { usedPercentage: 30, resetsAt: 1794900000, observedAt: 1794397212 } } } } }),
+        clock,
+      ).usage;
+      expect(v).toEqual({ big: "–", lines: ["kein 5h-Stand"], tone: "gray" });
+    });
+  });
   it("die Eingaben der Usage-Fläche kennen keine Tokens mehr (OUT zeigt sie aus dem Feed)", () => {
     expect(Object.keys(inputs().usage)).toEqual(["snapshot"]);
   });
@@ -331,20 +354,28 @@ describe("panelValues: Aufgaben", () => {
     expect(v.lines).toEqual(["Erste", "Zweite Alias", "Dritte"]);
   });
   it("mehr als drei: nur drei Zeilen; lange Texte gekürzt", () => {
-    const rows = ["a", "b", "c", "d", "x".repeat(40)].map((t, i) => ({ kind: "task" as const, line: i, text: t, done: false, depth: 0 }));
-    const v = panelValues(inputs({ tasks: { kind: "ok", rows } }), clock).tasks;
+    const open = ["a", "b", "c", "d", "x".repeat(40)];
+    const v = panelValues(inputs({ tasks: { open, total: 5, tasksMissing: false } }), clock).tasks;
     expect(v.big).toBe("5");
     expect(v.lines).toEqual(["a", "b", "c"]);
-    const lang = panelValues(inputs({ tasks: { kind: "ok", rows: rows.slice(4) } }), clock).tasks.lines[0];
+    const lang = panelValues(inputs({ tasks: { open: open.slice(4), total: 1, tasksMissing: false } }), clock).tasks.lines[0];
     expect(lang.length).toBe(24);
     expect(lang.endsWith("…")).toBe(true);
   });
   it("alles erledigt, leere Liste, fehlende Datei, lädt noch", () => {
-    const done = [{ kind: "task" as const, line: 1, text: "x", done: true, depth: 0 }];
-    expect(panelValues(inputs({ tasks: { kind: "ok", rows: done } }), clock).tasks).toMatchObject({ big: "0", lines: ["alles erledigt"] });
-    expect(panelValues(inputs({ tasks: { kind: "ok", rows: [] } }), clock).tasks).toMatchObject({ big: "0", lines: ["keine Aufgaben"] });
-    expect(panelValues(inputs({ tasks: { kind: "missing" } }), clock).tasks).toMatchObject({ big: "–", lines: ["fehlt"], tone: "gray", hint: "Aufgabenliste fehlt" });
+    expect(panelValues(inputs({ tasks: { open: [], total: 2, tasksMissing: false } }), clock).tasks).toMatchObject({ big: "0", lines: ["alles erledigt"] });
+    expect(panelValues(inputs({ tasks: { open: [], total: 0, tasksMissing: false } }), clock).tasks).toMatchObject({ big: "0", lines: ["keine Aufgaben"] });
+    expect(panelValues(inputs({ tasks: { open: [], total: 0, tasksMissing: true } }), clock).tasks).toMatchObject({ big: "–", lines: ["fehlt"], tone: "gray", hint: "Aufgabenliste fehlt" });
     expect(panelValues(inputs({ tasks: null }), clock).tasks).toMatchObject({ big: "…", tone: "gray" });
+  });
+  it("Aufgabenliste fehlt, aber Briefing oder Erinnerungen haben Punkte: Zahl und Texte statt „fehlt“", () => {
+    const v = panelValues(inputs({ tasks: { open: ["Punkt aus dem Briefing"], total: 2, tasksMissing: true } }), clock).tasks;
+    expect(v).toMatchObject({ big: "1", lines: ["Punkt aus dem Briefing"] });
+    expect(v.hint).toBeUndefined();
+    expect(panelValues(inputs({ tasks: { open: [], total: 1, tasksMissing: true } }), clock).tasks).toMatchObject({ big: "0", lines: ["alles erledigt"] });
+  });
+  it("Beschriftung der Fläche heißt „Heute“", () => {
+    expect(PANEL_TITLES.tasks).toBe("Heute");
   });
 });
 
@@ -491,7 +522,7 @@ describe("panelValues: Warnungen (19b: die Folge statt der Prozente)", () => {
 // Neue Flächen aus Abend 18 (Geometrie am Bild nachgemessen): eigene Liste FIELDS neben PANELS. Seit 19b liegen Repos und Radare
 // in der Konsole unter dem System-Display, und der Effort-Bildschirm sitzt auf dem Platz des früheren Skills-Schirms.
 describe("neue Flächen (Abend 18): Geometrie", () => {
-  const ids: FieldId[] = ["radar", "focus", "gaugeLeft", "gaugeRight", "vault", "repos", "radars", "effort", "telegram", "sound", "loc", "commits", "newSession"];
+  const ids: FieldId[] = ["radar", "focus", "gaugeLeft", "gaugeRight", "vault", "repos", "radars", "effort", "telegram", "sound", "loc", "commits", "handoff", "newSession"];
   const field = (id: FieldId) => {
     const f = FIELDS.find((x) => x.id === id);
     if (!f) throw new Error(`Fläche ${id} fehlt`);
@@ -519,7 +550,7 @@ describe("neue Flächen (Abend 18): Geometrie", () => {
     return set;
   };
 
-  it("genau dreizehn neue Flächen, alle mit Titel, keine davon in PANELS", () => {
+  it("genau vierzehn Flächen, alle mit Titel, keine davon in PANELS", () => {
     expect(FIELDS.map((f) => f.id).sort()).toEqual([...ids].sort());
     for (const id of ids) {
       expect(FIELD_TITLES[id].length).toBeGreaterThan(0);
@@ -560,6 +591,7 @@ describe("neue Flächen (Abend 18): Geometrie", () => {
       ["sound", 312, 1404, 53, 159],
       ["loc", 1157, 1140, 41, 57],
       ["commits", 1157, 1212, 49, 61],
+      ["handoff", 329, 1140, 51, 139],
       ["newSession", 699, 1498, 116, 83],
     ];
     for (const [id, x, y, w, h] of gemessen) {
@@ -612,7 +644,8 @@ describe("neue Flächen (Abend 18): Geometrie", () => {
         }
       }
       // am Bild gemessene Deckung (Polygon gegen Fläche im Bild, Schnittmenge durch Vereinigung), Messskript scripts/measure-fields.py
-      expect([f.id, f.coverage >= 0.98 && f.coverage <= 1]).toEqual([f.id, true]);
+      // handoff (43j): der schmale Schlitz misst 0,9747 (Randpixel des Glanzrands, auch mit mehr Ecken unverändert), darum Untergrenze 0,97
+      expect([f.id, f.coverage >= (f.id === "handoff" ? 0.97 : 0.98) && f.coverage <= 1]).toEqual([f.id, true]);
       // Seit 19b ist jede Fläche gemessen, keine ein Entwurf (die Effort-Kulisse fiel mit dem Hebel weg)
       expect([f.id, "designed" in f]).toEqual([f.id, false]);
       const c = f.content;
@@ -632,7 +665,7 @@ describe("neue Flächen (Abend 18): Geometrie", () => {
     }
   });
 
-  // Seit 19b prüft der Überlappungstest PANELS und FIELDS gemeinsam: jedes Paar aus allen 21 Flächen, nicht nur Felder gegen Panels.
+  // Seit 19b prüft der Überlappungstest PANELS und FIELDS gemeinsam: jedes Paar aus allen 22 Flächen, nicht nur Felder gegen Panels.
   type Belegt = [string, Set<number>, Rect];
   const belegung = (): Belegt[] => [
     ...PANELS.map((p) => [p.id, pixels(p.rect, p.polygon), p.rect] as Belegt),
@@ -650,7 +683,7 @@ describe("neue Flächen (Abend 18): Geometrie", () => {
     // Pixelmengen mit Umrandung: Paare, deren Rechtecke sich nicht berühren, haben keine gemeinsamen Pixel und werden übersprungen
     const alle = belegung();
     expect(alle).toHaveLength(PANELS.length + FIELDS.length);
-    expect(alle).toHaveLength(21);
+    expect(alle).toHaveLength(22);
     for (const [, s] of alle) expect(s.size).toBeGreaterThan(300);
     for (let i = 0; i < alle.length; i++) {
       for (let j = i + 1; j < alle.length; j++) expect([alle[i][0], alle[j][0], gemeinsam(alle[i], alle[j])]).toEqual([alle[i][0], alle[j][0], 0]);
@@ -847,7 +880,7 @@ describe("Ausschnitt VIEW_CROP (Abend 19b)", () => {
   });
 
   it("jede sichtbare Fläche liegt ganz im Ausschnitt; nur ALLOWED_CUT darf angeschnitten sein, mit mindestens 85 % der Rect-Fläche drin", () => {
-    expect(sichtbar).toHaveLength(21);
+    expect(sichtbar).toHaveLength(22);
     for (const f of sichtbar) {
       const share = insideShare(f.rect, VIEW_CROP);
       if (ALLOWED_CUT.includes(f.id)) expect([f.id, share >= 0.85]).toEqual([f.id, true]);

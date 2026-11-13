@@ -314,7 +314,7 @@ describe("Aufräumen beim Schließen", () => {
 describe("Abend 18: Feed bis zum Layout", () => {
   const radarInput = (id: string, name: string) => ({ id, name, cwd: "/v", running: true, failed: false, signal: "busy" as const, signalAt: 1, seen: true });
   const feedWith = (names: string[]): CockpitFeed => ({
-    handoffs: [], sessions: names.map((n, i) => radarInput(`id${i}`, n)), active: null, tokensToday: null, focus: [], vault: null,
+    handoffs: [], handoffCheck: null, sessions: names.map((n, i) => radarInput(`id${i}`, n)), active: null, tokensToday: null, focus: [], vault: null,
     repos: null, day: null, radars: [], unset: { projects: false, briefings: false, inbox: false, index: false, daily: false }, effort: "aus", telegramOn: false, soundOn: false,
   });
 

@@ -25,12 +25,21 @@ async function schreibeAntwort(): Promise<void> {
 describe("TranscriptReader", () => {
   it("force umgeht die Drosselung der Ordnersuche", async () => {
     const reader = new TranscriptReader(ID, root, homedir(), "darwin");
-    expect(await reader.read()).toEqual({ changed: false, blocks: [], handoff: null });
+    expect(await reader.read()).toEqual({ changed: false, blocks: [], handoff: null, startedAtMs: null });
     await schreibeAntwort();
     // Ohne force bleibt die Suche gedrosselt.
     expect((await reader.read()).blocks).toEqual([]);
     const forced = await reader.read(true);
     expect(forced.blocks).toEqual([{ lang: "sh", code: "ls -la" }]);
+  });
+
+  it("h) startedAtMs ist die Erstellzeit der Datei: Zahl > 0 oder null, nie NaN", async () => {
+    await schreibeAntwort();
+    const result = await new TranscriptReader(ID, root, homedir(), "darwin").read(true);
+    expect(result.startedAtMs === null || (Number.isFinite(result.startedAtMs) && result.startedAtMs > 0)).toBe(true);
+    // Unter macOS ist die Erstellzeit bekannt und nicht später als jetzt.
+    if (process.platform === "darwin") expect(result.startedAtMs).toBeLessThanOrEqual(Date.now() + 1);
+    if (process.platform === "darwin") expect(result.startedAtMs).toBeGreaterThan(0);
   });
 
   it("findet die Datei beim ersten Poll", async () => {
@@ -55,7 +64,7 @@ describe("TranscriptReader: Lesefehler lassen den alten Stand (Abend 29)", () =>
       expect(zweiter.blocks).toEqual([{ lang: "sh", code: "ls -la" }]);
       expect(spy).toHaveBeenCalledTimes(2);
       // Erst das gelungene Lesen setzt den Stand: jetzt ist die Datei unverändert.
-      expect(await reader.read()).toEqual({ changed: false, blocks: [], handoff: null });
+      expect(await reader.read()).toEqual({ changed: false, blocks: [], handoff: null, startedAtMs: null });
       expect(spy).toHaveBeenCalledTimes(2);
     } finally {
       spy.mockRestore();
@@ -112,11 +121,11 @@ describe("TranscriptReader: Handoff-Block (Abend 19b)", () => {
     await schreibe([antwort("m1", "```\nHandoff: da\n```")]);
     const reader = new TranscriptReader(ID, root, homedir(), "darwin");
     expect((await reader.read(false, P)).handoff).toBe("Handoff: da");
-    expect(await reader.read(false, P)).toEqual({ changed: false, blocks: [], handoff: null });
+    expect(await reader.read(false, P)).toEqual({ changed: false, blocks: [], handoff: null, startedAtMs: null });
   });
 
   it("fehlende Datei: handoff null", async () => {
-    expect(await new TranscriptReader(ID, root, homedir(), "darwin").read(true, P)).toEqual({ changed: false, blocks: [], handoff: null });
+    expect(await new TranscriptReader(ID, root, homedir(), "darwin").read(true, P)).toEqual({ changed: false, blocks: [], handoff: null, startedAtMs: null });
   });
 });
 

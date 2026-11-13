@@ -68,8 +68,8 @@ describe("Abend 37: Link-Hülle verkabelt", () => {
     const view = code(read("src/host/terminal-view.ts"));
     expect(view).toContain("pane.registerLinkProvider(");
     expect(view).not.toMatch(/term\.registerLinkProvider\(/);
-    // Ein Wächter, der keinen Anmeldeweg sähe, wäre vakuum: es gibt genau zwei Provider (Pfade, /clear).
-    expect(view.split("registerLinkProvider(").length - 1).toBe(2);
+    // Ein Wächter, der keinen Anmeldeweg sähe, wäre vakuum: es gibt genau drei Provider (Pfade, /clear, Weblinks ab Nachtrag 43h).
+    expect(view.split("registerLinkProvider(").length - 1).toBe(3);
   });
 
   it("kein anderer Ort in src/ meldet bei xterm einen Link-Provider an", () => {

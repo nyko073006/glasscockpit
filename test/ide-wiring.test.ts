@@ -94,7 +94,7 @@ describe("Shell bekommt keine Variablen, Claude nur bei laufender Brücke", () =
   });
   it("der Claude-Zweig reicht ideEnv() an buildEnv, und die Variablennamen stehen nur in ide-protocol.ts", () => {
     expect(launcher).toMatch(/const ide = await this\.ideEnvWithin\(\);/);
-    expect(launcher).toMatch(/buildEnv\(this\.options\.env\(\), env\.dirs, env\.lang, ide \?\? undefined, start\.fullscreen, platform\)/);
+    expect(launcher).toMatch(/buildEnv\(this\.options\.env\(\), env\.dirs, env\.lang, \{ \.\.\.\(ide \?\? \{\}\), \.\.\.smooth\.env \}, start\.fullscreen, platform\)/);
     const hits = srcFiles().filter((f) => /ENABLE_IDE_INTEGRATION|CLAUDE_CODE_SSE_PORT/.test(readFileSync(f, "utf8"))).map(relativeToRoot);
     expect(hits).toEqual(["src/core/ide-protocol.ts"]);
   });

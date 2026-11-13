@@ -3,7 +3,7 @@ import type { ILink } from "@xterm/xterm";
 import { describe, expect, it, vi } from "vitest";
 import { type CellRow, MAX_PATH_PROBES } from "../src/core/file-links";
 import type { Platform } from "../src/core/platform-path";
-import { FileLinkProvider, type LinkTarget, openTerminalPath } from "../src/host/file-links";
+import { FileLinkProvider, type LinkTarget, openTerminalPath, UrlLinkProvider } from "../src/host/file-links";
 import { guardLinkProvider } from "../src/host/link-guard";
 
 const rowOf = (text: string, isWrapped = false): CellRow => ({ cells: Array.from(text, (chars) => ({ chars, width: 1 })), isWrapped });
@@ -571,5 +571,44 @@ describe("openTerminalPath unter win32", () => {
     await openTerminalPath({ path: "C:\\Vault2\\a.md", line: null, col: null }, d);
     expect(d.openInVault).not.toHaveBeenCalled();
     expect(d.openInModal).toHaveBeenCalled();
+  });
+});
+
+describe("UrlLinkProvider (Nachtrag 43h)", () => {
+  const click = (o: Partial<MouseEvent> = {}) => ({ button: 0, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, preventDefault: vi.fn(), ...o }) as unknown as MouseEvent;
+  function make(text: string, opts: { enabled?: boolean; platform?: Platform } = {}) {
+    const open = vi.fn<(url: string) => void>();
+    const p = new UrlLinkProvider({ row: (y) => (y === 1 ? rowOf(text) : null), enabled: () => opts.enabled ?? true, platform: opts.platform ?? "darwin", open });
+    let links: ILink[] | undefined;
+    p.provideLinks(1, (l) => { links = l; });
+    return { p, links, open };
+  }
+  it("Cmd+Klick öffnet die URL, Bereich in Zellen (ab 1)", () => {
+    const { links, open } = make("Siehe https://a.de/x.");
+    expect(links).toHaveLength(1);
+    expect(links?.[0].range).toEqual({ start: { x: 7, y: 1 }, end: { x: 20, y: 1 } });
+    links?.[0].activate(click({ metaKey: true }), links[0].text);
+    expect(open).toHaveBeenCalledWith("https://a.de/x");
+  });
+  it("Gegentest: einfacher Klick öffnet nicht, markiert weiter Text", () => {
+    const { links, open } = make("https://a.de");
+    links?.[0].activate(click(), links[0].text);
+    expect(open).not.toHaveBeenCalled();
+  });
+  it("Windows: Ctrl+Klick öffnet, Cmd nicht", () => {
+    const { links, open } = make("https://a.de", { platform: "win32" });
+    links?.[0].activate(click({ metaKey: true }), links[0].text);
+    expect(open).not.toHaveBeenCalled();
+    links?.[0].activate(click({ ctrlKey: true }), links[0].text);
+    expect(open).toHaveBeenCalledWith("https://a.de");
+  });
+  it("Einstellung aus: keine Links", () => {
+    expect(make("https://a.de", { enabled: false }).links).toBeUndefined();
+  });
+  it("unterstrichen nur mit gedrückter Taste", () => {
+    const { p, links } = make("https://a.de");
+    expect(links?.[0].decorations).toEqual({ underline: false, pointerCursor: false });
+    p.setModifier(true);
+    expect(links?.[0].decorations).toEqual({ underline: false, pointerCursor: false }); // ohne Hover bleibt es
   });
 });

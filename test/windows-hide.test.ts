@@ -68,7 +68,7 @@ const callsByFile = (): Map<string, Call[]> =>
   new Map(hostFiles().map((f) => [relativeToRoot(f), processCalls(readFileSync(f, "utf8"))] as const).filter(([, calls]) => calls.length > 0));
 
 describe("windowsHide an jedem Prozessaufruf in src/host (Abend 42)", () => {
-  it("Positivprobe: die Suche findet genau die heute gezählten Aufrufe (Abend 43: 11 in 9 Dateien, gezählt am Stand 70b2df8)", () => {
+  it("Positivprobe: die Suche findet genau die heute gezählten Aufrufe (Abend 44: 12 in 10 Dateien, Abend 43 waren es 11 in 9 am Stand 70b2df8)", () => {
     const erwartet: Record<string, number> = {
       "src/host/git-pull.ts": 1,
       "src/host/native-download.ts": 1,
@@ -79,10 +79,11 @@ describe("windowsHide an jedem Prozessaufruf in src/host (Abend 42)", () => {
       "src/host/attention-alert.ts": 1,
       "src/host/login-shell.ts": 1,
       "src/host/native-loader.ts": 1,
+      "src/host/reminders.ts": 1,
     };
     const gefunden = new Map([...callsByFile()].map(([datei, calls]) => [datei, calls.length] as const));
     expect(Object.fromEntries([...gefunden].sort())).toEqual(Object.fromEntries(Object.entries(erwartet).sort()));
-    expect([...gefunden.values()].reduce((n, anzahl) => n + anzahl, 0)).toBe(11);
+    expect([...gefunden.values()].reduce((n, anzahl) => n + anzahl, 0)).toBe(12);
   });
   it("jede Datei in src/host mit Import aus child_process hat Fundstellen, und jede Datei mit Fundstellen importiert es", () => {
     const IMPORT = /(?:from\s*|require\s*\(\s*)["'](?:node:)?child_process["']/;

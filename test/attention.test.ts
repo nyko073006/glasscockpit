@@ -150,7 +150,7 @@ describe("Sitzungswechsel nach /clear", () => {
   });
   it("alte ID rein, Signal, neue ID in Speicher, claudeIdOf, Titel und Leser-Ziel", () => {
     const rec: SessionRecord = { id: "c1", name: "claude 4", kind: "claude", cwd: "/v", createdAt: "x", claudeSessionId: OLD };
-    const store = new SessionStore({ schemaVersion: 1, sessions: [rec], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null }, async () => {}, new FakeTimers(), 300);
+    const store = new SessionStore({ schemaVersion: 1, sessions: [rec], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null }, async () => {}, new FakeTimers(), 300);
     const parsed = parseSignal(`notify;Glasscockpit;cockpit:session:${NEW}`);
     expect(parsed?.kind).toBe("session");
     const next = claudeIdChange(claudeIdOf(store.get("c1")!), (parsed as { id: string }).id);

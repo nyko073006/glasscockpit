@@ -249,6 +249,15 @@ describe("Einstellungsseite (Abend 34)", () => {
     });
   });
 
+  it("Weich scrollen (43f): die drei Felder stehen direkt nach „Eingabezeile fest (Vollbild)“", async () => {
+    await mitPlattform("darwin", false, async (tab) => {
+      const namen = (record(tab) as Record<string, unknown>[]).filter((e) => "name" in e).map((e) => e.name);
+      const i = namen.indexOf("Eingabezeile fest (Vollbild)");
+      expect(i).toBeGreaterThan(-1);
+      expect(namen.slice(i + 1, i + 4)).toEqual(["Weich scrollen", "Scrolltempo", "Höchsttempo je Bild"]);
+    });
+  });
+
   // Abend 42, Task 2: Unter Windows heißt die Taste Ctrl. Der darwin-Snapshot oben bleibt unverändert; hier die Windows-Fassung als Literale.
   describe("Datei-Links: Taste je Plattform (Abend 42)", () => {
     const FILE_LINKS_DESC = (mod: string, save: string) =>
@@ -852,5 +861,88 @@ describe("Ausschluss-Schalter (Abend 33)", () => {
     current.claudeExclusion = true;
     def.render!(row, {});
     expect(row.disabledNow).toBe(false);
+  });
+});
+
+describe("Karte „Heute“: Einstellungen (Abend 44)", () => {
+  const REMINDERS = "Erinnerungen in „Heute“ (nur macOS)";
+  const REMINDERS_DESC = "An: Offene Erinnerungen der App „Erinnerungen“, fällig heute oder früher, stehen in der Karte „Heute“; Abhaken setzt sie in der App auf erledigt. Liest per AppleScript, macOS fragt beim ersten Mal nach der Freigabe.";
+  const dashboardNames = (tab: CockpitSettingTab): string[] => {
+    const out: string[] = [];
+    let inDashboard = false;
+    for (const e of record(tab) as Record<string, unknown>[]) {
+      if ("heading" in e) { inDashboard = e.heading === "Dashboard"; continue; }
+      if (inDashboard && "name" in e) out.push(e.name as string);
+    }
+    return out;
+  };
+
+  it("Abschnitt Dashboard: die sechs Zeilen stehen nach „Aufgabenliste“, mit den Texten des Plans", () => {
+    const names = dashboardNames(makeTab({}, "darwin"));
+    const i = names.indexOf("Aufgabenliste");
+    expect(i).toBeGreaterThan(-1);
+    expect(names.slice(i + 1, i + 7)).toEqual([
+      "Überschrift für neue Aufgaben", "Briefing-Punkte in „Heute“", REMINDERS,
+      "Listen der Erinnerungen", "Überfällige Erinnerungen zeigen", "Erinnerungen-Abstand (Minuten)",
+    ]);
+    const rows = rowsOf(record(makeTab({}, "darwin")));
+    expect(rows["Überschrift für neue Aufgaben"]).toContainEqual({ desc: "Neue Aufgaben aus der Karte „Heute“ landen als letzter Punkt unter dieser Überschrift der Aufgabenliste. Fehlt sie oder ist das Feld leer: am Dateiende." });
+    expect(rows["Briefing-Punkte in „Heute“"]).toContainEqual({ desc: "An: Die Punkte unter der Überschrift der Tagespunkte und alle Checkboxen im heutigen Briefing stehen in der Karte „Heute“ und lassen sich dort und im Briefing abhaken. Das Briefing selbst wird nie geändert." });
+    expect(rows[REMINDERS]).toContainEqual({ desc: REMINDERS_DESC });
+    expect(rows["Listen der Erinnerungen"]).toContainEqual({ desc: "Namen der Listen, mit Komma getrennt. Leer = alle." });
+    expect(rows["Überfällige Erinnerungen zeigen"]).toContainEqual({ desc: "Aus: nur Erinnerungen, die heute fällig sind." });
+    expect(rows["Erinnerungen-Abstand (Minuten)"]).toContainEqual({ desc: "So oft liest die Karte die Erinnerungen, solange ein Dashboard offen ist (0 bis 1440). 0 = nur beim Öffnen und per Knopf." });
+  });
+
+  it("focusHeading heißt „Überschrift der Tagespunkte“ mit neuer Beschreibung", () => {
+    const rows = rowsOf(record(makeTab({}, "darwin")));
+    expect(Object.keys(rows)).not.toContain("Überschrift des Tagesfokus");
+    expect(rows["Überschrift der Tagespunkte"]).toContainEqual({ desc: "Die Punkte unter dieser Überschrift im heutigen Briefing stehen in der Karte „Heute“; die ersten zwei zeigt die Kanzel. Eine Zeile." });
+  });
+
+  it("darwin: der Erinnerungen-Schalter ist frei, ohne Windows-Zusatz", () => {
+    const tab = makeTab({}, "darwin");
+    const rows = rowsOf(record(tab));
+    expect(Object.keys(rows)).toContain(REMINDERS);
+    expect(rows[REMINDERS]).toContainEqual({ desc: REMINDERS_DESC });
+    expect(rows[REMINDERS]).not.toContainEqual({ disabled: true });
+    expect(openRow(tab, REMINDERS).disabledNow).toBe(false);
+  });
+
+  it("win32: der Erinnerungen-Schalter ist gesperrt, mit Zusatz; ein gespeichertes true bleibt", () => {
+    store.updateSetting.mockImplementation(((key: keyof CockpitSettings, value: never) => { (current as unknown as Record<string, unknown>)[key] = value; return { ok: true }; }) as never);
+    const tab = makeTab({ remindersEnabled: true }, "win32");
+    const rows = rowsOf(record(tab));
+    expect(Object.keys(rows)).toContain(REMINDERS);
+    expect(rows[REMINDERS]).toContainEqual({ desc: `${REMINDERS_DESC} Unter Windows nicht verfügbar.` });
+    expect(rows[REMINDERS]).toContainEqual({ disabled: true });
+    const row = openRow(tab, REMINDERS);
+    expect(row.disabledNow).toBe(true);
+    const toggle = row.comps.find((c) => c.kind === "toggle")!;
+    expect(toggle.getValue()).toBe(true);
+    if (!row.disabledNow) toggle.changeCb!(false);
+    expect(current.remindersEnabled).toBe(true);
+  });
+
+  it("die übrigen fünf Zeilen speichern ihr Feld", () => {
+    const tab = makeTab({}, "darwin");
+    expect(dashboardNames(tab)).toEqual(expect.arrayContaining(["Briefing-Punkte in „Heute“", "Überfällige Erinnerungen zeigen", REMINDERS, "Überschrift für neue Aufgaben", "Listen der Erinnerungen", "Erinnerungen-Abstand (Minuten)"]));
+    clickToggle(tab, "Briefing-Punkte in „Heute“", false);
+    expect(store.updateSetting).toHaveBeenLastCalledWith("todayBriefing", false);
+    clickToggle(tab, "Überfällige Erinnerungen zeigen", false);
+    expect(store.updateSetting).toHaveBeenLastCalledWith("remindersOverdue", false);
+    clickToggle(tab, REMINDERS, true);
+    expect(store.updateSetting).toHaveBeenLastCalledWith("remindersEnabled", true);
+    for (const [name, key, value, stored] of [
+      ["Überschrift für neue Aufgaben", "tasksAddHeading", "Inbox", "Inbox"],
+      ["Listen der Erinnerungen", "remindersLists", "Arbeit, Privat", "Arbeit, Privat"],
+      ["Erinnerungen-Abstand (Minuten)", "remindersIntervalMin", "10", 10],
+    ] as const) {
+      const row = openRow(tab, name);
+      const text = row.comps.find((c) => c.kind === "text")!;
+      text.setValue(value);
+      text.inputEl.listeners.change!();
+      expect(store.updateSetting, name).toHaveBeenLastCalledWith(key, stored);
+    }
   });
 });

@@ -75,11 +75,34 @@ export function barItems(blocks: readonly CodeBlock[], handoff: string | null): 
   return items;
 }
 
+/** Block der laufenden Claude-ID samt Sitzungsstart (Erstellzeit des Transkripts, null unbekannt). */
+export interface CurrentHandoff { claudeId: string; block: string | null; startedAtMs: number | null }
+
 /**
  * Letzter Handoff-Block je Cockpit-Sitzung, im Speicher. Der Schlüssel ist die Cockpit-id, nicht die Claude-ID: Ein
  * Sitzungswechsel (/clear, /resume, /branch) ändert nur die Claude-ID, der Knopf soll stehen bleiben.
  */
 export class HandoffKeeper {
+  private readonly currents = new Map<string, CurrentHandoff>();
+
+  /**
+   * Block der laufenden Claude-ID (für die Übergabe-Lampe). Neue ID: nur was dieses Transkript selbst hergibt, nie
+   * der Block des Vorgängers. Gleiche ID: ein neuer Block ersetzt, null lässt Block und Start stehen.
+   */
+  keepCurrent(sessionId: string, claudeId: string, found: string | null, startedAtMs: number | null): CurrentHandoff {
+    const alt = this.currents.get(sessionId);
+    const neu: CurrentHandoff = alt !== undefined && alt.claudeId === claudeId
+      ? { claudeId, block: found ?? alt.block, startedAtMs: startedAtMs ?? alt.startedAtMs }
+      : { claudeId, block: found, startedAtMs };
+    this.currents.set(sessionId, neu);
+    return neu;
+  }
+
+  /** Der zuletzt gemerkte Stand der laufenden Claude-ID; null vor dem ersten keepCurrent. */
+  current(sessionId: string): CurrentHandoff | null {
+    return this.currents.get(sessionId) ?? null;
+  }
+
   private readonly blocks = new Map<string, string>();
 
   /** Der gemerkte Block; null, wenn es noch nie einen gab. */

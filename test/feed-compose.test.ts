@@ -10,7 +10,7 @@ const ID_B = "11111111-2222-4333-8444-555555555555";
 const file = (id: string, extra: Partial<SessionFile> = {}): SessionFile => ({ sessionId: id, contextTokens: 80_000, usedPercentage: 40, model: "Opus", writtenAt: 1_000, ...extra });
 
 const basis = (over: Partial<FeedParts> = {}): FeedParts => ({
-  handoffs: [], sessions: [], active: null, sessionFiles: new Map(), tokens: null, focus: [], vault: null, repos: null, day: null,
+  handoffs: [], handoffCheck: null, sessions: [], active: null, sessionFiles: new Map(), tokens: null, focus: [], vault: null, repos: null, day: null,
   radarLamps: new Map(), settings: { radars: [], projectsRoot: "~/p", briefingsDir: "B", inboxDir: "I", indexFile: "x.md", dailyDir: "D", nextEffort: "aus", telegramOnDone: false, telegramOnQuestion: false, alertSound: false, alertBanner: false },
   ...over,
 });
@@ -131,7 +131,7 @@ describe("sessionFilesToDelete: älter als 24 h", () => {
 
 describe("Kippschalter über den Store (Abend 29): wie toggleTelegram und toggleSound in main.ts", () => {
   const storeWith = (over: Partial<CockpitSettings>) => new SessionStore(
-    { schemaVersion: 1, sessions: [], settings: { ...DEFAULT_SETTINGS, ...over }, recentSkills: [], openAtUnload: [], dashboardAtUnload: null },
+    { schemaVersion: 1, sessions: [], settings: { ...DEFAULT_SETTINGS, ...over }, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null },
     async () => {}, new FakeTimers(), 300,
   );
   it("Telegram aus einem Mischzustand: ein Event, darin beide Felder schon aus", () => {

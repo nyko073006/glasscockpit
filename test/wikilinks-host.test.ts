@@ -1,6 +1,9 @@
 import { Window } from "happy-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { Observable } from "../src/core/observable";
 import { DEFAULT_SETTINGS, type CockpitSettings } from "../src/core/settings";
+import type { TodayView } from "../src/core/today";
+import type { RemindersController } from "../src/host/reminders";
 import type { DashboardDeps } from "../src/host/dashboard-view";
 import type { TasksCardDeps } from "../src/host/tasks-card";
 
@@ -32,6 +35,10 @@ const { TFile, MarkdownRenderer, notices, mocks } = vi.hoisted(() => {
     constructor(leaf: { app: unknown }) {
       this.app = leaf.app;
     }
+    getState(): Record<string, unknown> {
+      return {};
+    }
+    async setState(): Promise<void> {}
     addChild<T>(child: T): T {
       return child;
     }
@@ -71,8 +78,12 @@ beforeAll(() => {
   (globalThis as Record<string, unknown>).createDiv = (info?: Info) => baue("div", info);
 });
 
+/** Zeitstempel je Klick eine Sekunde weiter: Die Karte „Heute“ verwirft Zeilenklicks binnen 350 ms (Fix-Runde 2 zu Abend 44). */
+let uhr = 1_000_000;
 const click = (target: Element): MouseEvent => {
   const ev = new win.MouseEvent("click", { bubbles: true, cancelable: true }) as unknown as MouseEvent;
+  uhr += 1000;
+  Object.defineProperty(ev, "timeStamp", { value: uhr });
   target.dispatchEvent(ev);
   return ev;
 };
@@ -85,6 +96,24 @@ const mittelklick = (target: Element, button = 1): MouseEvent => {
 /** Lässt async-Pfade (toggle, openLinkText) durchlaufen, bevor "nicht passiert" geprüft wird. */
 const flush = () => new Promise<void>((r) => setTimeout(r, 0));
 const all = (root: ParentNode, sel: string): HTMLElement[] => [...root.querySelectorAll<HTMLElement>(sel)];
+
+/** Abhängigkeiten der Karte „Heute“ (Abend 44) ohne Briefing und Erinnerungen; „Erledigt“ aufgeklappt, damit erledigte Aufgaben sichtbar sind. */
+function kartenDeps(settings: CockpitSettings): TasksCardDeps {
+  const reminders = { state: new Observable({ kind: "off" }), isBusy: () => false, setCompleted: vi.fn(), refresh: vi.fn() } as unknown as RemindersController;
+  return {
+    settings: () => settings,
+    onSettingsChange: () => () => {},
+    now: () => new Date(2026, 10, 11, 9, 0),
+    briefingDone: () => [],
+    setBriefingDone: vi.fn(),
+    remindersDone: () => [],
+    setReminderDone: vi.fn(),
+    onTodayChange: () => () => {},
+    reminders,
+    doneOpen: () => true,
+    setDoneOpen: vi.fn(),
+  };
+}
 
 describe("Aufgabenkarte: Wikilinks klickbar", () => {
   const FILE = "Listen/Aufgaben.md";
@@ -125,8 +154,7 @@ describe("Aufgabenkarte: Wikilinks klickbar", () => {
     };
     const owner = { app, containerEl: { win }, registerEvent: vi.fn(), register: vi.fn() };
     const settings: CockpitSettings = { ...DEFAULT_SETTINGS, tasksFile: FILE };
-    const deps: TasksCardDeps = { settings: () => settings, onSettingsChange: () => () => {} };
-    new TasksCard(owner as never, el, deps).start();
+    new TasksCard(owner as never, el, kartenDeps(settings)).start();
     await vi.waitFor(() => expect(all(el, ".cockpit-task")).toHaveLength(2));
   }
   beforeEach(aufbau);
@@ -236,8 +264,7 @@ describe("Aufgabenkarte: Zustand beim Umschalten (Abend 29)", () => {
     };
     const owner = { app, containerEl: { win }, registerEvent: vi.fn(), register: vi.fn() };
     const settings: CockpitSettings = { ...DEFAULT_SETTINGS, tasksFile: FILE };
-    const deps: TasksCardDeps = { settings: () => settings, onSettingsChange: () => () => {} };
-    new TasksCard(owner as never, el, deps).start();
+    new TasksCard(owner as never, el, kartenDeps(settings)).start();
     await vi.waitFor(() => expect(all(el, ".cockpit-task")).toHaveLength(2));
   });
 
@@ -383,5 +410,96 @@ describe("Briefing: Wikilinks klickbar", () => {
     expect(intern.expanded).toBe(false);
     expect(requestSaveLayout).toHaveBeenCalledTimes(1);
     expect(openLinkText).not.toHaveBeenCalled();
+  });
+});
+
+describe("Dashboard: Karte „Heute“ im View-State und im Instrument (Abend 44)", () => {
+  const today: TodayView = {
+    open: [{ kind: "source", text: "Briefing" }, { kind: "briefing", key: "a", text: "Punkt [[Ziel|Alias]]", done: false, locked: false }],
+    done: [{ kind: "task", line: 3, text: "Fertig", done: true, depth: 0 }, { kind: "task", line: 4, text: "Auch fertig", done: true, depth: 0 }],
+    doneCount: 2,
+    total: 3,
+    openTexts: ["Punkt [[Ziel|Alias]]"],
+    tasksMissing: true,
+  };
+  let view: InstanceType<typeof DashboardView>;
+  let requestSaveLayout: ReturnType<typeof vi.fn>;
+  let intern: { tasks: unknown; opened: boolean; cockpitInputs(): { tasks: unknown } };
+
+  beforeEach(() => {
+    requestSaveLayout = vi.fn();
+    const settings: CockpitSettings = { ...DEFAULT_SETTINGS };
+    const deps = {
+      settings: () => settings,
+      pull: { state: { snapshot: () => ({ status: "ok", at: null, error: null }) } },
+    } as unknown as DashboardDeps;
+    view = new DashboardView({ app: { workspace: { requestSaveLayout } } } as never, deps);
+    intern = view as unknown as typeof intern;
+  });
+
+  it("cockpitInputs bildet TasksInput aus dem Stand der Karte: offene Texte, Gesamtzahl, fehlende Liste", () => {
+    intern.tasks = { data: new Observable({ kind: "ok", today }) };
+    expect(intern.cockpitInputs().tasks).toEqual({ open: ["Punkt [[Ziel|Alias]]"], total: 3, tasksMissing: true });
+    intern.tasks = { data: new Observable(null) };
+    expect(intern.cockpitInputs().tasks).toBeNull();
+  });
+
+  it("doneOpen steht im View-State und kommt aus setState zurück", async () => {
+    expect(view.getState()).toMatchObject({ doneOpen: false });
+    await view.setState({ doneOpen: true }, {} as never);
+    expect(view.getState()).toMatchObject({ doneOpen: true });
+    await view.setState({ doneOpen: "ja" }, {} as never);
+    expect(view.getState()).toMatchObject({ doneOpen: false });
+  });
+
+  it("setState({ doneOpen: true }) nach dem ersten Zeichnen klappt „Erledigt“ der Karte sofort auf", async () => {
+    const FILE = "Listen/Aufgaben.md";
+    const file = new TFile(FILE);
+    const data = "# Aufgaben\n\n- [ ] Erste\n- [x] Zweite\n";
+    const app = {
+      vault: { getFileByPath: (p: string) => (p === FILE ? file : null), cachedRead: async () => data, process: vi.fn(), on: () => ({}) },
+      metadataCache: {
+        getFileCache: () => ({ headings: [], listItems: [2, 3].map((line) => ({ position: { start: { line } }, task: data.split("\n")[line][3], parent: -1 })) }),
+        on: () => ({}),
+      },
+      workspace: { openLinkText: vi.fn() },
+    };
+    const el = doc.createElement("div");
+    const owner = { app, containerEl: { win }, registerEvent: vi.fn(), register: vi.fn() };
+    const card = new TasksCard(owner as never, el, { ...kartenDeps({ ...DEFAULT_SETTINGS, tasksFile: FILE }), doneOpen: () => (view as unknown as { doneOpen: boolean }).doneOpen });
+    card.start();
+    intern.tasks = card;
+    await vi.waitFor(() => expect(el.querySelector(".cockpit-today-done-toggle")?.textContent).toBe("Erledigt (1)"));
+    expect(all(el, ".cockpit-today-done .cockpit-task")).toHaveLength(0);
+    await view.setState({ doneOpen: true }, {} as never);
+    expect(all(el, ".cockpit-today-done .cockpit-task")).toHaveLength(1);
+  });
+});
+
+describe("Dashboard: Öffnen und Schließen beim Erinnerungen-Controller paarig (Fix-Runde 1)", () => {
+  let view: InstanceType<typeof DashboardView>;
+  let reminders: { dashboardOpened: ReturnType<typeof vi.fn>; dashboardClosed: ReturnType<typeof vi.fn> };
+  let intern: { remindersCounted: boolean; tasks: unknown };
+
+  beforeEach(() => {
+    reminders = { dashboardOpened: vi.fn(), dashboardClosed: vi.fn() };
+    const deps = { settings: () => DEFAULT_SETTINGS, pull: { dashboardClosed: vi.fn() }, reminders } as unknown as DashboardDeps;
+    view = new DashboardView({ app: { workspace: {} } } as never, deps);
+    intern = view as unknown as typeof intern;
+  });
+
+  it("nicht gezählt (onOpen scheiterte davor): onClose meldet kein Schließen", async () => {
+    await view.onClose();
+    expect(reminders.dashboardClosed).not.toHaveBeenCalled();
+  });
+
+  it("gezählt: Schließen auch, wenn das Aufräumen wirft, und nur einmal", async () => {
+    intern.remindersCounted = true;
+    intern.tasks = { stop: () => { throw new Error("kaputt"); } };
+    await expect(view.onClose()).rejects.toThrow("kaputt");
+    expect(reminders.dashboardClosed).toHaveBeenCalledTimes(1);
+    intern.tasks = null;
+    await view.onClose();
+    expect(reminders.dashboardClosed).toHaveBeenCalledTimes(1);
   });
 });

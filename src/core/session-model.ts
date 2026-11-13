@@ -1,4 +1,4 @@
-import { RECENT_SKILLS_MAX, SESSION_NAME_MAX } from "./constants";
+import { RECENT_SKILLS_MAX, SESSION_NAME_MAX, TODAY_DONE_MAX } from "./constants";
 import { DEFAULT_SETTINGS, parseSettings, type CockpitSettings } from "./settings";
 
 export type SessionKind = "claude" | "agent" | "shell";
@@ -28,10 +28,20 @@ export type DashboardMemo = { area: DashboardArea } | null;
  * openAtUnload (Abend 19c): Sitzungs-ids mit offenem Terminal-Tab beim letzten Entladen des Plugins, nach dem Laden wieder leer.
  * dashboardAtUnload (Abend 19e): dasselbe für die Cockpit-Ansicht, mit ihrem Bereich.
  */
-export interface CockpitData { schemaVersion: 1; sessions: SessionRecord[]; settings: CockpitSettings; recentSkills: string[]; openAtUnload: string[]; dashboardAtUnload: DashboardMemo }
+/** Abend 44, Karte „Heute“: abgehakte Briefing-Punkte eines Tages (`date` lokal JJJJ-MM-TT, `keys` die Schlüssel der Punkte). */
+export interface BriefingDone { date: string; keys: string[] }
+/** Eine in der Karte abgehakte Erinnerung: Kennung der App „Erinnerungen“ und ihr Name. */
+export interface ReminderDone { id: string; name: string }
+/** Abend 44: abgehakte Erinnerungen eines Tages (`date` lokal JJJJ-MM-TT). */
+export interface RemindersDone { date: string; items: ReminderDone[] }
+export interface CockpitData {
+  schemaVersion: 1; sessions: SessionRecord[]; settings: CockpitSettings; recentSkills: string[]; openAtUnload: string[]; dashboardAtUnload: DashboardMemo;
+  /** Erledigt-Stand der Karte „Heute“ (Abend 44); null = nichts gespeichert. */
+  briefingDone: BriefingDone | null; remindersDone: RemindersDone | null;
+}
 
 export function emptyData(): CockpitData {
-  return { schemaVersion: 1, sessions: [], settings: { ...DEFAULT_SETTINGS }, recentSkills: [], openAtUnload: [], dashboardAtUnload: null };
+  return { schemaVersion: 1, sessions: [], settings: { ...DEFAULT_SETTINGS }, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null };
 }
 
 export interface ParseResult { data: CockpitData; reason: string | null }
@@ -73,6 +83,32 @@ function parseDashboardMemo(v: unknown): DashboardMemo {
   return typeof area === "string" && AREAS.includes(area) ? { area: area as DashboardArea } : null;
 }
 
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const asObject = (v: unknown): Record<string, unknown> | null =>
+  typeof v === "object" && v !== null && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+
+/** Abgehakte Briefing-Punkte (Abend 44): kein Objekt, kein Tag in `date` oder `keys` kein Array ergibt null; Nicht-Strings, Leeres und Dopplungen fallen raus, höchstens TODAY_DONE_MAX. Nie ein Grund für die Kaputt-Notice. */
+function parseBriefingDone(v: unknown): BriefingDone | null {
+  const o = asObject(v);
+  if (o === null || typeof o.date !== "string" || !DAY.test(o.date) || !Array.isArray(o.keys)) return null;
+  const keys: string[] = [];
+  for (const k of o.keys) if (isText(k) && !keys.includes(k)) keys.push(k);
+  return { date: o.date, keys: keys.slice(0, TODAY_DONE_MAX) };
+}
+
+/** Abgehakte Erinnerungen (Abend 44): wie parseBriefingDone; ein Eintrag braucht eine nicht leere `id` und einen Text als `name`, Dopplungen nach `id` fallen raus. */
+function parseRemindersDone(v: unknown): RemindersDone | null {
+  const o = asObject(v);
+  if (o === null || typeof o.date !== "string" || !DAY.test(o.date) || !Array.isArray(o.items)) return null;
+  const items: ReminderDone[] = [];
+  for (const e of o.items) {
+    const r = asObject(e);
+    if (r === null || !isText(r.id) || typeof r.name !== "string" || items.some((i) => i.id === r.id)) continue;
+    items.push({ id: r.id, name: r.name });
+  }
+  return { date: o.date, items: items.slice(0, TODAY_DONE_MAX) };
+}
+
 /** Liest data.json. Nie werfen: kaputt heißt Vorgaben plus Grund. */
 export function parseData(raw: unknown): ParseResult {
   if (raw === undefined || raw === null) return { data: emptyData(), reason: null };
@@ -102,7 +138,7 @@ export function parseData(raw: unknown): ParseResult {
   const { settings, invalid } = parseSettings(obj.settings);
   if (invalid.length > 0) reasons.push(`Einstellungen auf Vorgabe zurückgesetzt: ${invalid.join(", ")}`);
   return {
-    data: { schemaVersion: 1, sessions, settings, recentSkills: parseRecents(obj.recentSkills), openAtUnload: parseIdList(obj.openAtUnload), dashboardAtUnload: parseDashboardMemo(obj.dashboardAtUnload) },
+    data: { schemaVersion: 1, sessions, settings, recentSkills: parseRecents(obj.recentSkills), openAtUnload: parseIdList(obj.openAtUnload), dashboardAtUnload: parseDashboardMemo(obj.dashboardAtUnload), briefingDone: parseBriefingDone(obj.briefingDone), remindersDone: parseRemindersDone(obj.remindersDone) },
     reason: reasons.length > 0 ? reasons.join("; ") : null,
   };
 }

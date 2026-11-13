@@ -40,3 +40,16 @@ describe("ModeTracker", () => {
     expect(after("\x1b[?10", "x\x1b[?1004h")).toBe("\x1b[?1004h");
   });
 });
+
+describe("ModeTracker.isOn", () => {
+  it("meldet den Stand eines Modus, auch über Portionen hinweg", () => {
+    const t = new ModeTracker();
+    expect(t.isOn(1006)).toBe(false);
+    t.feed("\x1b[?1000;1006h");
+    expect(t.isOn(1006)).toBe(true);
+    t.feed("\x1b[?10");
+    t.feed("06l");
+    expect(t.isOn(1006)).toBe(false);
+    expect(t.isOn(1000)).toBe(true);
+  });
+});

@@ -6,6 +6,7 @@ import type { CockpitFeed, CockpitFeedActions } from "../src/core/cockpit-feed";
 import { FIELDS, IMAGE_H, IMAGE_W, type CardId, PANELS, VIEW_CROP, polygonCss } from "../src/core/cockpit-panels";
 import { DEFAULT_SETTINGS } from "../src/core/settings";
 import type { RadarInput } from "../src/core/session-radar";
+import type { HandoffCheck } from "../src/core/handoff-check";
 import { type CockpitLayout, createCockpitLayout } from "../src/host/cockpit-layout";
 import { installObsidianDom } from "./helpers/obsidian-dom";
 
@@ -36,6 +37,7 @@ const feedOf = (o: Partial<CockpitFeed> = {}): CockpitFeed => ({
   telegramOn: true,
   soundOn: true,
   handoffs: [],
+  handoffCheck: null,
   day: { loc: 1234, commits: 7, repos: [{ name: "alpha", loc: 1200, commits: 5 }, { name: "beta", loc: 34, commits: 2 }] },
   ...o,
 });
@@ -78,7 +80,7 @@ beforeEach(() => {
 afterEach(() => layout.destroy());
 
 describe("Flächen", () => {
-  it("alle dreizehn stehen an ihrer Stelle, mit clip-path aus der Geometrie am klickbaren Element", () => {
+  it("alle vierzehn stehen an ihrer Stelle, mit clip-path aus der Geometrie am klickbaren Element", () => {
     for (const f of FIELDS) {
       const outer = q(`.cockpit-field-${f.id}`);
       expect([outer.style.left, outer.style.top, outer.style.width, outer.style.height]).toEqual([`${f.rect.x}%`, `${f.rect.y}%`, `${f.rect.w}%`, `${f.rect.h}%`]);
@@ -494,7 +496,7 @@ describe("Tooltips", () => {
     expect(all("[title]").length).toBeGreaterThan(4); // die Prüfung hat etwas zu prüfen (Radarzeilen und Radarlampen; der Effort-Schirm nutzt seit 19b aria-label)
   });
   it("die Felder mit Zahlen und die Schalter nutzen Obsidians Tooltip (aria-label), der native title erscheint in Obsidian nicht verlässlich", () => {
-    for (const id of ["gaugeLeft", "gaugeRight", "telegram", "sound", "loc", "commits"]) {
+    for (const id of ["gaugeLeft", "gaugeRight", "telegram", "sound", "loc", "commits", "handoff"]) {
       expect([id, clipOf(id).getAttribute("title"), (clipOf(id).getAttribute("aria-label") ?? "").length > 0]).toEqual([id, null, true]);
     }
     expect(clipOf("telegram").getAttribute("aria-label")).toMatch(/^Telegram-Meldungen (an|aus)$/);
@@ -563,6 +565,46 @@ describe("Zoom", () => {
     click(clipOf("effort"));
     click(clipOf("focus"));
     expect(layout.zoomedField()).toBeNull();
+  });
+});
+
+describe("Übergabe-Lampe (43j)", () => {
+  const rot = (lines = ["Handoff: ok", "Daily Note: fehlt", "Git: ungespeicherte Änderungen"]): HandoffCheck => ({
+    tone: "red", gaps: ["Daily Note: fehlt", "Git: ungespeicherte Änderungen"], lines, tooltip: "Übergabe: Daily Note: fehlt; Git: ungespeicherte Änderungen",
+  });
+  it("ohne Sitzung grau, Beschriftung ÜBERGABE, Lampe vorhanden", () => {
+    expect(q(".cockpit-field-handoff").classList.contains("cockpit-tone-gray")).toBe(true);
+    expect(q(".cockpit-handoff-label", clipOf("handoff")).textContent).toBe("ÜBERGABE");
+    expect(all(".cockpit-handoff-lamp", clipOf("handoff"))).toHaveLength(1);
+  });
+  it("rote Lampe: Ton-Klasse rot, aria-label (ohne title) mit den Lücken", () => {
+    feed(feedOf({ handoffCheck: rot() }));
+    expect(q(".cockpit-field-handoff").classList.contains("cockpit-tone-red")).toBe(true);
+    expect(clipOf("handoff").getAttribute("aria-label")).toBe(rot().tooltip);
+    expect(clipOf("handoff").getAttribute("title")).toBeNull();
+    expect(clipOf("handoff").getAttribute("aria-label")).toContain("Daily Note: fehlt");
+  });
+  it("Klick, Enter und Leertaste öffnen den Zoom „Übergabe“ mit den drei Zeilen", () => {
+    feed(feedOf({ handoffCheck: rot() }));
+    click(clipOf("handoff"));
+    expect(layout.zoomedField()).toBe("handoff");
+    expect(all(".cockpit-zoom .cockpit-handoff-line").map((l) => l.textContent)).toEqual(["Handoff: ok", "Daily Note: fehlt", "Git: ungespeicherte Änderungen"]);
+    expect(q(".cockpit-zoom-title, .cockpit-zoom h2, .cockpit-zoom-head", document.body).textContent).toContain("Übergabe");
+    click(q(".cockpit-zoom-close"));
+    clipOf("handoff").dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    expect(layout.zoomedField()).toBe("handoff");
+  });
+  it("neuer Feed mit geänderter Zeile füllt den offenen Zoom neu", () => {
+    feed(feedOf({ handoffCheck: rot() }));
+    click(clipOf("handoff"));
+    feed(feedOf({ handoffCheck: rot(["Handoff: ok", "Daily Note: ok", "Git: ok"]) }));
+    expect(all(".cockpit-zoom .cockpit-handoff-line").map((l) => l.textContent)).toEqual(["Handoff: ok", "Daily Note: ok", "Git: ok"]);
+  });
+  it("gleicher Stand zeichnet nicht neu (Lampe bleibt dasselbe Element)", () => {
+    feed(feedOf({ handoffCheck: rot() }));
+    const lamp = q(".cockpit-handoff-lamp", clipOf("handoff"));
+    feed(feedOf({ handoffCheck: rot() }));
+    expect(q(".cockpit-handoff-lamp", clipOf("handoff"))).toBe(lamp);
   });
 });
 

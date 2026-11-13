@@ -7,6 +7,7 @@ import type { LaunchInfo } from "../core/diagnose";
 import type { EffortStep } from "../core/effort";
 import { fixedPaths, mergePath, windowsFixedPaths } from "../core/login-path";
 import { type Platform, pathKey, splitPathList, system32Path } from "../core/platform-path";
+import { smoothScrollStart } from "../core/smooth-wheel";
 import { hookSettings, windowsSettings } from "../core/attention";
 import { CMD_LINE_LIMIT, cmdShimCommandLine } from "../core/cmd-shim";
 import type { SessionMeta } from "../core/session-manager";
@@ -41,6 +42,8 @@ export interface StartContext {
   prompt?: string;
   /** Abend 33: Ausschluss für diese Sitzung (Regeln für --settings, graue Zeile); zum Startzeitpunkt berechnet, Shell-Tabs ignorieren ihn. */
   exclusion?: { settings: Record<string, unknown>; notice: string | null };
+  /** Weich scrollen (Einstellung smoothScroll, Nachtrag 43f): Startzusätze für Claude; fehlt es, gilt aus. Shell-Tabs ignorieren es. */
+  smoothScroll?: boolean;
 }
 
 /** Variablen der IDE-Brücke für Claude-Sitzungen; null, wenn sie aus ist oder nicht läuft. */
@@ -143,19 +146,21 @@ export class Launcher {
       startKind: start.startKind,
       newId: () => crypto.randomUUID(),
     });
+    // Einmal berechnen, dann in --settings (beide Zweige) und in die Umgebung mischen.
+    const smooth = smoothScrollStart(start.smoothScroll === true);
     // Unter Windows steht die Einstellung in einer Datei je Sitzung (--settings <datei>), auf dem Mac als JSON-Argument.
     let settings: string;
     if (platform === "win32") {
       let path: string | null;
       try {
-        path = this.options.settingsFiles?.write(decision.claudeId, windowsSettings(start.exclusion?.settings ?? {}, system32Path(this.options.systemRoot, "WindowsPowerShell", "v1.0", "powershell.exe"))) ?? null;
+        path = this.options.settingsFiles?.write(decision.claudeId, windowsSettings({ ...start.exclusion?.settings, ...smooth.settings }, system32Path(this.options.systemRoot, "WindowsPowerShell", "v1.0", "powershell.exe"))) ?? null;
       } catch (fehler) {
         return { ok: false, message: `Settings-Datei nicht geschrieben: ${fehler instanceof Error ? fehler.message : String(fehler)}` };
       }
       if (path === null) return { ok: false, message: NO_VAULT_DIR };
       settings = path;
     } else {
-      settings = hookSettings(start.exclusion?.settings);
+      settings = hookSettings({ ...start.exclusion?.settings, ...smooth.settings });
     }
     const args = buildArgs({
       sessionId: decision.claudeId,
@@ -185,9 +190,9 @@ export class Launcher {
         file,
         args: spawnArgs,
         cwd: record.cwd,
-        env: buildEnv(this.options.env(), env.dirs, env.lang, ide ?? undefined, start.fullscreen, platform),
+        env: buildEnv(this.options.env(), env.dirs, env.lang, { ...(ide ?? {}), ...smooth.env }, start.fullscreen, platform),
       },
-      meta: { kind: "claude", title: tabTitle(record.name, decision.claudeId) },
+      meta: { kind: "claude", title: tabTitle(record.name, decision.claudeId), ...(start.smoothScroll === true ? { smoothScroll: true } : {}) },
       notice: [decision.notice, start.exclusion?.notice].filter((n): n is string => !!n).join("\n") || null,
       adoptClaudeId: decision.adoptId,
       release: () => undefined,

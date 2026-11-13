@@ -90,6 +90,19 @@ export class CockpitSettingTab extends PluginSettingTab {
           `An: Claude läuft im Vollbild-Modus, die Eingabezeile bleibt unten stehen und das Mausrad scrollt den Verlauf in Claude. Ziehen markiert in Claude und kopiert beim Loslassen, Shift+Ziehen markiert im Terminal (dann ${mod}+C). Suchen im Verlauf mit Ctrl+O und /. Der Scrollback des Terminals bleibt leer. Aus: klassisch, der Verlauf liegt im Scrollback. Wirkt für neu gestartete Sitzungen.`,
         ),
         this.toggleField(
+          "smoothScroll", "Weich scrollen",
+          "An: Im Vollbild (Eingabezeile fest) nimmt das Cockpit Trackpad und Mausrad selbst an. Der Verlauf folgt dem Finger Zeile für Zeile, eine einzelne Raststufe bewegt eine Zeile, schnelles Scrollen wird gebremst. Claudes eigene Beschleunigung ist in diesen Sitzungen aus. Einschalten wirkt für neu gestartete Sitzungen. Ausschalten gibt das Scrollen sofort an das Terminal zurück, Claudes eigene Beschleunigung kommt erst nach einem Neustart der Sitzung wieder. Aus: wie bisher.",
+        ),
+        this.numberField(
+          "scrollSpeed", "Scrolltempo",
+          "Zeilen je Zellhöhe Fingerweg (0.1 bis 5). 2 scrollt doppelt so weit. Wirkt sofort.",
+          "0.1",
+        ),
+        this.numberField(
+          "scrollMaxPerFrame", "Höchsttempo je Bild",
+          "Höchstens so viele Zeilen je Bildwechsel (1 bis 20); was ein schneller Wisch darüber hinaus bringt, verfällt. Wirkt sofort.",
+        ),
+        this.toggleField(
           "skipPermissions", "Rechteabfragen überspringen",
           "Achtung: An, und Claude führt Befehle ohne Rückfrage aus (Start mit --dangerously-skip-permissions). Aus: Claude fragt vor Änderungen und Befehlen nach. Gilt für neue Sitzungen; laufende Sitzungen bleiben unverändert.",
         ),
@@ -154,6 +167,14 @@ export class CockpitSettingTab extends PluginSettingTab {
         this.toggleField(
           "clearLink", "/clear per Klick einfügen",
           "Ein Klick auf /clear im Terminal einer Claude-Sitzung schreibt es in die Eingabezeile. Enter drückst du selbst.",
+        ),
+        this.toggleField(
+          "checkBeforeClear", "Vor /clear prüfen",
+          "Klick auf /clear fragt nach, wenn Handoff, Daily Note oder Git der Sitzung noch offen sind (Lampe Übergabe rot).",
+        ),
+        this.toggleField(
+          "webLinks", `Weblinks per ${mod}+Klick öffnen`,
+          `An: Adressen mit http:// oder https:// im Terminal öffnen per ${mod}+Klick im Standardbrowser. Ein einfacher Klick markiert weiter Text. Wirkt sofort.`,
         ),
         this.numberField(
           "fileViewerMaxMb", "Datei-Viewer: Höchstgröße (MB)",
@@ -248,6 +269,20 @@ export class CockpitSettingTab extends PluginSettingTab {
         this.numberField("pullIntervalMin", "Pull-Abstand (Minuten)", "git pull im Briefing-Ordner, solange ein Dashboard offen ist. 0 = kein automatischer Pull."),
         this.textField("continuePrompt", "Text für „Hiermit weiterarbeiten“", "Wird an die aktive Claude-Sitzung gesendet. {ordner} wird durch den Briefing-Ordner ersetzt."),
         this.textField("tasksFile", "Aufgabenliste", "Markdown-Datei im Vault mit den Aufgaben (- [ ] ...), endet auf .md. Wird nie automatisch angelegt."),
+        // Karte „Heute“ (Abend 44).
+        this.textField("tasksAddHeading", "Überschrift für neue Aufgaben", "Neue Aufgaben aus der Karte „Heute“ landen als letzter Punkt unter dieser Überschrift der Aufgabenliste. Fehlt sie oder ist das Feld leer: am Dateiende."),
+        this.toggleField("todayBriefing", "Briefing-Punkte in „Heute“", "An: Die Punkte unter der Überschrift der Tagespunkte und alle Checkboxen im heutigen Briefing stehen in der Karte „Heute“ und lassen sich dort und im Briefing abhaken. Das Briefing selbst wird nie geändert."),
+        this.toggleField(
+          "remindersEnabled", "Erinnerungen in „Heute“ (nur macOS)",
+          "An: Offene Erinnerungen der App „Erinnerungen“, fällig heute oder früher, stehen in der Karte „Heute“; Abhaken setzt sie in der App auf erledigt. Liest per AppleScript, macOS fragt beim ersten Mal nach der Freigabe."
+            + (win ? " Unter Windows nicht verfügbar." : ""),
+          undefined,
+          // Unter Windows gesperrt, der gespeicherte Wert bleibt (ein Vault kann zwischen Mac und Windows wandern).
+          win ? () => true : undefined,
+        ),
+        this.textField("remindersLists", "Listen der Erinnerungen", "Namen der Listen, mit Komma getrennt. Leer = alle."),
+        this.toggleField("remindersOverdue", "Überfällige Erinnerungen zeigen", "Aus: nur Erinnerungen, die heute fällig sind."),
+        this.numberField("remindersIntervalMin", "Erinnerungen-Abstand (Minuten)", "So oft liest die Karte die Erinnerungen, solange ein Dashboard offen ist (0 bis 1440). 0 = nur beim Öffnen und per Knopf."),
         this.numberField("skillButtons", "Zahl der Skill-Knöpfe", "So viele Skills zeigt die Karte „Skills“ als Knöpfe (1 bis 30), zuletzt benutzte zuerst."),
         this.numberField("usagePollSec", "Usage-Abstand (Sekunden)", "So oft liest die Karte „Usage“ den Schnappschuss der Statuszeile und die heutigen Transkripte (10 bis 3600), auch bei geschlossenem Dashboard." + (win ? " Unter Windows noch ohne Statuszeile, Limits fehlen." : "")),
         this.toggleField("writeTokensFile", "Tokens für die Statuszeile schreiben",
@@ -263,7 +298,7 @@ export class CockpitSettingTab extends PluginSettingTab {
         this.numberField("clearableMinPrompts", "Handoff frühestens ab Nachrichten", "Erst ab so vielen eigenen Nachrichten in der Session (1 bis 50), damit wirklich etwas passiert ist. Gilt zusammen mit dem Kontextanteil."),
         this.numberField("tokensDayMedian", "Output-Tokens je Tag: Median", "Darunter ist das Tokens-Instrument gelb, ab hier grün (1000 bis 100000000). Muss unter dem p90 liegen."),
         this.numberField("tokensDayP90", "Output-Tokens je Tag: p90", "Hier ist der Ring voll, ab hier läuft der Regenbogen (1000 bis 100000000). Muss über dem Median liegen."),
-        this.textField("focusHeading", "Überschrift des Tagesfokus", "Die ersten zwei Punkte unter dieser Überschrift im heutigen Briefing zeigt die Kanzel. Eine Zeile."),
+        this.textField("focusHeading", "Überschrift der Tagespunkte", "Die Punkte unter dieser Überschrift im heutigen Briefing stehen in der Karte „Heute“; die ersten zwei zeigt die Kanzel. Eine Zeile."),
         this.textField("inboxDir", "Inbox-Ordner", "Ordner im Vault, dessen Notizen die Vault-Lage zählt, ohne führenden Schrägstrich. Leer = aus."),
         this.textField("hubsDir", "Projekt-Ordner (Vault)", "Ordner im Vault mit einem Unterordner je Projekt und dessen HUB-Datei. Leer = Handoffs aus."),
         this.textField("handoffsDir", "Handoff-Unterordner", "Name des Handoff-Ordners in jedem Projektordner, z. B. Handoffs. Leer = Handoffs aus."),

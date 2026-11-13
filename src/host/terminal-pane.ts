@@ -12,6 +12,7 @@ import { bufferRowOf, type CellRow, linkModifierDown } from "../core/file-links"
 import { PressGuard } from "../core/link-guard";
 import type { Platform } from "../core/platform-path";
 import { OBSIDIAN_STATUS_BAR, bottomOverlap } from "../core/status-bar";
+import { ModeTracker } from "../core/terminal-modes";
 import { type TerminalOptions, changedXtermOptions, windowsPtyOption, xtermOptions } from "../core/terminal-options";
 import { type Dimensions, usableDimensions } from "../core/terminal-size";
 import { type ReadVar, buildTheme } from "../core/xterm-theme";
@@ -19,6 +20,7 @@ import { createCssColorReader } from "./css-vars";
 import { hostPlatform } from "./host-platform";
 import { guardLinkProvider, trackPresses } from "./link-guard";
 import type { PopoutWindow } from "./popout-window";
+import { type SmoothWheelSource, WheelTakeover } from "./smooth-wheel";
 import { TerminalInput, type TerminalInputOptions } from "./terminal-input";
 
 export type ResizeCallback = (cols: number, rows: number) => void;
@@ -49,6 +51,10 @@ export class TerminalPane {
   /** Läuft gerade ein Druck, der im Terminal begann? Gate für activate jedes Links (Abend 37). */
   private readonly presses = new PressGuard();
   private readonly untrackPresses: () => void;
+  /** Eigener Stand der Terminal-Modi (1006 für die Wheel-Übernahme), gefüttert in write vor term.write. */
+  private readonly modes = new ModeTracker();
+  /** Aktive Übernahme von Trackpad und Mausrad (Nachtrag 43f); xterm hält nur einen Wheel-Handler. */
+  private wheelTakeover: WheelTakeover | null = null;
   /** Plattform dieses Rechners (hostPlatform()): bestimmt die Taste, die Datei-Links unterstreicht. */
   private readonly platform: Platform;
 
@@ -155,7 +161,32 @@ export class TerminalPane {
 
   /** onParsed kommt, sobald xterm diese Portion (und damit alles davor) geparst hat; xterm parst asynchron. */
   write(data: string, onParsed?: () => void): void {
-    if (!this.disposed) this.term.write(data, onParsed);
+    if (this.disposed) return;
+    this.modes.feed(data);
+    this.term.write(data, onParsed);
+  }
+
+  /**
+   * Weich scrollen im Vollbild (Nachtrag 43f): Trackpad und Mausrad zählt das Cockpit und schickt je Bild SGR-Meldungen an die PTY.
+   * Ein zweiter Aufruf löst den ersten ab (xterm hält nur einen Handler). Die Abmeldung wirkt nur auf die eigene Übernahme,
+   * nie auf eine spätere. Zeitgeber kommen je Aufruf vom Fenster des Containers (Pop-out).
+   */
+  attachSmoothWheel(source: SmoothWheelSource): () => void {
+    this.wheelTakeover?.dispose();
+    const takeover = new WheelTakeover({
+      term: this.term,
+      screen: () => this.host.querySelector<HTMLElement>(".xterm-screen"),
+      sgr: () => this.modes.isOn(1006),
+      source,
+      write: (data) => this.sink?.(data),
+      schedule: (cb) => this.container.win.requestAnimationFrame(cb),
+      cancel: (handle) => this.container.win.cancelAnimationFrame(handle),
+    });
+    this.wheelTakeover = takeover;
+    return () => {
+      takeover.dispose();
+      if (this.wheelTakeover === takeover) this.wheelTakeover = null;
+    };
   }
 
   /**
@@ -254,6 +285,8 @@ export class TerminalPane {
     this.input.dispose();
     this.sink = null;
     this.untrackPresses();
+    this.wheelTakeover?.dispose();
+    this.wheelTakeover = null;
     this.term.dispose();
     this.host.remove();
   }

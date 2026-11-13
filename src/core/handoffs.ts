@@ -52,25 +52,34 @@ function statusValue(raw: string): string {
   if (q) return q[1] ?? q[2];
   return v.replace(/(^|[ \t]+)#.*$/, "").trim();
 }
-const TAKEN = /^aufgenommen[ \t]*:.*?(\r?)$/;
-
-/** Setzt status: aufgenommen und aufgenommen: <day>; alle anderen Zeilen bleiben bytegleich. */
-export function markTakenUp(text: string, day: string): { ok: true; content: string } | { ok: false; reason: string } {
+/** Setzt status: <status> und das gleichnamige Datumsfeld <status>: <day> (fehlt es, direkt nach status); alle anderen Zeilen bleiben bytegleich. */
+function markStatus(text: string, status: "aufgenommen" | "verworfen", day: string): { ok: true; content: string } | { ok: false; reason: string } {
   const lines = text.split("\n");
   if (lines[0]?.replace(/\r$/, "").replace(/^\uFEFF/, "") !== "---") return { ok: false, reason: "Handoff ohne Frontmatter" };
   const end = lines.findIndex((l, i) => i > 0 && l.replace(/\r$/, "") === "---");
   if (end < 0) return { ok: false, reason: "Handoff ohne Frontmatter" };
-  let statusAt = -1; let takenAt = -1; let cr = "";
+  const field = new RegExp(`^${status}[ \\t]*:.*?(\\r?)$`);
+  let statusAt = -1; let fieldAt = -1; let cr = "";
   for (let i = 1; i < end; i++) {
     const s = STATUS.exec(lines[i]);
     if (s && statusAt < 0) { if (statusValue(s[1]) !== "offen") return { ok: false, reason: "Handoff ist nicht offen" }; statusAt = i; cr = s[2]; }
-    else if (TAKEN.test(lines[i]) && takenAt < 0) takenAt = i;
+    else if (field.test(lines[i]) && fieldAt < 0) fieldAt = i;
   }
   if (statusAt < 0) return { ok: false, reason: "Handoff ist nicht offen" };
-  lines[statusAt] = `status: aufgenommen${cr}`;
-  const taken = `aufgenommen: ${day}${cr}`;
-  if (takenAt >= 0) lines[takenAt] = taken; else lines.splice(statusAt + 1, 0, taken);
+  lines[statusAt] = `status: ${status}${cr}`;
+  const dated = `${status}: ${day}${cr}`;
+  if (fieldAt >= 0) lines[fieldAt] = dated; else lines.splice(statusAt + 1, 0, dated);
   return { ok: true, content: lines.join("\n") };
+}
+
+/** Setzt status: aufgenommen und aufgenommen: <day>; alle anderen Zeilen bleiben bytegleich. */
+export function markTakenUp(text: string, day: string): { ok: true; content: string } | { ok: false; reason: string } {
+  return markStatus(text, "aufgenommen", day);
+}
+
+/** Nachtrag 43g: Handoff im Dialog „Wo soll claude starten?“ weggemacht. status: verworfen und verworfen: <day>, sonst bytegleich. */
+export function markDismissed(text: string, day: string): { ok: true; content: string } | { ok: false; reason: string } {
+  return markStatus(text, "verworfen", day);
 }
 
 export function isoDay(d: Date): string {

@@ -4,8 +4,9 @@ import {
   DEFAULT_NOTIFY_ON_DONE, DEFAULT_NOTIFY_ON_QUESTION, DEFAULT_PROJECTS_ROOT, DEFAULT_SOUND_FILE, DEFAULT_QUIET_WHILE_AGENTS, DEFAULT_QUIET_MAX_AGE_MIN, DEFAULT_SHOW_OPEN_TASKS,
   DEFAULT_SKILL_BUTTONS, DEFAULT_TASKS_FILE, DEFAULT_RESUME_CONVERSATIONS, DEFAULT_REOPEN_AFTER_DISABLE, DEFAULT_FONT_SIZE, DEFAULT_SCROLLBACK, DEFAULT_MIN_CONTRAST, DEFAULT_TAB_SHADOW,
   DEFAULT_TELEGRAM_CHAT_ID, DEFAULT_TELEGRAM_ENV_FILE, DEFAULT_TELEGRAM_IDLE_MIN, DEFAULT_TELEGRAM_ON_DONE, DEFAULT_TELEGRAM_ON_QUESTION,
-  DEFAULT_USAGE_POLL_SEC, DEFAULT_WRITE_TOKENS_FILE, DEFAULT_RESEARCH_SEARCHES, DEFAULT_RESEARCH_MAX_AGE_MIN, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF, DEFAULT_FILE_LINKS, DEFAULT_FILE_LINKS_CLAUDE_DIRS, DEFAULT_FILE_LINKS_SPACES, DEFAULT_CLEAR_LINK, DEFAULT_FILE_VIEWER_MAX_MB, DEFAULT_FILE_VIEWER_WIDTH_PCT, DEFAULT_FILE_VIEWER_HEIGHT_PCT, DEFAULT_FILE_VIEWER_FONT_SIZE, DEFAULT_FILE_VIEWER_AUTOCOMPLETE, DEFAULT_FILE_VIEWER_MARKDOWN, DEFAULT_FILE_VIEWER_IMAGES, DEFAULT_FILE_VIEWER_IMAGE_MAX_MB, DEFAULT_FILE_VIEWER_MD_COMMANDS, DEFAULT_FIXED_PROMPT, DEFAULT_SKIP_PERMISSIONS,
+  DEFAULT_USAGE_POLL_SEC, DEFAULT_WRITE_TOKENS_FILE, DEFAULT_RESEARCH_SEARCHES, DEFAULT_RESEARCH_MAX_AGE_MIN, DEFAULT_IDE_BRIDGE, DEFAULT_IDE_DIFF, DEFAULT_FILE_LINKS, DEFAULT_FILE_LINKS_CLAUDE_DIRS, DEFAULT_FILE_LINKS_SPACES, DEFAULT_CLEAR_LINK, DEFAULT_CHECK_BEFORE_CLEAR, DEFAULT_WEB_LINKS, DEFAULT_FILE_VIEWER_MAX_MB, DEFAULT_FILE_VIEWER_WIDTH_PCT, DEFAULT_FILE_VIEWER_HEIGHT_PCT, DEFAULT_FILE_VIEWER_FONT_SIZE, DEFAULT_FILE_VIEWER_AUTOCOMPLETE, DEFAULT_FILE_VIEWER_MARKDOWN, DEFAULT_FILE_VIEWER_IMAGES, DEFAULT_FILE_VIEWER_IMAGE_MAX_MB, DEFAULT_FILE_VIEWER_MD_COMMANDS, DEFAULT_FIXED_PROMPT, DEFAULT_SKIP_PERMISSIONS, DEFAULT_SMOOTH_SCROLL, DEFAULT_SCROLL_SPEED, DEFAULT_SCROLL_MAX_PER_FRAME,
   DEFAULT_CLAUDE_EXCLUSION, DEFAULT_CLAUDE_EXCLUSION_SANDBOX,
+  DEFAULT_TODAY_BRIEFING, DEFAULT_TASKS_ADD_HEADING, DEFAULT_REMINDERS_ENABLED, DEFAULT_REMINDERS_LISTS, DEFAULT_REMINDERS_OVERDUE, DEFAULT_REMINDERS_INTERVAL_MIN,
   DASHBOARD_LAYOUTS, DEFAULT_DASHBOARD_LAYOUT, COCKPIT_CROPS, DEFAULT_COCKPIT_CROP, NEW_SESSION_ORDERS, DEFAULT_NEW_SESSION_ORDER, DEFAULT_HIDDEN_PROJECT_DIRS,
   DEFAULT_CONTEXT_WARN, DEFAULT_CONTEXT_HANDOFF, DEFAULT_CLEARABLE_MIN_CONTEXT_PCT, DEFAULT_CLEARABLE_MIN_PROMPTS, DEFAULT_TOKENS_DAY_MEDIAN, DEFAULT_TOKENS_DAY_P90, DEFAULT_FOCUS_HEADING, DEFAULT_INBOX_DIR,
   DEFAULT_HUBS_DIR, DEFAULT_HANDOFFS_DIR, DEFAULT_HUB_SUFFIX, DEFAULT_HANDOFF_PROMPT,
@@ -26,9 +27,9 @@ export interface CockpitSettings {
   markTab: boolean; alertSound: boolean; alertBanner: boolean; soundFile: string; alertGapMs: number; bannerSeconds: number;
   briefingsDir: string; pullIntervalMin: number; continuePrompt: string;
   tasksFile: string; skillButtons: number; usagePollSec: number; writeTokensFile: boolean;
-  resumeConversations: boolean; fixedPrompt: boolean; skipPermissions: boolean; claudeExclusion: boolean; claudeExclusionSandbox: boolean; fontSize: number; scrollback: number; minimumContrast: number; tabShadow: boolean;
+  resumeConversations: boolean; fixedPrompt: boolean; smoothScroll: boolean; scrollSpeed: number; scrollMaxPerFrame: number; skipPermissions: boolean; claudeExclusion: boolean; claudeExclusionSandbox: boolean; fontSize: number; scrollback: number; minimumContrast: number; tabShadow: boolean;
   ideBridge: boolean; ideDiff: boolean; handoffPrefix: string;
-  fileLinks: boolean; fileLinksClaudeDirs: boolean; fileLinksSpaces: boolean; clearLink: boolean; fileViewerMaxMb: number; fileViewerWidthPct: number; fileViewerHeightPct: number; fileViewerFontSize: number; fileViewerAutocomplete: boolean;
+  fileLinks: boolean; fileLinksClaudeDirs: boolean; fileLinksSpaces: boolean; clearLink: boolean; checkBeforeClear: boolean; webLinks: boolean; fileViewerMaxMb: number; fileViewerWidthPct: number; fileViewerHeightPct: number; fileViewerFontSize: number; fileViewerAutocomplete: boolean;
   fileViewerImages: boolean; fileViewerImageMaxMb: number; fileViewerMarkdown: boolean; fileViewerMdText: string; fileViewerMdCode: string; fileViewerMdCommand: string; fileViewerMdHeading: string;
   fileViewerMdLink: string; fileViewerMdMarker: string; fileViewerMdFrontmatter: string; fileViewerMdCommands: string;
   telegramOnDone: boolean; telegramOnQuestion: boolean; telegramEnvFile: string; telegramChatId: string; telegramIdleMin: number;
@@ -37,7 +38,10 @@ export interface CockpitSettings {
   cockpitCrop: CockpitCrop;
   contextWarn: number; contextHandoff: number; clearableMinContextPct: number; clearableMinPrompts: number;
   tokensDayMedian: number; tokensDayP90: number;
-  focusHeading: string; inboxDir: string; indexFile: string; lintAfterDays: number; dailyDir: string;
+  focusHeading: string;
+  /** Abend 44, Karte „Heute“: Briefing-Punkte, Überschrift für neue Aufgaben, Erinnerungen (nur macOS). */
+  todayBriefing: boolean; tasksAddHeading: string; remindersEnabled: boolean; remindersLists: string; remindersOverdue: boolean; remindersIntervalMin: number;
+  inboxDir: string; indexFile: string; lintAfterDays: number; dailyDir: string;
   nextEffort: (typeof EFFORT_STEPS)[number]; radars: RadarEntry[]; lintCommand: string;
   hubsDir: string; handoffsDir: string; hubSuffix: string; handoffPrompt: string;
   /** Abend 41: Shell für Shell-Tabs unter Windows; leer = pwsh.exe, sonst Windows PowerShell. */
@@ -70,6 +74,9 @@ export const DEFAULT_SETTINGS: CockpitSettings = {
   writeTokensFile: DEFAULT_WRITE_TOKENS_FILE,
   resumeConversations: DEFAULT_RESUME_CONVERSATIONS,
   fixedPrompt: DEFAULT_FIXED_PROMPT,
+  smoothScroll: DEFAULT_SMOOTH_SCROLL,
+  scrollSpeed: DEFAULT_SCROLL_SPEED,
+  scrollMaxPerFrame: DEFAULT_SCROLL_MAX_PER_FRAME,
   skipPermissions: DEFAULT_SKIP_PERMISSIONS,
   claudeExclusion: DEFAULT_CLAUDE_EXCLUSION,
   claudeExclusionSandbox: DEFAULT_CLAUDE_EXCLUSION_SANDBOX,
@@ -83,6 +90,8 @@ export const DEFAULT_SETTINGS: CockpitSettings = {
   fileLinksClaudeDirs: DEFAULT_FILE_LINKS_CLAUDE_DIRS,
   fileLinksSpaces: DEFAULT_FILE_LINKS_SPACES,
   clearLink: DEFAULT_CLEAR_LINK,
+  checkBeforeClear: DEFAULT_CHECK_BEFORE_CLEAR,
+  webLinks: DEFAULT_WEB_LINKS,
   fileViewerMaxMb: DEFAULT_FILE_VIEWER_MAX_MB,
   fileViewerWidthPct: DEFAULT_FILE_VIEWER_WIDTH_PCT,
   fileViewerHeightPct: DEFAULT_FILE_VIEWER_HEIGHT_PCT,
@@ -116,6 +125,12 @@ export const DEFAULT_SETTINGS: CockpitSettings = {
   tokensDayMedian: DEFAULT_TOKENS_DAY_MEDIAN,
   tokensDayP90: DEFAULT_TOKENS_DAY_P90,
   focusHeading: DEFAULT_FOCUS_HEADING,
+  todayBriefing: DEFAULT_TODAY_BRIEFING,
+  tasksAddHeading: DEFAULT_TASKS_ADD_HEADING,
+  remindersEnabled: DEFAULT_REMINDERS_ENABLED,
+  remindersLists: DEFAULT_REMINDERS_LISTS,
+  remindersOverdue: DEFAULT_REMINDERS_OVERDUE,
+  remindersIntervalMin: DEFAULT_REMINDERS_INTERVAL_MIN,
   inboxDir: DEFAULT_INBOX_DIR,
   indexFile: DEFAULT_INDEX_FILE,
   lintAfterDays: DEFAULT_LINT_AFTER_DAYS,
@@ -146,6 +161,8 @@ const RANGES = {
   fontSize: [8, 32],
   scrollback: [500, 100000],
   minimumContrast: [1, 21],
+  scrollSpeed: [0.1, 5],
+  scrollMaxPerFrame: [1, 20],
   telegramIdleMin: [0, 240],
   researchMaxAgeMin: [10, 1440],
   contextWarn: [1000, 1000000],
@@ -160,6 +177,7 @@ const RANGES = {
   fileViewerWidthPct: [40, 100],
   fileViewerHeightPct: [40, 100],
   fileViewerFontSize: [8, 32],
+  remindersIntervalMin: [0, 1440],
 } as const satisfies Partial<Record<keyof CockpitSettings, readonly [number, number]>>;
 
 type RangedKey = keyof typeof RANGES;
@@ -170,7 +188,7 @@ const intIn = (min: number, max: number): Check => (v) =>
 const numIn = (min: number, max: number): Check => (v) =>
   typeof v === "number" && Number.isFinite(v) && v >= min && v <= max ? null : `Zahl von ${min} bis ${max}`;
 /** Schlüssel mit Dezimalwerten: Klemmen beim Laden gilt auch für nicht ganze Zahlen. */
-const DECIMAL_KEYS: ReadonlyArray<string> = ["minimumContrast"];
+const DECIMAL_KEYS: ReadonlyArray<string> = ["minimumContrast", "scrollSpeed"];
 const nonEmpty: Check = (v) => (typeof v === "string" && v.trim() !== "" ? null : "darf nicht leer sein");
 const flag: Check = (v) => (typeof v === "boolean" ? null : "muss an oder aus sein");
 
@@ -181,6 +199,8 @@ const stripSlashes = (v: string): string => v.trim().replace(/^\/+|\/+$/g, "").t
 const hexColor: Check = (v) => (typeof v === "string" && /^(#[0-9a-fA-F]{6})?$/.test(v) ? null : "leer oder Farbe wie #ff6b6b");
 
 const text: Check = (v) => (typeof v === "string" ? null : "muss Text sein");
+/** Eine Zeile Text, leer erlaubt. */
+const oneLine: Check = (v) => (typeof v !== "string" ? "muss Text sein" : /[\r\n]/.test(v) ? "eine Zeile" : null);
 
 /** Segmente eines Vault-Pfads: `/` und `\` trennen, jedes Segment wird getrimmt (`a/ ../b` ist ein `..`). */
 const segments = (path: string): string[] => path.split(/[\\/]/).map((p) => p.trim());
@@ -240,6 +260,9 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   writeTokensFile: flag,
   resumeConversations: flag,
   fixedPrompt: flag,
+  smoothScroll: flag,
+  scrollSpeed: numIn(...RANGES.scrollSpeed),
+  scrollMaxPerFrame: intIn(...RANGES.scrollMaxPerFrame),
   skipPermissions: flag,
   claudeExclusion: flag,
   claudeExclusionSandbox: flag,
@@ -254,6 +277,8 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   fileLinksClaudeDirs: flag,
   fileLinksSpaces: flag,
   clearLink: flag,
+  checkBeforeClear: flag,
+  webLinks: flag,
   fileViewerMaxMb: intIn(...RANGES.fileViewerMaxMb),
   fileViewerWidthPct: intIn(...RANGES.fileViewerWidthPct),
   fileViewerHeightPct: intIn(...RANGES.fileViewerHeightPct),
@@ -290,6 +315,12 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
   tokensDayMedian: intIn(...RANGES.tokensDayMedian),
   tokensDayP90: intIn(...RANGES.tokensDayP90),
   focusHeading: (v) => (typeof v === "string" && v.trim() !== "" && !/[\r\n]/.test(v) ? null : "eine Zeile, nicht leer"),
+  todayBriefing: flag,
+  tasksAddHeading: oneLine,
+  remindersEnabled: flag,
+  remindersLists: oneLine,
+  remindersOverdue: flag,
+  remindersIntervalMin: intIn(...RANGES.remindersIntervalMin),
   inboxDir: vaultDir,
   indexFile: vaultMdFile,
   lintAfterDays: intIn(...RANGES.lintAfterDays),
@@ -312,7 +343,7 @@ const CHECKS: { [K in keyof CockpitSettings]: Check } = {
 
 const KEYS = Object.keys(CHECKS) as Array<keyof CockpitSettings>;
 
-const TEXT_KEYS: ReadonlyArray<keyof CockpitSettings> = ["projectsRoot", "soundFile", "briefingsDir", "continuePrompt", "tasksFile", "telegramEnvFile", "telegramChatId", "focusHeading", "handoffPrefix", "lintCommand", "hubsDir", "handoffsDir", "handoffPrompt", "windowsShell", "hiddenProjectDirs"];
+const TEXT_KEYS: ReadonlyArray<keyof CockpitSettings> = ["projectsRoot", "soundFile", "briefingsDir", "continuePrompt", "tasksFile", "telegramEnvFile", "telegramChatId", "focusHeading", "tasksAddHeading", "remindersLists", "handoffPrefix", "lintCommand", "hubsDir", "handoffsDir", "handoffPrompt", "windowsShell", "hiddenProjectDirs"];
 
 /** Textwerte getrimmt, alles andere unverändert (nach bestandener Prüfung). */
 export function normalizeSetting<K extends keyof CockpitSettings>(key: K, value: CockpitSettings[K]): CockpitSettings[K] {

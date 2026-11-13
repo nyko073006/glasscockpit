@@ -1,3 +1,4 @@
+import type { HandoffCheck } from "./handoff-check";
 import type { EffortStep } from "./effort";
 import type { DayTotals } from "./day-stats";
 import type { GitStatus } from "./git-status";
@@ -52,6 +53,8 @@ export interface CockpitFeed {
   soundOn: boolean;
   /** Offene Handoffs je Projekt, neueste zuerst (Abend 19h). */
   handoffs: OpenHandoff[];
+  /** Übergabe-Lampe der aktiven Sitzung; null ohne aktive Sitzung. */
+  handoffCheck: HandoffCheck | null;
 }
 
 /** Klicks und Tasten der neuen Flächen; der Aufrufer führt aus. */

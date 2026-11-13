@@ -1,7 +1,7 @@
 import type { IBufferRange, ILink, ILinkDecorations, ILinkProvider } from "@xterm/xterm";
 import {
   type BufferPos, candidatesWithQuotes, type CellRow, extendCandidates, isRelativePath, linkModifierDown, type LogicalLine, logicalLine, MAX_PATH_PROBES,
-  opensOnClick, pathCandidates, ProbeBudget, resolveCandidatePath, resolveViaBases, vaultRelative, wordLine,
+  opensOnClick, pathCandidates, ProbeBudget, resolveCandidatePath, resolveViaBases, urlRanges, vaultRelative, wordLine,
 } from "../core/file-links";
 import { touchesRow } from "../core/link-guard";
 import type { Platform } from "../core/platform-path";
@@ -181,6 +181,81 @@ export class FileLinkProvider implements ILinkProvider {
   }
 
   /** Eigenschaften setzen, nie das Objekt tauschen: Nur so meldet xterm die Änderung an die Darstellung. */
+  private decorate(link: ILink): void {
+    const d = link.decorations;
+    if (!d) return;
+    d.underline = this.meta;
+    d.pointerCursor = this.meta;
+  }
+}
+
+export interface UrlLinkDeps {
+  /** Pufferzeile y (ab 1) als Zellen, null außerhalb. */
+  row: (y: number) => CellRow | null;
+  /** Einstellung webLinks, bei jeder Abfrage frisch. */
+  enabled: () => boolean;
+  /** Plattform: Mac Cmd+Klick, Windows Ctrl+Klick (wie die Pfade). */
+  platform: Platform;
+  /** Öffnet die URL im Standardbrowser. */
+  open: (url: string) => void;
+}
+
+/**
+ * Nachtrag 43h: Web-URLs (http, https) im Terminal als xterm-Links, Klick und Unterstreichung wie bei den Pfaden: nur mit Cmd
+ * (Windows: Ctrl), ein einfacher Klick markiert weiter Text. Über Claudes Umbrüche hinweg (logicalLine mit hard), damit eine lange
+ * URL am Rand ganz Link bleibt.
+ */
+export class UrlLinkProvider implements ILinkProvider {
+  private readonly deps: UrlLinkDeps;
+  private hovered: ILink | null = null;
+  private meta = false;
+
+  constructor(deps: UrlLinkDeps) {
+    this.deps = deps;
+  }
+
+  provideLinks(y: number, callback: (links: ILink[] | undefined) => void): void {
+    if (!this.deps.enabled()) return callback(undefined);
+    const line = logicalLine(y, this.deps.row, true);
+    if (!line) return callback(undefined);
+    const links: ILink[] = [];
+    for (const r of urlRanges(line.text)) {
+      const start = line.positions[r.start];
+      const end = line.positions[r.end - 1];
+      if (!start || !end) continue;
+      links.push(this.makeLink({ start, end }, r.url));
+    }
+    callback(links.length > 0 ? links : undefined);
+  }
+
+  private makeLink(range: IBufferRange, url: string): ILink {
+    const link: ILink = {
+      range,
+      text: url,
+      decorations: decorations(this.meta),
+      activate: (event) => {
+        if (!opensOnClick(event, this.deps.platform)) return;
+        event.preventDefault();
+        this.deps.open(url);
+      },
+      hover: (event) => {
+        this.hovered = link;
+        this.meta = linkModifierDown(event, this.deps.platform);
+        // Wie beim FileLinkProvider: xterm tauscht decorations direkt nach hover, erst danach setzen.
+        queueMicrotask(() => this.decorate(link));
+      },
+      leave: () => {
+        if (this.hovered === link) this.hovered = null;
+      },
+    };
+    return link;
+  }
+
+  setModifier(meta: boolean): void {
+    this.meta = meta;
+    if (this.hovered) this.decorate(this.hovered);
+  }
+
   private decorate(link: ILink): void {
     const d = link.decorations;
     if (!d) return;

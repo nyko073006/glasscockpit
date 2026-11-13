@@ -25,7 +25,10 @@ import { RenameModal } from "./rename-modal";
 import type { TerminalOptions } from "../core/terminal-options";
 import { TerminalPane } from "./terminal-pane";
 import { ClearLinkProvider } from "./clear-link";
-import { FileLinkProvider, type LinkTarget } from "./file-links";
+import { type ClearGuardState, guardedClearInsert } from "./clear-guard";
+import { ChoiceModal } from "./file-viewer-modal";
+import type { HandoffCheck } from "../core/handoff-check";
+import { FileLinkProvider, type LinkTarget, UrlLinkProvider } from "./file-links";
 import { isDirSync, isFileSync } from "./file-viewer-fs";
 import { TranscriptReader, type TranscriptResult } from "./transcript-reader";
 
@@ -70,6 +73,8 @@ export interface TerminalDeps {
   handoffs: HandoffKeeper;
   /** Datei-Viewer (Abend 27): Pfad aus einem Cmd+Klick öffnen (Vault-Tab oder Fenster); refocus holt danach den Fokus zurück. */
   openPath: (target: LinkTarget, refocus: () => void) => void;
+  /** Übergabe-Check einer Sitzung (Nachtrag 43j), null bei Shell oder unbekannter Sitzung. */
+  handoffCheck: (sessionId: string) => Promise<HandoffCheck | null>;
 }
 
 /** Was zur Laufzeit am Leaf hängt, aber nicht in obsidian.d.ts steht. */
@@ -110,6 +115,10 @@ export class TerminalView extends ItemView {
   private unbindSettings: (() => void) | null = null;
   private unbindLinks: (() => void) | null = null;
   private unbindClearLink: (() => void) | null = null;
+  /** Laufzustand der /clear-Rückfrage dieser View (Nachtrag 43j). */
+  private readonly clearGuard: ClearGuardState = { busy: false };
+  private unbindWebLink: (() => void) | null = null;
+  private unbindWheel: (() => void) | null = null;
   // Benachrichtigung (nur Claude-Sitzungen).
   private attention: AttentionSignal | null = null;
   // Erst nach dem Parsen des Replays scharf: Der Ring-Puffer enthält alte Signale.
@@ -261,12 +270,47 @@ export class TerminalView extends ItemView {
         hasSelection: () => pane.hasSelection(),
         // Wie Tippen in die PTY der angeklickten Sitzung (SessionHandle dieser View), nicht über das Ziel der jüngsten Sitzung
         // (sendToActive): ein Klick in einem Split gehört dem Split, in dem geklickt wurde.
+        // Nachtrag 43j: Mit Check vor dem Einfügen (Einstellung Vor /clear prüfen); Rückfrage nur bei roter Übergabe.
         insert: () => {
-          this.handle?.write(CLEAR_INSERT);
-          this.pane?.focus();
+          const insert = (): void => {
+            this.handle?.write(CLEAR_INSERT);
+            this.pane?.focus();
+          };
+          void guardedClearInsert({
+            enabled: () => this.deps.settings().checkBeforeClear,
+            check: () => (this.sessionId ? this.deps.handoffCheck(this.sessionId) : Promise.resolve(null)),
+            confirm: (gaps, onYes) => {
+              new ChoiceModal(this.app, "Trotzdem clearen?", "Die Übergabe ist nicht fertig:\n" + gaps.map((g) => "– " + g).join("\n"), [
+                { label: "Abbrechen", action: () => this.pane?.focus() },
+                { label: "Trotzdem clearen", warning: true, action: onYes },
+              ]).open();
+            },
+            insert,
+            log: (m) => console.warn(`[glasscockpit] ${m}`),
+          }, this.clearGuard);
         },
       }),
     );
+    // Weblinks per Cmd+Klick, unter Windows Ctrl+Klick (Nachtrag 43h), als letzter Provider: Pfade und /clear behalten bei
+    // Überlappung Vorrang wie bisher (beide lassen URLs ohnehin aus). Öffnen wie die Links im Cockpit: window.open, Obsidian gibt
+    // http(s) an den Standardbrowser.
+    this.unbindWebLink = pane.registerLinkProvider(
+      new UrlLinkProvider({
+        row: (y) => pane.bufferRow(y),
+        enabled: () => this.deps.settings().webLinks,
+        platform: hostPlatform(),
+        open: (url) => { window.open(url, "_blank"); },
+      }),
+    );
+    // Weich scrollen (Nachtrag 43f): Schalter, Sitzungsart und Tempo je Ereignis frisch. Übernommen wird nur, wenn die Sitzung mit
+    // der Einstellung gestartet wurde (Meta): in einer alten Sitzung ist Claudes Beschleunigung an. Ausschalten wirkt sofort.
+    this.unbindWheel = pane.attachSmoothWheel({
+      enabled: () =>
+        this.sessionId !== null &&
+        this.deps.settings().smoothScroll &&
+        this.deps.manager.meta(this.sessionId)?.smoothScroll === true,
+      tuning: () => ({ speed: this.deps.settings().scrollSpeed, maxPerFrame: this.deps.settings().scrollMaxPerFrame }),
+    });
     // Schriftgröße und Scrollback wirken sofort auf offene Panes; ein leeres Handoff-Präfix blendet den festen Knopf sofort aus.
     // Höchstalter und Anzeige der Hintergrundaufgaben (Abend 28) wirken sofort auf den Tab-Titel.
     this.unbindSettings = this.deps.onSettingsChange(() => {
@@ -319,6 +363,10 @@ export class TerminalView extends ItemView {
     this.unbindLinks = null;
     this.unbindClearLink?.();
     this.unbindClearLink = null;
+    this.unbindWebLink?.();
+    this.unbindWebLink = null;
+    this.unbindWheel?.();
+    this.unbindWheel = null;
     this.pane?.dispose();
     this.pane = null;
     this.bar?.remove();
@@ -378,7 +426,11 @@ export class TerminalView extends ItemView {
 
   /** Neuer Stand aus dem Transkript: Handoff-Block der Cockpit-Sitzung übernehmen (null lässt den alten stehen), Leiste zeichnen. */
   private applyResult(result: TranscriptResult): void {
-    if (this.sessionId !== null) this.deps.handoffs.keep(this.sessionId, result.handoff);
+    if (this.sessionId !== null) {
+      this.deps.handoffs.keep(this.sessionId, result.handoff);
+      // Für die Übergabe-Lampe: Block und Sitzungsstart der Claude-ID, die dieser Leser liest.
+      if (this.readerId !== null) this.deps.handoffs.keepCurrent(this.sessionId, this.readerId, result.handoff, result.startedAtMs);
+    }
     this.renderBar(result.blocks);
   }
 
