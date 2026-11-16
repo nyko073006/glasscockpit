@@ -3,6 +3,7 @@
 // .publicignore, prüft das Ziel mit scripts/check-public.mjs und committet erst danach.
 import { execFileSync, spawnSync } from "node:child_process";
 import {
+  chmodSync,
   copyFileSync,
   existsSync,
   lstatSync,
@@ -12,8 +13,17 @@ import {
   realpathSync,
   rmdirSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { dirname, join, relative } from "node:path";
+
+/** Markierungszeile des pre-push-Hooks; nur Hooks mit ihr darf der Export überschreiben. */
+export const HOOK_MARKE = "# glasscockpit-release-guard";
+export const HOOK_ZEILE = `${HOOK_MARKE} (von npm run export-public angelegt, nicht von Hand ändern)`;
+export const HOOK_INHALT = `#!/bin/sh
+${HOOK_ZEILE}
+exec node scripts/release-guard.mjs "$@"
+`;
 
 /** Immer draußen: Pfade (Ordner mit / am Ende) und die Ausschlussdatei selbst. */
 export const FESTE_AUSSCHLUESSE = ["handoffs/", "CLAUDE.local.md", ".publicignore"];
@@ -85,6 +95,30 @@ export function exportPublic({ root, target, message }: ExportOptionen): ExportE
     throw new Error("Ziel und Quell-Repo sind derselbe Ordner");
   }
 
+  // Hook-Prüfungen vor jedem Schreiben.
+  // ASSUMPTION: core.hooksPath auf jeder Ebene (auch global) bricht ab, weil der Hook sonst in einem geteilten Ordner landen würde.
+  const hooksPath = spawnSync("git", ["config", "--get", "core.hooksPath"], { cwd: target, encoding: "utf8" });
+  if (hooksPath.status === 0 && hooksPath.stdout.trim() !== "") {
+    throw new Error(
+      `core.hooksPath ist im Ziel gesetzt (${hooksPath.stdout.trim()}): der pre-push-Hook würde in einem geteilten Ordner landen, nichts geschrieben`,
+    );
+  }
+  // ASSUMPTION: Hook-Ordner per --git-path hooks und Dateiname angehängt, weil git bei hooks/pre-push einen Symlink schon auflöst und lstat dann nichts sähe.
+  const hookPfad = join(git(target, ["rev-parse", "--path-format=absolute", "--git-path", "hooks"]).trim(), "pre-push");
+  // ASSUMPTION: Eigener Hook = Zeile 2 stimmt (nach trimEnd) exakt mit HOOK_ZEILE überein, weil das einfacher und strenger ist als „Marke irgendwo“.
+  const hookInfo = lstatSync(hookPfad, { throwIfNoEntry: false });
+  if (hookInfo?.isSymbolicLink()) {
+    throw new Error(`pre-push-Hook im Ziel ist ein Symlink (${hookPfad}): der Export schreibt nicht hindurch, nichts geschrieben`);
+  }
+  if (hookInfo && readFileSync(hookPfad, "utf8").split("\n")[1]?.trimEnd() !== HOOK_ZEILE) {
+    throw new Error(`Fremder pre-push-Hook im Ziel (${hookPfad}): der Export überschreibt ihn nicht, nichts geschrieben`);
+  }
+  const hookSchreiben = () => {
+    mkdirSync(dirname(hookPfad), { recursive: true });
+    writeFileSync(hookPfad, HOOK_INHALT);
+    chmodSync(hookPfad, 0o755);
+  };
+
   const ignorePfad = join(root, ".publicignore");
   const eintraege = [...FESTE_AUSSCHLUESSE, ...(existsSync(ignorePfad) ? parseIgnore(readFileSync(ignorePfad, "utf8")) : [])];
   const dateien = git(root, ["ls-files", "-z"])
@@ -120,9 +154,13 @@ export function exportPublic({ root, target, message }: ExportOptionen): ExportE
   }
 
   const geaendert = spawnSync("git", ["diff", "--cached", "--quiet"], { cwd: target }).status !== 0;
-  if (!geaendert) return { files: dateien.length, committed: false };
+  if (!geaendert) {
+    hookSchreiben();
+    return { files: dateien.length, committed: false };
+  }
 
   const kurz = git(root, ["rev-parse", "--short", "HEAD"]).trim();
   git(target, ["commit", "-q", "-m", message ?? `Export aus dem privaten Repo (${kurz})`]);
+  hookSchreiben();
   return { files: dateien.length, committed: true };
 }
