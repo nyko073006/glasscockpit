@@ -10,6 +10,15 @@ Glasscockpit was inspired by the Agentic OS plugin from skaile.de and is an inde
 
 The plugin's settings and labels are in German. There is no English interface yet.
 
+## Features
+
+- **Sessions as tabs:** Claude Code and shells run as terminal tabs in Obsidian, per project folder or in your home folder.
+- **Dashboard:** usage limits, context size, today's tokens, the "Heute" (today) card, tasks, vault status, briefing, radars and GitHub searches, as cards or as a cockpit picture.
+- **Resume handoffs:** open handoff notes show up as "Weiter" (continue) and start the next session in the right repo.
+- **Alerts:** banner, sound and Telegram when a session finishes or asks a question, quiet while agents are still running in the background.
+- **Launcher:** skills, agents and slash commands from the command palette, effort for the next session.
+- **Terminal comfort and protection:** open and edit paths with Cmd+click (Ctrl+click on Windows), click `/clear`, minimum contrast, IDE bridge, excluded files closed to Claude.
+
 ## Requirements
 
 - macOS on Apple Silicon (Intel Macs are untested), or Windows (see "Windows" below).
@@ -54,6 +63,19 @@ Windows is supported alongside macOS, with these differences.
 ## First steps
 
 Open the command palette and run "Neue Claude-Sitzung" (new Claude session) or "Dashboard öffnen" (open dashboard). Settings are under Settings, Glasscockpit.
+
+The most useful commands in the palette (names are German):
+
+| Command | What it does |
+|---|---|
+| Neue Sitzung | Menu with project folders and open handoffs. |
+| Neue Claude-Sitzung, … im Home | Start Claude in the vault or in your home folder. |
+| Neue Shell | Terminal without Claude. |
+| Dashboard öffnen, Cockpit-Ansicht öffnen | Dashboard as cards or as the cockpit picture. |
+| Skill starten, Agent starten, Slash-Befehl einfügen | Launcher for the most recently active session. |
+| Auswahl an Claude erwähnen | Send the selected passage of the note as an @-mention (needs the IDE bridge). |
+| Letzten Codeblock kopieren | Copy the last code block of the answer to the clipboard. |
+| Sitzung frisch starten | New Claude conversation in the same tab, the old one is kept. |
 
 Most vault-related settings start empty. Empty means "not set up", never an error. The matching card or field then shows "aus" or "nicht eingerichtet" and the plugin reads nothing for it:
 
@@ -100,6 +122,12 @@ This copies `hooks/clearable-banner.py` to `~/.claude/hooks/clearable-banner.py`
 
 For Claude to set the signal, add an instruction to your `CLAUDE.md`, for example: "When the session is ready to hand off, end the answer with a code block that starts with `Handoff:`."
 
+`npm run deploy:hook` also copies `hooks/clear-sicherung.py` next to the banner hook. It is a second, optional hook for the end of a session (for example after `/clear`): it looks for the last handoff block in the ending session and writes that session's ID and transcript path into the frontmatter of the handoff file named there (`vorgaenger_session`, `vorgaenger_transkript`), so the next session can find its predecessor. It never blocks and prints nothing. Register it only if you want it:
+
+```json
+{ "hooks": { "SessionEnd": [ { "hooks": [ { "type": "command", "command": "python3 \"$HOME/.claude/hooks/clear-sicherung.py\" 2>/dev/null || true" } ] } ] } }
+```
+
 ## Handoffs
 
 The plugin can continue a project from the handoff note of an earlier session. It is off until you set two paths.
@@ -129,7 +157,7 @@ Claude Code sends some text (for example the question of a choice prompt) as fix
 
 ## Open paths with Cmd+click
 
-File paths in the terminal open with Cmd+click: absolute, with `~` or relative to the session's start folder, each optionally with `:line` or `:line:column`. While Cmd is held, a path is underlined, but only if it exists as a file. Only Cmd with the left button opens it; Cmd with the middle or right button, or with Ctrl or Alt, does nothing. Files in the vault open as a tab, all others in a window with a small code editor: Cmd+S saves, Esc closes. TypeScript, JavaScript, JSON, Swift, CSS, Python, YAML, SQL, HTML and shell are shown in the theme's code colors; while you type, the window suggests words from the file and keywords of the language (Enter accepts, Esc first closes the list, Ctrl+Space opens it; turn it off with "Datei-Viewer: Vorschläge beim Tippen"). If the file changed since it was opened (for example by Claude), the window asks before overwriting. Text files larger than "Datei-Viewer: Höchstgröße (MB)" (default 2) are not shown. Images (png, jpg, jpeg, gif, webp, svg, bmp, ico) appear fitted into the window; zoom works as with text (Cmd+Plus, Cmd+Minus, Cmd+mouse wheel), 100 % shows real pixels with scrolling, Cmd+0 fits the image again, and the title shows size in pixels and file size (for SVG only the file size). Images have their own size limit ("Datei-Viewer: Höchstgröße Bilder (MB)", default 20) and a switch ("Datei-Viewer: Bilder anzeigen"). Other binary files are not shown, but a button opens them (and images) in the default program. Markdown files (.md) are colored by body text, code, commands, headings, links, markers and frontmatter; the text stays raw text, and the colors and the command list are configurable ("Datei-Viewer: Markdown färben", "Datei-Viewer: Farbe …", "Datei-Viewer: Befehle in Backticks"). Turn it off with "Pfade per Cmd+Klick öffnen". In shell sessions the start folder still applies after `cd`. The window starts at 90 % of the Obsidian window's width and height (settings "Datei-Viewer: Startbreite (%)" and "Datei-Viewer: Starthöhe (%)", 40 to 100) with the font size from "Datei-Viewer: Schriftgröße (px)" (default 14), and long lines wrap. Cmd+Plus, Cmd+Minus and Cmd+0 (or Cmd+mouse wheel) zoom the text, 50 to 200 %; the shortcuts are intercepted so that Obsidian's own zoom should stay untouched (to be confirmed in acceptance). Drag the title bar to move the window, drag an edge or corner to resize it, double-click the title bar to go back to the start size. Nothing is remembered: the next window opens at the start size and 100 % again.
+File paths in the terminal open with Cmd+click: absolute, with `~` or relative to the session's start folder, each optionally with `:line` or `:line:column`. While Cmd is held, a path is underlined, but only if it exists as a file. Only Cmd with the left button opens it; Cmd with the middle or right button, or with Ctrl or Alt, does nothing. Files in the vault open as a tab, all others in a window with a small code editor: Cmd+S saves, Esc closes. TypeScript, JavaScript, JSON, Swift, CSS, Python, YAML, SQL, HTML and shell are shown in the theme's code colors; while you type, the window suggests words from the file and keywords of the language (Enter accepts, Esc first closes the list, Ctrl+Space opens it; turn it off with "Datei-Viewer: Vorschläge beim Tippen"). If the file changed since it was opened (for example by Claude), the window asks before overwriting. Text files larger than "Datei-Viewer: Höchstgröße (MB)" (default 2) are not shown. Images (png, jpg, jpeg, gif, webp, svg, bmp, ico) appear fitted into the window; zoom works as with text (Cmd+Plus, Cmd+Minus, Cmd+mouse wheel), 100 % shows real pixels with scrolling, Cmd+0 fits the image again, and the title shows size in pixels and file size (for SVG only the file size). Images have their own size limit ("Datei-Viewer: Höchstgröße Bilder (MB)", default 20) and a switch ("Datei-Viewer: Bilder anzeigen"). Other binary files are not shown, but a button opens them (and images) in the default program. Markdown files (.md) are colored by body text, code, commands, headings, links, markers and frontmatter; the text stays raw text, and the colors and the command list are configurable ("Datei-Viewer: Markdown färben", "Datei-Viewer: Farbe …", "Datei-Viewer: Befehle in Backticks"). Turn it off with "Pfade per Cmd+Klick öffnen". In shell sessions the start folder still applies after `cd`. The window starts at 90 % of the Obsidian window's width and height (settings "Datei-Viewer: Startbreite (%)" and "Datei-Viewer: Starthöhe (%)", 40 to 100) with the font size from "Datei-Viewer: Schriftgröße (px)" (default 14), and long lines wrap. Cmd+Plus, Cmd+Minus and Cmd+0 (or Cmd+mouse wheel) zoom the text, 50 to 200 %; the shortcuts are intercepted, so Obsidian's own zoom stays untouched. Drag the title bar to move the window, drag an edge or corner to resize it, double-click the title bar to go back to the start size. Nothing is remembered: the next window opens at the start size and 100 % again.
 
 If a relative path is not in the start folder, the cockpit looks for it in the folders Claude has worked in during this session: `cd` targets and the folders of files it read or edited. So when Claude names `src/main.ts:10` from a repo in a vault session, it becomes a link. If several of these folders have the file, for example the repo and a worktree, it opens from the folder Claude worked in most recently; the window title shows the full path. Turn it off with "Relative Pfade auch in Claudes Ordnern suchen".
 
@@ -192,7 +220,8 @@ This follows the disclosure rules of the Obsidian developer policies.
 - The file you save with Cmd+S in the file viewer, and only that one (switch "Pfade per Cmd+Klick öffnen", on by default). It is written to a temporary file in the same folder, which is then renamed.
 - `~/.claude/ide/<port>.lock`: lock file of the IDE bridge (switch "IDE-Brücke", on by default). It lets Claude sessions started by the plugin see your selection and open notes. The server listens on `127.0.0.1` only. The lock file is removed on exit.
 - `npm run deploy:statusline` writes `~/.claude/statusline-command.sh`. You run that yourself.
-- `npm run deploy:hook` writes `~/.claude/hooks/clearable-banner.py`; you run that yourself too. The hook reads `~/.claude/cockpit/thresholds.json`, `sessions/*.json` and the session transcript, and appends a log to `~/.claude/hooks/clearable-banner.log`.
+- `npm run deploy:hook` writes `~/.claude/hooks/clearable-banner.py` and `~/.claude/hooks/clear-sicherung.py`; you run that yourself too. The banner hook reads `~/.claude/cockpit/thresholds.json`, `sessions/*.json` and the session transcript, and appends a log to `~/.claude/hooks/clearable-banner.log`.
+- `clear-sicherung.py`, only if you register it as a SessionEnd hook: reads `~/.claude/cockpit/thresholds.json` (handoff prefix) and the transcript of the ending session, writes the two fields `vorgaenger_session` and `vorgaenger_transkript` into the handoff file named in its last handoff block (via a temporary file that is then renamed; everything else in the file stays byte for byte), and appends one line per session end to `~/.claude/cockpit/clear-log.jsonl` (time, reason, session ID, transcript path, working folder, handoff path, whether it was stamped, and an error text if one occurred).
 
 **Writes inside the vault.** The plugin's `data.json` (settings, session list, the briefing points ticked in the "Heute" card or in the briefing, and the ticked reminders; each of the two lists stays until you tick an item of the same kind again on a later day), the folder `native/darwin-<arch>/` (on Windows `native/win32-<arch>/`) inside the plugin folder when you press "Binärdateien laden" (plus a temporary folder `.native-download-*` there while it runs, removed afterwards), the task file when you press "Anlegen", tick a task or add one in the "Heute" card, and the result of `git pull` in the briefing folder. On Windows also `.sessions/<id>.settings.json` in the plugin folder, one settings file per Claude session. The plugin removes these files when the session is stopped and when it loads and unloads. After a crash they stay until the next start.
 
