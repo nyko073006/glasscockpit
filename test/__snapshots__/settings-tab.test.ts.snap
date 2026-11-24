@@ -1179,7 +1179,7 @@ exports[`Einstellungsseite (Abend 34) > Zeilen, Reihenfolge und Steuerelemente b
     "name": "Erinnerungen in „Heute“ (nur macOS)",
   },
   {
-    "desc": "An: Offene Erinnerungen der App „Erinnerungen“, fällig heute oder früher, stehen in der Karte „Heute“; Abhaken setzt sie in der App auf erledigt. Liest per AppleScript, macOS fragt beim ersten Mal nach der Freigabe.",
+    "desc": "An: Offene Erinnerungen der App „Erinnerungen“, fällig heute oder früher, stehen in der Karte „Heute“; Abhaken setzt sie in der App auf erledigt. Liest per AppleScript, macOS fragt beim ersten Mal nach der Freigabe. Gilt auf jedem Mac, der diesen Vault synchronisiert.",
   },
   {
     "control": "toggle",

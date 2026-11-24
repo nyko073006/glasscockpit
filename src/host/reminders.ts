@@ -78,6 +78,8 @@ export class RemindersController {
   /** Gab es schon ein Ergebnis seit dem Einschalten? Nur der erste Lauf zeigt `loading`. */
   private loaded = false;
   private items: Reminder[] = [];
+  /** In dieser Sitzung per setCompleted(id, true) abgehakte Erinnerungen mit vollen Daten, damit das Zurückholen sie sofort wieder zeigt. */
+  private readonly completed = new Map<string, Reminder>();
   private readonly busy = new Set<string>();
   private wasActive: boolean;
 
@@ -100,6 +102,12 @@ export class RemindersController {
     if (!this.disposed) this.state.set(s);
   }
 
+  /** Meldet die aktuellen items bei Art `ok` oder `error` (Art und Meldung bleiben), sonst nichts. */
+  private publishItems(): void {
+    const cur = this.state.get();
+    if (cur.kind === "ok" || cur.kind === "error") this.publish({ ...cur, items: this.items });
+  }
+
   private settingsChanged(): void {
     const now = this.active();
     if (now === this.wasActive) return;
@@ -107,6 +115,7 @@ export class RemindersController {
     if (!now) {
       this.loaded = false;
       this.items = [];
+      this.completed.clear();
       this.lastAttempt = null;
       this.publish({ kind: "off" });
       return;
@@ -172,12 +181,15 @@ export class RemindersController {
 
   /**
    * Setzt den Zielzustand einer Erinnerung (nie kippen). true bei Erfolg; erledigt nimmt den Eintrag aus der Liste (die Art des
-   * Zustands bleibt), zurückgesetzt liest danach neu. Läuft für dieselbe id schon ein Aufruf, false ohne zweiten Aufruf.
+   * Zustands bleibt) und merkt ihn für diese Sitzung; zurückgesetzt nimmt einen gemerkten Eintrag sofort wieder auf (unbekannte
+   * id, etwa nach Neuladen: nichts, erst der Leselauf zeigt sie) und liest danach neu. Läuft für dieselbe id schon ein Aufruf, false ohne zweiten Aufruf.
    * Fehler: Zustand `error`, false. Die id ist vor jeder Zustandsmeldung wieder frei.
    */
   async setCompleted(id: string, done: boolean): Promise<boolean> {
     if (!this.active() || this.busy.has(id)) return false;
     this.busy.add(id);
+    // Vor dem Setzen erfassen: Ein Leselauf, der noch vor der Antwort endet, ersetzt items schon ohne die id.
+    const vorher = done ? this.items.find((r) => r.id === id) : undefined;
     let ok = true;
     let fehler: unknown = null;
     try {
@@ -195,10 +207,20 @@ export class RemindersController {
     // Ein laufender Leselauf zeigt den Stand von vor dem Setzen.
     if (this.running) this.stale = true;
     if (done) {
+      // Der frischere Stand aus items gewinnt; `vorher` deckt den Fall ab, dass ein Leselauf die id während des Setzens entfernt hat.
+      const alt = this.items.find((r) => r.id === id) ?? vorher;
+      if (alt) this.completed.set(id, alt);
       this.items = this.items.filter((r) => r.id !== id);
-      const cur = this.state.get();
-      if (cur.kind === "ok" || cur.kind === "error") this.publish({ ...cur, items: this.items });
+      this.publishItems();
     } else {
+      const gemerkt = this.completed.get(id);
+      if (gemerkt && !this.items.some((r) => r.id === id)) {
+        // ASSUMPTION: der Eintrag kommt ans Ende der Liste, weil die Reihenfolge in items egal ist (dueReminders sortiert nach
+        // Fälligkeit und Name) und der Leselauf danach die Reihenfolge der App liefert.
+        this.items = [...this.items, gemerkt];
+        this.publishItems();
+      }
+      this.completed.delete(id);
       void this.refresh();
     }
     return true;

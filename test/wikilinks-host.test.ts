@@ -2,7 +2,8 @@ import { Window } from "happy-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Observable } from "../src/core/observable";
 import { DEFAULT_SETTINGS, type CockpitSettings } from "../src/core/settings";
-import type { TodayView } from "../src/core/today";
+import { panelValues } from "../src/core/cockpit-panels";
+import { todayView, type TodayView } from "../src/core/today";
 import type { RemindersController } from "../src/host/reminders";
 import type { DashboardDeps } from "../src/host/dashboard-view";
 import type { TasksCardDeps } from "../src/host/tasks-card";
@@ -108,6 +109,8 @@ function kartenDeps(settings: CockpitSettings): TasksCardDeps {
     setBriefingDone: vi.fn(),
     remindersDone: () => [],
     setReminderDone: vi.fn(),
+    tasksDone: () => [],
+    setTaskDone: vi.fn(),
     onTodayChange: () => () => {},
     reminders,
     doneOpen: () => true,
@@ -417,8 +420,9 @@ describe("Dashboard: Karte „Heute“ im View-State und im Instrument (Abend 44
   const today: TodayView = {
     open: [{ kind: "source", text: "Briefing" }, { kind: "briefing", key: "a", text: "Punkt [[Ziel|Alias]]", done: false, locked: false }],
     done: [{ kind: "task", line: 3, text: "Fertig", done: true, depth: 0 }, { kind: "task", line: 4, text: "Auch fertig", done: true, depth: 0 }],
-    doneCount: 2,
-    total: 3,
+    doneCount: 0,
+    total: 1,
+    listed: 3,
     openTexts: ["Punkt [[Ziel|Alias]]"],
     tasksMissing: true,
   };
@@ -442,6 +446,16 @@ describe("Dashboard: Karte „Heute“ im View-State und im Instrument (Abend 44
     expect(intern.cockpitInputs().tasks).toEqual({ open: ["Punkt [[Ziel|Alias]]"], total: 3, tasksMissing: true });
     intern.tasks = { data: new Observable(null) };
     expect(intern.cockpitInputs().tasks).toBeNull();
+  });
+
+  it("Instrument: 8 alte [x], nichts offen, nichts heute abgehakt bleibt „alles erledigt“ (listed, nicht der neue Zähler)", () => {
+    const tasks = Array.from({ length: 8 }, (_, i) => ({ kind: "task" as const, line: i, text: `Alt ${i}`, done: true, depth: 0 }));
+    const view = todayView({ briefing: [], briefingDone: [], reminders: [], remindersDone: [], tasksDone: [], tasks });
+    expect(view.total).toBe(0);
+    intern.tasks = { data: new Observable({ kind: "ok", today: view }) };
+    expect(intern.cockpitInputs().tasks).toEqual({ open: [], total: 8, tasksMissing: false });
+    const werte = panelValues(intern.cockpitInputs() as never, () => "00:00");
+    expect(werte.tasks).toMatchObject({ big: "0", lines: ["alles erledigt"] });
   });
 
   it("doneOpen steht im View-State und kommt aus setState zurück", async () => {
@@ -469,7 +483,8 @@ describe("Dashboard: Karte „Heute“ im View-State und im Instrument (Abend 44
     const card = new TasksCard(owner as never, el, { ...kartenDeps({ ...DEFAULT_SETTINGS, tasksFile: FILE }), doneOpen: () => (view as unknown as { doneOpen: boolean }).doneOpen });
     card.start();
     intern.tasks = card;
-    await vi.waitFor(() => expect(el.querySelector(".cockpit-today-done-toggle")?.textContent).toBe("Erledigt (1)"));
+    // Nachtrag 44e: Der Knopf trägt vorn den Pfeil (aria-hidden); geprüft wird der Text ohne ihn.
+    await vi.waitFor(() => expect(el.querySelector(".cockpit-today-done-toggle")?.textContent?.replace(/^[▸▾]/, "")).toBe("Erledigt (1)"));
     expect(all(el, ".cockpit-today-done .cockpit-task")).toHaveLength(0);
     await view.setState({ doneOpen: true }, {} as never);
     expect(all(el, ".cockpit-today-done .cockpit-task")).toHaveLength(1);

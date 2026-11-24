@@ -40,3 +40,40 @@ Vom Nutzer gewählt: Wächter, der vor dem Push des öffentlichen Exports prüft
 - Echtlauf A5 in einer Wegwerf-Kopie des öffentlichen Repos (Remote GitHub, nur `git push --dry-run`): Manifest 0.4.0 -> „Release 0.4.0 vorhanden“, Exit 0; Manifest 0.4.1 -> „Push gesperrt … kein Release 0.4.1“, Exit 1.
 - Nicht geprüft: Windows (Prozesstest dort übersprungen), Entwurfs-Fall gegen echtes GitHub (nur per Stub).
 - Bekannte Lücke (Re-Review Task 2, nicht behoben): Ist `.git/hooks` selbst ein Symlink auf einen geteilten Ordner, schreibt der Export `pre-push` dorthin (git löst den Ordner-Symlink auf). Gleiche Fehlerklasse wie `core.hooksPath`, exotisch, nicht in der Spec. Abhilfe bei Bedarf: `lstat(join(target, ".git/hooks"))` prüfen. (scripts/lib/export-public.ts)
+
+## Nachtrag 44d: zurückgeholte Erinnerung sofort offen (unbeaufsichtigt, 16.11.2026)
+Plan: `handoffs/2026-11-16-erinnerung-zurueck-plan.md` (ignoriert, nur lokal).
+- Auswahl: gewählt die Beobachtung „zurückgeholte Erinnerung fehlt rund 6 s“ statt der anderen offenen Punkte aus Abend 44, weil nur sie ohne Urteil des Nutzers lösbar ist (Knopf „Erledigt“ ist Geschmack, Kopfzähler und Schalter je Gerät sind Verhaltensfragen, 44b und 43f brauchen Freund bzw. Gefühlstest). Ob der Nachtrag nach main kommt, entscheidet der Nutzer. (Auftrag)
+- Ort der Korrektur: gewählt `RemindersController` merkt sich abgehakte Erinnerungen und setzt sie beim Zurückholen sofort wieder in `items` statt einer Änderung in Karte oder `todayView`, weil der Controller für alle Dashboards gilt und die bestehenden Karten-Tests `setCompleted` mit exakten Argumenten prüfen (neue Signatur oder neuer Aufruf hätte sie gebrochen). (src/host/reminders.ts, setCompleted)
+- Grenze: gewählt Verhalten unverändert für Erinnerungen, die der Controller nicht kennt (nach Neuladen des Plugins kommt der Erledigt-Stand nur mit id und Name aus der data.json), statt eines Platzhalters ohne Liste und Fälligkeit, weil `dueReminders` beides zum Filtern braucht. Dort bleibt die Lücke bis zum Leselauf. (src/host/reminders.ts, setCompleted)
+- Kein Deckel für die gemerkten Einträge: gewählt unbegrenzte Map statt Höchstzahl, weil sie nur je Abhaken in dieser Sitzung wächst, beim Zurückholen und Ausschalten schrumpft. (src/host/reminders.ts)
+- Einfügestelle (Umsetzer): gewählt ans Ende von `items` statt an die alte Stelle, weil `dueReminders` nach Fälligkeit und Name sortiert und die Stelle nie sichtbar ist. (src/host/reminders.ts, setCompleted)
+- Gemerkter Stand (agy, Re-Review): gewählt Erfassen vor dem `await` und beim Merken `items.find(...) ?? vorher` statt Suche erst nach dem Setzen, weil ein Leselauf, der während des Setzens endet, `items` schon ohne die id ersetzt; der frischere Stand gewinnt, wenn es ihn gibt. (src/host/reminders.ts, setCompleted)
+- Verworfen (agy): Erledigt-Liste ohne Listen-/Fälligkeitsfilter ist gewollt; Deckel für die Map unnötig.
+
+## Ergebnis Nachtrag 44d
+- Commits: `47b86dc` (Umsetzung), `18e5a7e` (Fix-Runde Review und agy), `18b755c` (Fix-Runde 2 Re-Review).
+- Tests: `npx vitest run` 4399 grün, 0 rot, 1 expected fail, 12 skipped (Basis 4389); `npx tsc --noEmit` und `npm run build` Exit 0.
+- Prüfung: task-reviewer (Opus) Freigabe nach Re-Review, Mutationen je Kernzeile rot; agy (Gemini) fand den Fall „Leselauf endet während des Setzens“, behoben mit Test.
+- Nicht geprüft: Verhalten in Obsidian (Abnahme Nutzer); wiederkehrende Erinnerungen (ob die App beim Abhaken die id behält).
+
+# Version 0.4.1 vorbereitet (unbeaufsichtigt, 19.11.2026)
+
+Auftrag aus der Übergabe `handoffs/2026-11-19-nachtschicht.md` (ignoriert, nur lokal): Versionssprung nach dem Muster von `f1ae033`, dazu Build, Tests, Release-Paket und Export in eine Wegwerf-Kopie. Nichts wurde veröffentlicht: kein Tag, kein GitHub-Release, kein Push, kein Merge, kein Deploy.
+
+- Arbeitsort: gewählt Worktree `~/Developer/worktrees/claude-cockpit-afk-041` (Branch `afk/0.4.1`) statt des Haupt-Checkouts, weil dort ungesicherte Arbeit oder eine parallele Sitzung liegen kann. (Repo, Branch)
+- Versionsliste: gewählt keine Doku-Änderung statt eines neuen Änderungsprotokolls, weil weder README noch `docs/` frühere Versionen aufzählen; einziger Treffer ist „ab Version 0.3.6“. (README.md:61, README.de.md:59)
+- Klammertext des Versionscommits: gewählt die Spanne seit dem letzten Versionscommit `f1ae033` (43f bis 44e) statt nur 44d und 44e, weil `f1ae033` dasselbe Muster nutzt. Gegenüber dem veröffentlichten 0.4.0 (öffentlicher Commit `8c8f63e` vom 13.11.2026) sind nur 44d und 44e neu; das zeigt der Diff des Wegwerf-Exports (29 Dateien, Erinnerungen und Karte Heute). Die Nachricht des echten Exports sollte deshalb nur diese beiden nennen. (Commit `18ab6a8`)
+- Ziel des Exports: gewählt ein Klon des öffentlichen Checkouts im Temp-Ordner statt des Checkouts selbst, weil dort der Release-Wächter sitzt und die Arbeitskopie dem Nutzer gehört. (scripts/lib/export-public.ts)
+- Portal-Lint: `npm run release` hat seine Wegwerf-Kopie unter `~/.cache/glasscockpit-portal-lint` neu installiert, weil sich `package-lock.json` geändert hat. Das ist der vom Repo vorgesehene Weg und die einzige Schreibstelle außerhalb von Worktree und Temp-Ordner. (scripts/portal-lint.mjs)
+- Besetzung: gewählt Umsetzer auf Sonnet, Review auf Opus, Zweitmeinung Gemini, wie in der Übergabe freigegeben. (Übergabe, Abschnitt „Freigegeben“)
+
+## Ergebnis Version 0.4.1
+- Commit: `18ab6a8` (nur `manifest.json`, `package.json`, `package-lock.json` an beiden Stellen).
+- Tests: `npm test` 4435 grün, 0 rot, 1 expected fail, 12 skipped (Stand vorher 4435); `npm run build` Exit 0.
+- Release: `npm run release` Exit 0. In `dist/` liegen `glasscockpit-0.4.1.zip`, die vier `glasscockpit-native-<ziel>.zip` (darwin-arm64, darwin-x64, win32-arm64, win32-x64), `main.js`, `manifest.json` (0.4.1) und `styles.css`. Portal-Lint 0 Errors, 0 Warnungen. Die Prüfung gegen `native-checksums.ts` läuft vor dem Packen (scripts/lib/release.ts, Z. 61–67); das Review hat alle Summen des Pakets zusätzlich selbst nachgerechnet.
+- Export: `npm run export-public` in die Wegwerf-Kopie Exit 0, 418 Dateien, `check:public` dort 0 Treffer, neuer Commit über `92ff280`, `manifest.json` 0.4.1, ohne `handoffs/` und `CLAUDE.local.md`.
+- Gegentest: Mit einer Wegwerf-Sperrliste, die einen im Repo vorhandenen Begriff nennt (`COCKPIT_PUBLIC_DENYLIST`), bricht derselbe Export mit Exit 1 ab („209 Treffer in 16 Dateien“), das Ziel bleibt auf `92ff280`. Die Prüfung im Export greift also wirklich.
+- Prüfung: task-reviewer (Opus) Freigabe, 0 wichtig, 2 klein (Stichworte im Klammertext, fehlende Rohbelege im Bericht, beide nachgeholt); agy (Gemini) bestätigt den Versionssprung als vollständig, keine `versions.json` nötig.
+- Nicht geprüft: Verhalten in Obsidian; Tag, GitHub-Release, Attestierung und Push (gesperrt, Sache des Nutzers).
+- Morgens nötig: Merge nach main, echter Export, Release-Entwurf mit `main.js`, `manifest.json`, `styles.css` und den ZIPs, Push, Veröffentlichen (Ablauf in CLAUDE.md, „export-public“).

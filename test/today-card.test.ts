@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { Window } from "happy-dom";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Observable } from "../src/core/observable";
@@ -115,6 +116,8 @@ interface Welt {
   setBriefingDone: ReturnType<typeof vi.fn>;
   remindersDone: ReturnType<typeof vi.fn>;
   setReminderDone: ReturnType<typeof vi.fn>;
+  tasksDone: ReturnType<typeof vi.fn>;
+  setTaskDone: ReturnType<typeof vi.fn>;
   setDoneOpen: ReturnType<typeof vi.fn>;
   doneOpen: { value: boolean };
 }
@@ -178,6 +181,15 @@ function aufbau(o: { files?: Record<string, string>; settings?: Partial<CockpitS
     reminderStore.set(today, done ? [...items, item] : items);
     fireToday();
   });
+  const taskStore = new Map<string, string[]>();
+  const tasksDone = vi.fn((today: string) => [...(taskStore.get(today) ?? [])]);
+  const setTaskDone = vi.fn((today: string, key: string, done: boolean) => {
+    const keys = [...(taskStore.get(today) ?? [])];
+    if (done) keys.push(key);
+    else if (keys.includes(key)) keys.splice(keys.indexOf(key), 1);
+    taskStore.set(today, keys);
+    fireToday();
+  });
   const state = new Observable<RemindersState>(o.state ?? { kind: "ok", items: [] });
   const busy = new Set<string>();
   const setCompleted = vi.fn(async () => true);
@@ -196,6 +208,8 @@ function aufbau(o: { files?: Record<string, string>; settings?: Partial<CockpitS
     setBriefingDone,
     remindersDone,
     setReminderDone,
+    tasksDone,
+    setTaskDone,
     onTodayChange: (cb) => { todayHandlers.add(cb); return () => todayHandlers.delete(cb); },
     reminders,
     doneOpen: () => doneOpen.value,
@@ -208,7 +222,7 @@ function aufbau(o: { files?: Record<string, string>; settings?: Partial<CockpitS
     card,
     fireSettings: () => { for (const cb of [...settingsHandlers]) cb(settings); },
     el, files, settings, now, cachedRead, getFileByPath, process, openLinkText, fireVault, fireToday, state, setCompleted, busy, refresh,
-    briefingDone, setBriefingDone, remindersDone, setReminderDone, setDoneOpen, doneOpen,
+    briefingDone, setBriefingDone, remindersDone, setReminderDone, tasksDone, setTaskDone, setDoneOpen, doneOpen,
   };
 }
 
@@ -216,6 +230,15 @@ const kopf = (w: Welt) => w.el.querySelector<HTMLElement>(".cockpit-card-head")!
 const rumpf = (w: Welt) => w.el.querySelector<HTMLElement>(".cockpit-card-body")!;
 const eingabe = (w: Welt) => w.el.querySelector<HTMLInputElement>("input.cockpit-today-input")!;
 const erledigtKnopf = (w: Welt) => w.el.querySelector<HTMLElement>(".cockpit-today-done-toggle");
+/** Text des Knopfs ohne Knoten mit aria-hidden (der Pfeil), also so, wie ihn ein Screenreader als Namen liest. */
+const knopfName = (w: Welt): string | undefined => {
+  const knopf = erledigtKnopf(w);
+  if (!knopf) return undefined;
+  const kopie = knopf.cloneNode(true) as HTMLElement;
+  for (const versteckt of Array.from(kopie.querySelectorAll('[aria-hidden="true"]'))) versteckt.remove();
+  return kopie.textContent ?? "";
+};
+const pfeil = (w: Welt) => erledigtKnopf(w)?.querySelector<HTMLElement>(".cockpit-today-done-chevron") ?? null;
 /** Zeilen des offenen Teils (ohne den Bereich „Erledigt“). */
 const offen = (w: Welt) => all(rumpf(w), ".cockpit-task").filter((e) => !e.closest(".cockpit-today-done"));
 const erledigt = (w: Welt) => all(w.el, ".cockpit-today-done .cockpit-task");
@@ -227,9 +250,9 @@ const zeile = (rows: HTMLElement[], text: string): HTMLElement => {
 const geladen = async (w: Welt) => { await vi.waitFor(() => expect(kopf(w).textContent).toMatch(/\d+\/\d+/)); };
 
 describe("Karte „Heute“: Aufbau", () => {
-  it("a) Briefing, Aufgaben, Zähler und Erledigt zugeklappt", async () => {
+  it("a) Briefing, Aufgaben, Zähler (alter Haken der Datei zählt nicht) und Erledigt zugeklappt", async () => {
     const w = aufbau();
-    await vi.waitFor(() => expect(texts(kopf(w), ".cockpit-card-date")).toEqual(["1/4"]));
+    await vi.waitFor(() => expect(texts(kopf(w), ".cockpit-card-date")).toEqual(["0/3"]));
     expect(texts(kopf(w), ".cockpit-card-title")).toEqual(["Heute"]);
     expect(texts(rumpf(w), ".cockpit-today-source")).toEqual(["Briefing"]);
     expect(offen(w).map((e) => e.querySelector(".cockpit-task-text")?.textContent)).toEqual(["Punkt eins", "Siehe Notiz", "Offen"]);
@@ -239,16 +262,16 @@ describe("Karte „Heute“: Aufbau", () => {
       .filter((e) => !e.closest(".cockpit-today-done"))
       .map((e) => e.textContent?.replace(/^[☐☑]/, ""));
     expect(reihe).toEqual(["Briefing", "Punkt eins", "Siehe Notiz", "Liste", "Offen"]);
-    expect(erledigtKnopf(w)?.textContent).toBe("Erledigt (1)");
+    expect(knopfName(w)).toBe("Erledigt (1)");
     expect(erledigtKnopf(w)?.getAttribute("aria-expanded")).toBe("false");
     expect(erledigt(w)).toHaveLength(0);
-    expect(kopf(w).querySelector(".cockpit-progress-fill")?.getAttribute("style")).toMatch(/width: 25%/);
+    expect(kopf(w).querySelector(".cockpit-progress-fill")?.getAttribute("style")).toMatch(/width: 0%/);
   });
 
   it("Erledigt aufklappen: setDoneOpen(true), aria-expanded, die Zeilen durchgestrichen", async () => {
     const w = aufbau();
     await geladen(w);
-    expect(erledigtKnopf(w)?.textContent).toBe("Erledigt (1)");
+    expect(knopfName(w)).toBe("Erledigt (1)");
     click(erledigtKnopf(w)!);
     expect(w.setDoneOpen).toHaveBeenCalledWith(true);
     expect(erledigtKnopf(w)?.getAttribute("aria-expanded")).toBe("true");
@@ -256,6 +279,72 @@ describe("Karte „Heute“: Aufbau", () => {
     click(erledigtKnopf(w)!);
     expect(w.setDoneOpen).toHaveBeenLastCalledWith(false);
     expect(erledigt(w)).toHaveLength(0);
+  });
+
+  it("Knopf „Erledigt“ (Nachtrag 44e): Pfeil als eigenes span vor dem Text, aria-hidden, ▸ zu und ▾ auf", async () => {
+    const w = aufbau();
+    await geladen(w);
+    const zu = pfeil(w);
+    expect(zu, "Pfeil-span").not.toBeNull();
+    expect(zu!.tagName).toBe("SPAN");
+    expect(zu!.getAttribute("aria-hidden")).toBe("true");
+    expect(zu!.textContent).toBe("▸");
+    expect(erledigtKnopf(w)!.firstElementChild).toBe(zu);
+    expect(erledigtKnopf(w)!.textContent).toBe("▸Erledigt (1)");
+    expect(knopfName(w)).toBe("Erledigt (1)");
+    expect(erledigtKnopf(w)!.getAttribute("aria-expanded")).toBe("false");
+    expect(erledigtKnopf(w)!.hasAttribute("aria-label"), "kein aria-label, der Name kommt aus dem Text").toBe(false);
+    click(erledigtKnopf(w)!);
+    expect(pfeil(w)?.textContent).toBe("▾");
+    expect(pfeil(w)?.getAttribute("aria-hidden")).toBe("true");
+    expect(knopfName(w)).toBe("Erledigt (1)");
+    expect(erledigtKnopf(w)!.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("Knopf „Erledigt“: aufgeklappt geladen (doneOpen) zeigt sofort ▾", async () => {
+    const w = aufbau({ doneOpen: true });
+    await geladen(w);
+    expect(pfeil(w)?.textContent).toBe("▾");
+    expect(knopfName(w)).toBe("Erledigt (1)");
+  });
+
+  it("CSS-Wächter: Knopf mindestens 28 px hoch, inline-flex, height auto bleibt, Pfeil blass und 1em breit, kein all:", () => {
+    const css = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const regeln = (sel: string): string[] => {
+      const re = new RegExp(`(^|\\n|[},])\\s*${sel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`, "g");
+      return Array.from(css.matchAll(re), (m) => m[2]);
+    };
+    const regel = (sel: string): string => {
+      const alle = regeln(sel);
+      expect(alle, `Regel ${sel} genau einmal`).toHaveLength(1);
+      return alle[0];
+    };
+    // Deklarationen in eine Map, die letzte gewinnt; Werte per Gleichheit.
+    const werte = (body: string): Map<string, string> => {
+      const map = new Map<string, string>();
+      for (const teil of body.split(";")) {
+        const i = teil.indexOf(":");
+        if (i > 0) map.set(teil.slice(0, i).trim(), teil.slice(i + 1).trim());
+      }
+      return map;
+    };
+    const knopf = regel(".cockpit-today-done-toggle");
+    const k = werte(knopf);
+    expect(Object.fromEntries(["min-height", "display", "align-items", "gap", "padding", "height", "background", "box-shadow", "color"].map((n) => [n, k.get(n)]))).toEqual({
+      "min-height": "28px",
+      display: "inline-flex",
+      "align-items": "center",
+      gap: "4px",
+      padding: "4px 8px",
+      height: "auto",
+      background: "none",
+      "box-shadow": "none",
+      color: "var(--text-muted)",
+    });
+    expect(knopf).not.toMatch(/(^|[;{\s])all\s*:/);
+    const chevron = regel(".cockpit-today-done-chevron");
+    expect(chevron).toContain("color: var(--text-faint);");
+    expect(chevron).toContain("width: 1em;");
   });
 
   it("nichts offen: Hinweis „Nichts offen“", async () => {
@@ -387,7 +476,8 @@ describe("Karte „Heute“: Tag und Einstellungen", () => {
     await geladen(w);
     expect(w.cachedRead.mock.calls.map((c) => (c[0] as { path: string }).path)).not.toContain(`${DIR}/${HEUTE}.md`);
     expect(texts(rumpf(w), ".cockpit-today-source")).toEqual([]);
-    expect(texts(kopf(w), ".cockpit-card-date")).toEqual(["1/2"]);
+    // Nachtrag 44e: „Fertig“ ist ein alter Haken der Datei und zählt nicht als heute erledigt.
+    expect(texts(kopf(w), ".cockpit-card-date")).toEqual(["0/1"]);
   });
 });
 
@@ -934,5 +1024,81 @@ describe("Karte „Heute“: Erinnerungen, Fix-Runde 1", () => {
     // Kein Neuzeichnen: dieselbe Zeile, noch als belegt gezeichnet.
     expect(zeile(offen(w), "Anrufen")).toBe(gesperrt);
     expect(gesperrt.classList.contains("cockpit-task-busy")).toBe(true);
+  });
+});
+
+describe("Karte „Heute“: Tagesstand der Aufgaben (Nachtrag 44e)", () => {
+  it("erfolgreiches Abhaken ruft setTaskDone(Tag des Klicks, pointKey, true), der Zähler steigt", async () => {
+    const w = aufbau({ files: { [TASKS]: "- [ ] Erste Aufgabe\n- [ ] Zweite\n- [x] Alt\n" } });
+    await vi.waitFor(() => expect(texts(kopf(w), ".cockpit-card-date")).toEqual(["0/2"]));
+    click(zeile(offen(w), "Erste Aufgabe"));
+    await vi.waitFor(() => expect(w.setTaskDone).toHaveBeenCalledTimes(1));
+    expect(w.setTaskDone).toHaveBeenCalledWith(HEUTE, "erste aufgabe", true);
+    await vi.waitFor(() => expect(texts(kopf(w), ".cockpit-card-date")).toEqual(["1/2"]));
+  });
+
+  it("Zurückholen unter Erledigt ruft setTaskDone(…, false) mit dem Schlüssel; der Tag ist der des Klicks (nach Mitternacht)", async () => {
+    const w = aufbau({ files: { [TASKS]: "- [x] Fertig Heute\n" }, doneOpen: true });
+    await vi.waitFor(() => expect(erledigt(w)).toHaveLength(1));
+    w.now.value = new Date(2026, 10, 12, 0, 5);
+    click(zeile(erledigt(w), "Fertig Heute"));
+    await vi.waitFor(() => expect(w.setTaskDone).toHaveBeenCalledTimes(1));
+    expect(w.setTaskDone).toHaveBeenCalledWith(MORGEN, "fertig heute", false);
+  });
+
+  it("scheitert vault.process, wird setTaskDone nicht aufgerufen", async () => {
+    const w = aufbau({ files: { [TASKS]: "- [ ] Offen\n" } });
+    await vi.waitFor(() => expect(offen(w)).toHaveLength(1));
+    w.process.mockImplementationOnce(async () => { throw new Error("Platte voll"); });
+    click(zeile(offen(w), "Offen"));
+    await vi.waitFor(() => expect(notices.some((n) => n.includes("nicht umgeschaltet"))).toBe(true));
+    expect(w.setTaskDone).not.toHaveBeenCalled();
+  });
+
+  it("schon erledigt (Datei zwischenzeitlich geändert, zweiter Klick): setTaskDone wird nicht aufgerufen", async () => {
+    const w = aufbau({ files: { [TASKS]: "- [ ] Offen\n" } });
+    await vi.waitFor(() => expect(offen(w)).toHaveLength(1));
+    const row = zeile(offen(w), "Offen");
+    w.files.set(TASKS, "- [x] Offen\n");
+    click(row);
+    await vi.waitFor(() => expect(w.process).toHaveBeenCalledTimes(1));
+    await flush();
+    expect(w.setTaskDone).not.toHaveBeenCalled();
+    expect(w.files.get(TASKS)).toBe("- [x] Offen\n");
+  });
+
+  it("leerer Schlüssel (Text nur aus Markdown-Zeichen): Umschalten schreibt, setTaskDone wird nicht aufgerufen", async () => {
+    const w = aufbau({ files: { [TASKS]: "- [ ] **\n- [ ] Andere\n" } });
+    await vi.waitFor(() => expect(offen(w)).toHaveLength(2));
+    click(zeile(offen(w), "**"));
+    await vi.waitFor(() => expect(w.process).toHaveBeenCalledTimes(1));
+    await flush();
+    expect(w.files.get(TASKS)).toContain("- [x] **");
+    expect(w.setTaskDone).not.toHaveBeenCalled();
+  });
+
+  it("Tag ist der des Klicks, auch wenn Mitternacht während vault.process vergeht (wie toggleReminder)", async () => {
+    const w = aufbau({ files: { [TASKS]: "- [ ] Spaet\n" } });
+    await vi.waitFor(() => expect(offen(w)).toHaveLength(1));
+    w.now.value = new Date(2026, 10, 11, 23, 59, 59, 999);
+    w.process.mockImplementationOnce(async (f: { path: string }, fn: (d: string) => string) => {
+      w.now.value = new Date(2026, 10, 12, 0, 0, 0, 1);
+      const next = fn(w.files.get(f.path) ?? "");
+      w.files.set(f.path, next);
+      return next;
+    });
+    click(zeile(offen(w), "Spaet"));
+    await vi.waitFor(() => expect(w.setTaskDone).toHaveBeenCalledTimes(1));
+    expect(w.setTaskDone).toHaveBeenCalledWith(HEUTE, "spaet", true);
+  });
+
+  it("Kopf: nichts offen und nichts heute erledigt (total 0): Zähltext leer und ausgeblendet, Balken 0 %", async () => {
+    const w = aufbau({ files: { [TASKS]: "- [x] Alt 1\n- [x] Alt 2\n" } });
+    await vi.waitFor(() => expect(texts(rumpf(w), ".cockpit-hint")).toEqual(["Nichts offen"]));
+    const zaehler = kopf(w).querySelector<HTMLElement>(".cockpit-card-date")!;
+    expect(zaehler.hidden).toBe(true);
+    expect(zaehler.textContent).toBe("");
+    expect(kopf(w).querySelector(".cockpit-progress-fill")?.getAttribute("style")).toMatch(/width: 0%/);
+    expect(knopfName(w)).toBe("Erledigt (2)");
   });
 });

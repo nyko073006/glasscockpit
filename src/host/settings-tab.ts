@@ -275,7 +275,7 @@ export class CockpitSettingTab extends PluginSettingTab {
         this.toggleField(
           "remindersEnabled", "Erinnerungen in „Heute“ (nur macOS)",
           "An: Offene Erinnerungen der App „Erinnerungen“, fällig heute oder früher, stehen in der Karte „Heute“; Abhaken setzt sie in der App auf erledigt. Liest per AppleScript, macOS fragt beim ersten Mal nach der Freigabe."
-            + (win ? " Unter Windows nicht verfügbar." : ""),
+            + (win ? " Unter Windows nicht verfügbar." : " Gilt auf jedem Mac, der diesen Vault synchronisiert."),
           undefined,
           // Unter Windows gesperrt, der gespeicherte Wert bleibt (ein Vault kann zwischen Mac und Windows wandern).
           win ? () => true : undefined,

@@ -34,14 +34,16 @@ export interface BriefingDone { date: string; keys: string[] }
 export interface ReminderDone { id: string; name: string }
 /** Abend 44: abgehakte Erinnerungen eines Tages (`date` lokal JJJJ-MM-TT). */
 export interface RemindersDone { date: string; items: ReminderDone[] }
+/** Nachtrag 44e: heute in der Karte abgehakte Aufgaben (`keys` = pointKey des Texts, Dopplungen erlaubt: Mehrfachmenge). */
+export interface TasksDone { date: string; keys: string[] }
 export interface CockpitData {
   schemaVersion: 1; sessions: SessionRecord[]; settings: CockpitSettings; recentSkills: string[]; openAtUnload: string[]; dashboardAtUnload: DashboardMemo;
   /** Erledigt-Stand der Karte „Heute“ (Abend 44); null = nichts gespeichert. */
-  briefingDone: BriefingDone | null; remindersDone: RemindersDone | null;
+  briefingDone: BriefingDone | null; remindersDone: RemindersDone | null; tasksDone: TasksDone | null;
 }
 
 export function emptyData(): CockpitData {
-  return { schemaVersion: 1, sessions: [], settings: { ...DEFAULT_SETTINGS }, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null };
+  return { schemaVersion: 1, sessions: [], settings: { ...DEFAULT_SETTINGS }, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null, tasksDone: null };
 }
 
 export interface ParseResult { data: CockpitData; reason: string | null }
@@ -96,6 +98,15 @@ function parseBriefingDone(v: unknown): BriefingDone | null {
   return { date: o.date, keys: keys.slice(0, TODAY_DONE_MAX) };
 }
 
+/** Abgehakte Aufgaben (Nachtrag 44e): wie parseBriefingDone, aber Dopplungen bleiben (Mehrfachmenge); leere Strings fallen raus, höchstens TODAY_DONE_MAX. */
+function parseTasksDone(v: unknown): TasksDone | null {
+  const o = asObject(v);
+  if (o === null || typeof o.date !== "string" || !DAY.test(o.date) || !Array.isArray(o.keys)) return null;
+  const keys: string[] = [];
+  for (const k of o.keys) if (isText(k)) keys.push(k);
+  return { date: o.date, keys: keys.slice(0, TODAY_DONE_MAX) };
+}
+
 /** Abgehakte Erinnerungen (Abend 44): wie parseBriefingDone; ein Eintrag braucht eine nicht leere `id` und einen Text als `name`, Dopplungen nach `id` fallen raus. */
 function parseRemindersDone(v: unknown): RemindersDone | null {
   const o = asObject(v);
@@ -138,7 +149,7 @@ export function parseData(raw: unknown): ParseResult {
   const { settings, invalid } = parseSettings(obj.settings);
   if (invalid.length > 0) reasons.push(`Einstellungen auf Vorgabe zurückgesetzt: ${invalid.join(", ")}`);
   return {
-    data: { schemaVersion: 1, sessions, settings, recentSkills: parseRecents(obj.recentSkills), openAtUnload: parseIdList(obj.openAtUnload), dashboardAtUnload: parseDashboardMemo(obj.dashboardAtUnload), briefingDone: parseBriefingDone(obj.briefingDone), remindersDone: parseRemindersDone(obj.remindersDone) },
+    data: { schemaVersion: 1, sessions, settings, recentSkills: parseRecents(obj.recentSkills), openAtUnload: parseIdList(obj.openAtUnload), dashboardAtUnload: parseDashboardMemo(obj.dashboardAtUnload), briefingDone: parseBriefingDone(obj.briefingDone), remindersDone: parseRemindersDone(obj.remindersDone), tasksDone: parseTasksDone(obj.tasksDone) },
     reason: reasons.length > 0 ? reasons.join("; ") : null,
   };
 }

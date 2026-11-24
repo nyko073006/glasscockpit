@@ -2,7 +2,7 @@ import { asError } from "./as-error";
 import { SAVE_DEBOUNCE_MS, TODAY_DONE_MAX } from "./constants";
 import {
   addSession, pruneUnused, removeSession, renameSession, setClaudeId,
-  type BriefingDone, type Change, type CockpitData, type DashboardMemo, type ReminderDone, type RemindersDone, type SessionRecord,
+  type BriefingDone, type Change, type CockpitData, type DashboardMemo, type ReminderDone, type RemindersDone, type SessionRecord, type TasksDone,
 } from "./session-model";
 import { pushRecent } from "./recents";
 import { DEFAULT_SETTINGS, applyDependencies, dependencyReason, normalizeSetting, validateSetting, type CockpitSettings } from "./settings";
@@ -24,6 +24,7 @@ export class SessionStore {
   private dashboardMemo: DashboardMemo;
   private briefingState: BriefingDone | null;
   private remindersState: RemindersDone | null;
+  private tasksState: TasksDone | null;
   private readonly recentsListeners = new Set<() => void>();
   private readonly todayListeners = new Set<() => void>();
   private readonly changeListeners = new Set<(id: string | null) => void>();
@@ -55,6 +56,7 @@ export class SessionStore {
     this.dashboardMemo = initial.dashboardAtUnload;
     this.briefingState = initial.briefingDone === null ? null : { date: initial.briefingDone.date, keys: [...initial.briefingDone.keys] };
     this.remindersState = initial.remindersDone === null ? null : { date: initial.remindersDone.date, items: initial.remindersDone.items.map((i) => ({ ...i })) };
+    this.tasksState = initial.tasksDone === null ? null : { date: initial.tasksDone.date, keys: [...initial.tasksDone.keys] };
   }
 
   recentSkills(): string[] { return [...this.recents]; }
@@ -93,6 +95,27 @@ export class SessionStore {
     if (items.some((i) => i.id === item.id) === done) return;
     if (done && items.length >= TODAY_DONE_MAX) return;
     this.remindersState = { date: today, items: done ? [...items, { id: item.id, name: item.name }] : items.filter((i) => i.id !== item.id) };
+    this.todayChanged();
+  }
+  /** Heute in der Karte abgehakte Aufgaben (pointKey, Dopplungen erlaubt) von `today`; ein Stand von einem anderen Tag gilt nicht. */
+  tasksDone(today: string): string[] {
+    return this.tasksState !== null && this.tasksState.date === today ? [...this.tasksState.keys] : [];
+  }
+  /**
+   * Aufgabe abhaken (hängt einen Eintrag an, Obergrenze gilt) oder zurücknehmen (entfernt genau ein Vorkommen; keins da:
+   * nichts schreiben, nichts melden). Mehrfachmenge: zwei gleichnamige Aufgaben ergeben zwei Einträge. Anderer Tag: Stand verworfen.
+   */
+  setTaskDone(today: string, key: string, done: boolean): void {
+    const keys = this.tasksDone(today);
+    if (done) {
+      if (keys.length >= TODAY_DONE_MAX) return;
+      keys.push(key);
+    } else {
+      const at = keys.indexOf(key);
+      if (at < 0) return;
+      keys.splice(at, 1);
+    }
+    this.tasksState = { date: today, keys };
     this.todayChanged();
   }
   onTodayChange(cb: () => void): () => void {
@@ -213,6 +236,7 @@ export class SessionStore {
     const data: CockpitData = { schemaVersion: 1, sessions: [...this.sessions], settings: { ...this.current }, recentSkills: [...this.recents], openAtUnload: [...this.openList], dashboardAtUnload: this.dashboardMemo === null ? null : { ...this.dashboardMemo }, 
       briefingDone: this.briefingState === null ? null : { date: this.briefingState.date, keys: [...this.briefingState.keys] },
       remindersDone: this.remindersState === null ? null : { date: this.remindersState.date, items: this.remindersState.items.map((i) => ({ ...i })) },
+      tasksDone: this.tasksState === null ? null : { date: this.tasksState.date, keys: [...this.tasksState.keys] },
     };
     // Sofort aufrufen (nicht erst in einem Promise-Schritt); inflight sammelt nur, worauf flush wartet.
     let result: Promise<void>;

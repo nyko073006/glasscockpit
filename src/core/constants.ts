@@ -288,7 +288,7 @@ export const DEFAULT_REMINDERS_OVERDUE = true;
 export const DEFAULT_REMINDERS_INTERVAL_MIN = 5;
 // Zeitlimit eines osascript-Aufrufs der Erinnerungen (Stapelabfrage gemessen rund 4 s).
 export const REMINDERS_TIMEOUT_MS = 20000;
-// Höchstens so viele Einträge je Tag im Erledigt-Stand (briefingDone.keys, remindersDone.items) der data.json.
+// Höchstens so viele Einträge je Tag im Erledigt-Stand (briefingDone.keys, remindersDone.items, tasksDone.keys) der data.json.
 export const TODAY_DONE_MAX = 500;
 // Leer = nicht eingerichtet (Abend 21): inboxDir, indexFile, dailyDir.
 export const DEFAULT_INBOX_DIR = "";

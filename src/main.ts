@@ -405,6 +405,8 @@ export default class GlasscockpitPlugin extends Plugin {
           setBriefingDone: (today, key, done) => store.setBriefingDone(today, key, done),
           remindersDone: (today) => store.remindersDone(today),
           setReminderDone: (today, item, done) => store.setReminderDone(today, item, done),
+          tasksDone: (today) => store.tasksDone(today),
+          setTaskDone: (today, key, done) => store.setTaskDone(today, key, done),
           onTodayChange: (cb) => store.onTodayChange(cb),
         }),
     );

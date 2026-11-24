@@ -53,7 +53,30 @@ describe("Karte „Heute“: Verdrahtung", () => {
       /remindersDone: \(today\) => store\.remindersDone\(today\)/,
       /setReminderDone: \(today, item, done\) => store\.setReminderDone\(today, item, done\)/,
       /onTodayChange: \(cb\) => store\.onTodayChange\(cb\)/,
+      // Nachtrag 44e: Tagesstand der Aufgaben, nicht mit dem des Briefings vertauschbar.
+      /tasksDone: \(today\) => store\.tasksDone\(today\),/,
+      /setTaskDone: \(today, key, done\) => store\.setTaskDone\(today, key, done\)/,
     ]) expect([re.source, re.test(dash)]).toEqual([re.source, true]);
+  });
+
+  it("Nachtrag 44e: tasksDone und setTaskDone laufen unvertauscht von main.ts über das Dashboard in die Karte, das Instrument liest listed", () => {
+    const card = view.slice(view.indexOf("new TasksCard("), view.indexOf("});", view.indexOf("new TasksCard(")));
+    for (const re of [/\btasksDone: this\.deps\.tasksDone,/, /\bsetTaskDone: this\.deps\.setTaskDone,/, /\bbriefingDone: this\.deps\.briefingDone,/, /\bsetBriefingDone: this\.deps\.setBriefingDone,/]) {
+      expect([re.source, re.test(card)]).toEqual([re.source, true]);
+    }
+    expect(card).not.toMatch(/tasksDone: this\.deps\.briefingDone|setTaskDone: this\.deps\.setBriefingDone|briefingDone: this\.deps\.tasksDone|setBriefingDone: this\.deps\.setTaskDone/);
+    const dash = main.slice(main.indexOf("new DashboardView(leaf, {"), main.indexOf("}),", main.indexOf("new DashboardView(leaf, {")));
+    expect(dash).not.toMatch(/tasksDone: [^\n]*store\.briefingDone|setTaskDone: [^\n]*store\.setBriefingDone|briefingDone: [^\n]*store\.tasksDone|setBriefingDone: [^\n]*store\.setTaskDone/);
+    // Instrument der Cockpit-Ansicht: alte Zählweise (offen plus alles unter Erledigt), nicht der Kopfzähler.
+    expect(view).toMatch(/total: tasks\.today\.listed,/);
+    expect(view).not.toMatch(/total: tasks\.today\.total/);
+    // Die Karte setzt den Tagesstand der Aufgaben nach erfolgreichem vault.process, nie über den Briefing-Setzer.
+    const cardSrc = readFileSync(join(ROOT, "src/host/tasks-card.ts"), "utf8");
+    const toggle = cardSrc.slice(cardSrc.indexOf("private async toggle("), cardSrc.indexOf("private async addTask("));
+    expect(toggle.indexOf("vault.process")).toBeGreaterThan(-1);
+    expect(toggle.indexOf("this.deps.setTaskDone(")).toBeGreaterThan(toggle.indexOf("vault.process"));
+    expect(toggle).not.toMatch(/setBriefingDone/);
+    expect(cardSrc).toMatch(/tasksDone: this\.deps\.tasksDone\(today\),/);
   });
 
   it("das Dashboard meldet Öffnen und Schließen beim Erinnerungen-Controller neben dem Pull", () => {

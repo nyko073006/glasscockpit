@@ -8,7 +8,7 @@ const rec = (id: string, name = "claude"): SessionRecord =>
 
 describe("parseData", () => {
   it("fehlend ergibt Defaults ohne Grund", () => {
-    expect(parseData(undefined)).toEqual({ data: { schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null }, reason: null });
+    expect(parseData(undefined)).toEqual({ data: { schemaVersion: 1, sessions: [], settings: DEFAULT_SETTINGS, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null, tasksDone: null }, reason: null });
     expect(parseData(null).reason).toBeNull();
   });
   it("kaputt ergibt Defaults mit Grund", () => {
@@ -27,7 +27,7 @@ describe("parseData", () => {
     expect(parseData({ schemaVersion: 1, sessions: {} }).reason).toMatch(/keine Liste/);
   });
   it("gültig bleibt gleich", () => {
-    const data = { schemaVersion: 1, sessions: [rec("a"), { ...rec("b", "Briefing"), kind: "agent", agentName: "stefan" }], settings: DEFAULT_SETTINGS, recentSkills: ["lint", "council"], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null };
+    const data = { schemaVersion: 1, sessions: [rec("a"), { ...rec("b", "Briefing"), kind: "agent", agentName: "stefan" }], settings: DEFAULT_SETTINGS, recentSkills: ["lint", "council"], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null, tasksDone: null };
     expect(parseData(data)).toEqual({ data, reason: null });
   });
   it("ungültige und doppelte Einträge fliegen, gültige bleiben", () => {
@@ -136,7 +136,7 @@ describe("parseDataText", () => {
     }
   });
   it("gültiges JSON geht durch parseData", () => {
-    const data = { schemaVersion: 1, sessions: [rec("a")], settings: DEFAULT_SETTINGS, recentSkills: ["x"], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null };
+    const data = { schemaVersion: 1, sessions: [rec("a")], settings: DEFAULT_SETTINGS, recentSkills: ["x"], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null, tasksDone: null };
     expect(parseDataText(JSON.stringify(data))).toEqual({ data, reason: null });
     expect(parseDataText("42").reason).toBe("data.json ist kein Objekt");
   });
@@ -276,7 +276,7 @@ describe("openAtUnload in data.json (Abend 19c)", () => {
     expect(parseData({ ...base, openAtUnload: ["b", 3, "", "b", "a"] }).data.openAtUnload).toEqual(["b", "a"]);
   });
   it("übersteht den Weg durch JSON", () => {
-    const data = { ...base, openAtUnload: ["a"], dashboardAtUnload: null, briefingDone: null, remindersDone: null };
+    const data = { ...base, openAtUnload: ["a"], dashboardAtUnload: null, briefingDone: null, remindersDone: null, tasksDone: null };
     expect(parseDataText(JSON.stringify(data)).data).toEqual(data);
   });
 });
@@ -330,7 +330,7 @@ describe("dashboardAtUnload in data.json (Abend 19e)", () => {
     }
   });
   it("übersteht den Weg durch JSON", () => {
-    const data = { ...base, dashboardAtUnload: { area: "right" }, briefingDone: null, remindersDone: null };
+    const data = { ...base, dashboardAtUnload: { area: "right" }, briefingDone: null, remindersDone: null, tasksDone: null };
     expect(parseDataText(JSON.stringify(data)).data).toEqual(data);
   });
 });
@@ -374,5 +374,36 @@ describe("reopenNotice (Abend 19e)", () => {
   it("nur Sitzungen: Text wie seit Abend 19c", () => {
     expect(reopenNotice(1, false)).toBe("Glasscockpit: 1 Sitzung wieder geöffnet");
     expect(reopenNotice(3, false)).toBe("Glasscockpit: 3 Sitzungen wieder geöffnet");
+  });
+});
+
+describe("Aufgaben-Stand der Karte „Heute“ (Nachtrag 44e): parseTasksDone", () => {
+  const base = { schemaVersion: 1, sessions: [] };
+  it("fehlt das Feld: null, kein Grund", () => {
+    const r = parseData(base);
+    expect(r.data.tasksDone).toBeNull();
+    expect(r.reason).toBeNull();
+  });
+  it("gültiger Wert wird übernommen, Dopplungen bleiben (Mehrfachmenge)", () => {
+    const r = parseData({ ...base, tasksDone: { date: "2026-11-11", keys: ["milch", "brot", "milch"] } });
+    expect(r.data.tasksDone).toEqual({ date: "2026-11-11", keys: ["milch", "brot", "milch"] });
+    expect(r.reason).toBeNull();
+  });
+  it("kaputt (kein Objekt, date kein Tag, keys kein Array) ergibt null, nie einen Grund", () => {
+    for (const tasksDone of [5, "x", [], null, { date: 5, keys: ["a"] }, { date: "2026-11-1", keys: ["a"] }, { date: "2026-11-11", keys: "x" }, { date: "2026-11-11" }]) {
+      const r = parseData({ ...base, tasksDone });
+      expect(r.data.tasksDone, JSON.stringify(tasksDone)).toBeNull();
+      expect(r.reason).toBeNull();
+    }
+  });
+  it("Nicht-Strings und leere Strings fallen raus", () => {
+    const r = parseData({ ...base, tasksDone: { date: "2026-11-11", keys: ["a", 5, "", "  ", null, "a"] } });
+    expect(r.data.tasksDone).toEqual({ date: "2026-11-11", keys: ["a", "a"] });
+  });
+  it("höchstens TODAY_DONE_MAX Einträge, die ersten bleiben", () => {
+    const keys = Array.from({ length: TODAY_DONE_MAX + 20 }, (_, i) => `k${i % 7}`);
+    const r = parseData({ ...base, tasksDone: { date: "2026-11-11", keys } });
+    expect(r.data.tasksDone?.keys).toHaveLength(TODAY_DONE_MAX);
+    expect(r.data.tasksDone?.keys[0]).toBe("k0");
   });
 });

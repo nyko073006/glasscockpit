@@ -56,6 +56,8 @@ export interface DashboardDeps {
   setBriefingDone: (today: string, key: string, done: boolean) => void;
   remindersDone: (today: string) => ReminderDone[];
   setReminderDone: (today: string, item: ReminderDone, done: boolean) => void;
+  tasksDone: (today: string) => string[];
+  setTaskDone: (today: string, key: string, done: boolean) => void;
   onTodayChange: (cb: () => void) => () => void;
   /** Erinnerungen-Zustand und Takt, gehört dem Plugin (eine Instanz für alle Dashboards). */
   reminders: RemindersController;
@@ -165,6 +167,8 @@ export class DashboardView extends ItemView {
       setBriefingDone: this.deps.setBriefingDone,
       remindersDone: this.deps.remindersDone,
       setReminderDone: this.deps.setReminderDone,
+      tasksDone: this.deps.tasksDone,
+      setTaskDone: this.deps.setTaskDone,
       onTodayChange: this.deps.onTodayChange,
       reminders: this.deps.reminders,
       doneOpen: () => this.doneOpen,
@@ -209,7 +213,7 @@ export class DashboardView extends ItemView {
     this.register(this.deps.onSettingsChange((s) => {
       if (briefingLoadKey(s) !== this.loadedKey) this.reload?.();
     }));
-    // Erledigt-Stand des Tages geändert (feuert nur bei setBriefingDone und setReminderDone, nicht beim Tageswechsel): Haken
+    // Erledigt-Stand des Tages geändert (feuert nur bei setBriefingDone, setReminderDone und setTaskDone, nicht beim Tageswechsel): Haken
     // neu zeichnen, entprellt. Der eigene Klick lädt sofort (onToggle). Der Tausch des gerenderten Elements läuft synchron;
     // die Scrollposition soll dabei erhalten bleiben, in Obsidian noch nicht gemessen.
     this.register(this.deps.onTodayChange(() => {
@@ -310,7 +314,7 @@ export class DashboardView extends ItemView {
   private cockpitInputs(): CockpitInputs {
     const tasks = this.tasks?.data.get() ?? null;
     const tasksInput: TasksInput | null =
-      tasks === null ? null : { open: tasks.today.openTexts, total: tasks.today.total, tasksMissing: tasks.today.tasksMissing };
+      tasks === null ? null : { open: tasks.today.openTexts, total: tasks.today.listed, tasksMissing: tasks.today.tasksMissing };
     return {
       now: Date.now(),
       briefing: this.briefing.get(),

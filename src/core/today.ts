@@ -1,5 +1,5 @@
 // Reine Logik der Karte „Heute“: Aufgabe einfügen, drei Quellen zusammenführen. Kein Import von obsidian.
-import { RULE, fenceStep, headingOf, type BriefingPoint } from "./focus";
+import { RULE, fenceStep, headingOf, pointKey, type BriefingPoint } from "./focus";
 import { splitFrontmatter } from "./frontmatter";
 import type { DueReminder } from "./reminders";
 import type { ReminderDone } from "./session-model";
@@ -19,6 +19,8 @@ export interface TodayInput {
   briefingDone: readonly string[];
   reminders: DueReminder[];
   remindersDone: readonly ReminderDone[];
+  /** Schlüssel (pointKey) der heute in der Karte abgehakten Aufgaben, Mehrfachmenge. */
+  tasksDone: readonly string[];
   /** null = Datei fehlt. */
   tasks: TaskRow[] | null;
 }
@@ -28,6 +30,8 @@ export interface TodayView {
   done: TodayRow[];
   doneCount: number;
   total: number;
+  /** Offene Punkte plus alles unter Erledigt (der alte `total`), fürs Instrument der Cockpit-Ansicht. */
+  listed: number;
   openTexts: string[];
   tasksMissing: boolean;
 }
@@ -175,11 +179,28 @@ export function todayView(i: TodayInput): TodayView {
   }
 
   const points = open.filter((r) => r.kind !== "source" && r.kind !== "heading");
+  // Heute erledigt: Briefing und Erinnerungen wie sie unter Erledigt stehen, Aufgaben nur mit Eintrag in tasksDone. Je Schlüssel
+  // höchstens so viele wie Einträge (Mehrfachmenge) und erledigte Zeilen; ein leerer Schlüssel zählt nie.
+  const budget = new Map<string, number>();
+  for (const k of i.tasksDone) if (k !== "") budget.set(k, (budget.get(k) ?? 0) + 1);
+  let doneCount = 0;
+  for (const r of done) {
+    if (r.kind !== "task") {
+      doneCount++;
+      continue;
+    }
+    const key = pointKey(r.text);
+    const left = budget.get(key) ?? 0;
+    if (left <= 0) continue;
+    budget.set(key, left - 1);
+    doneCount++;
+  }
   return {
     open,
     done,
-    doneCount: done.length,
-    total: points.length + done.length,
+    doneCount,
+    total: points.length + doneCount,
+    listed: points.length + done.length,
     openTexts: points.map((r) => r.text),
     tasksMissing: i.tasks === null,
   };

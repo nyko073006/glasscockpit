@@ -131,7 +131,7 @@ describe("sessionFilesToDelete: älter als 24 h", () => {
 
 describe("Kippschalter über den Store (Abend 29): wie toggleTelegram und toggleSound in main.ts", () => {
   const storeWith = (over: Partial<CockpitSettings>) => new SessionStore(
-    { schemaVersion: 1, sessions: [], settings: { ...DEFAULT_SETTINGS, ...over }, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null },
+    { schemaVersion: 1, sessions: [], settings: { ...DEFAULT_SETTINGS, ...over }, recentSkills: [], openAtUnload: [], dashboardAtUnload: null, briefingDone: null, remindersDone: null, tasksDone: null },
     async () => {}, new FakeTimers(), 300,
   );
   it("Telegram aus einem Mischzustand: ein Event, darin beide Felder schon aus", () => {

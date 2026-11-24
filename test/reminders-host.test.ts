@@ -427,3 +427,159 @@ describe("runOsascript", () => {
     await expect(runOsascript("SKRIPT", [])).rejects.toThrow(/killed/);
   });
 });
+
+describe("RemindersController: Zurückholen sofort offen", () => {
+  it("abgehakt, dann zurückgeholt: der Eintrag steht vor dem Leselauf wieder in items", async () => {
+    const t = await geladen(["x"]);
+    const haken = t.ctl.setCompleted("x", true); // calls[1]
+    t.offen[1].resolve("");
+    await haken;
+    expect(t.ctl.state.get()).toEqual({ kind: "ok", items: [] });
+    const zurueck = t.ctl.setCompleted("x", false); // calls[2]
+    t.offen[2].resolve("");
+    expect(await zurueck).toBe(true);
+    expect(leseLaeufe(t)).toBe(2); // ein Leselauf angestoßen, er hängt (calls[3])
+    expect(t.ctl.state.get()).toEqual({ kind: "ok", items: [item("x")] });
+    t.offen[3].resolve(ausgabe("x"));
+    await flush();
+    expect(t.ctl.state.get()).toEqual({ kind: "ok", items: [item("x")] });
+  });
+
+  it("Zustand error vor dem Zurückholen: Art und Meldung bleiben, nur items ändert sich", async () => {
+    const t = await geladen(["x"]);
+    const haken = t.ctl.setCompleted("x", true);
+    t.offen[1].resolve("");
+    await haken;
+    const lesen = t.ctl.refresh(); // calls[2], scheitert
+    t.offen[2].reject(new Error("execution error: kaputt (-1)"));
+    await lesen;
+    const vorher = t.ctl.state.get();
+    expect(vorher.kind).toBe("error");
+    const zurueck = t.ctl.setCompleted("x", false); // calls[3]
+    t.offen[3].resolve("");
+    await zurueck;
+    if (vorher.kind !== "error") throw new Error("Vorbedingung: Zustand error");
+    expect(t.ctl.state.get()).toEqual({ kind: "error", message: vorher.message, items: [item("x")] });
+  });
+
+  it("unbekannte id: items bleibt bis zum Leselauf unverändert", async () => {
+    const t = await geladen(["y"]);
+    const zurueck = t.ctl.setCompleted("x", false);
+    t.offen[1].resolve("");
+    expect(await zurueck).toBe(true);
+    expect(t.ctl.state.get()).toEqual({ kind: "ok", items: [item("y")] });
+    expect(leseLaeufe(t)).toBe(2);
+  });
+
+  it("Fehler beim Zurückholen: items unverändert, der Eintrag bleibt für einen zweiten Versuch gemerkt", async () => {
+    const t = await geladen(["x"]);
+    const haken = t.ctl.setCompleted("x", true);
+    t.offen[1].resolve("");
+    await haken;
+    const schief = t.ctl.setCompleted("x", false); // calls[2]
+    t.offen[2].reject(new Error("execution error: kaputt (-1)"));
+    expect(await schief).toBe(false);
+    const s = t.ctl.state.get();
+    expect(s.kind).toBe("error");
+    if (s.kind === "error") expect(s.items).toEqual([]);
+    const nochmal = t.ctl.setCompleted("x", false); // calls[3]
+    t.offen[3].resolve("");
+    expect(await nochmal).toBe(true);
+    const danach = t.ctl.state.get();
+    expect(danach.kind === "ok" || danach.kind === "error").toBe(true);
+    if (danach.kind === "ok" || danach.kind === "error") expect(danach.items).toEqual([item("x")]);
+  });
+
+  it("ein Leselauf endet während des Setzens ohne die id: das Zurückholen setzt sie trotzdem ein", async () => {
+    const t = await geladen(["x"]);
+    const haken = t.ctl.setCompleted("x", true); // calls[1], hängt
+    const lesen = t.ctl.refresh(); // calls[2]
+    t.offen[2].resolve(ausgabe()); // liest nach der Änderung, ohne x, noch vor der Antwort des Setzens
+    await lesen;
+    t.offen[1].resolve("");
+    await haken;
+    const zurueck = t.ctl.setCompleted("x", false); // calls[3]
+    t.offen[3].resolve("");
+    expect(await zurueck).toBe(true);
+    expect(t.ctl.state.get()).toEqual({ kind: "ok", items: [item("x")] });
+  });
+
+  it("Fehler beim Abhaken merkt nichts: das Zurückholen setzt nichts ein", async () => {
+    const t = await geladen(["x"]);
+    const haken = t.ctl.setCompleted("x", true); // calls[1]
+    t.offen[1].reject(new Error("execution error: kaputt (-1)"));
+    expect(await haken).toBe(false);
+    const lesen = t.ctl.refresh(); // calls[2], x ist inzwischen aus der Liste
+    t.offen[2].resolve(ausgabe());
+    await lesen;
+    const zurueck = t.ctl.setCompleted("x", false); // calls[3]
+    t.offen[3].resolve("");
+    expect(await zurueck).toBe(true);
+    expect(t.ctl.state.get()).toEqual({ kind: "ok", items: [] });
+  });
+
+  it("id beim Zurückholen schon wieder in items: kein Doppel", async () => {
+    const t = await geladen(["x"]);
+    const h = t.ctl.setCompleted("x", true);
+    t.offen[1].resolve("");
+    await h;
+    const l = t.ctl.refresh();
+    t.offen[2].resolve(ausgabe("x"));
+    await l;
+    const z = t.ctl.setCompleted("x", false);
+    t.offen[3].resolve("");
+    await z;
+    expect(t.ctl.state.get()).toEqual({ kind: "ok", items: [item("x")] });
+  });
+
+  it("nach erfolgreichem Zurückholen ist das Gedächtnis leer", async () => {
+    const t = await geladen(["x"]);
+    const h = t.ctl.setCompleted("x", true);
+    t.offen[1].resolve("");
+    await h;
+    const z = t.ctl.setCompleted("x", false); // calls[2]
+    t.offen[2].resolve("");
+    await z;
+    t.offen[3].resolve(ausgabe()); // Leselauf ohne x
+    await flush();
+    const z2 = t.ctl.setCompleted("x", false); // calls[4]
+    t.offen[4].resolve("");
+    await z2;
+    expect(t.ctl.state.get()).toEqual({ kind: "ok", items: [] });
+  });
+
+  it("Zurückholen während eines Leselaufs: sofort in items, das Nachlesen bestimmt den Endstand", async () => {
+    const t = await geladen(["x"]);
+    const h = t.ctl.setCompleted("x", true);
+    t.offen[1].resolve("");
+    await h;
+    const lesen = t.ctl.refresh(); // calls[2], hängt
+    const z = t.ctl.setCompleted("x", false); // calls[3]
+    t.offen[3].resolve("");
+    expect(await z).toBe(true);
+    expect(t.ctl.state.get()).toEqual({ kind: "ok", items: [item("x")] });
+    t.offen[2].resolve(ausgabe()); // veraltet, wird verworfen
+    await flush();
+    expect(leseLaeufe(t)).toBe(3);
+    expect(t.ctl.state.get()).toEqual({ kind: "ok", items: [item("x")] });
+    t.offen[4].resolve(ausgabe("y")); // Nachlesen
+    await lesen;
+    expect(t.ctl.state.get()).toEqual({ kind: "ok", items: [item("y")] });
+  });
+
+  it("Ausschalten zwischen Abhaken und Zurückholen: der Eintrag wird nicht mehr eingesetzt", async () => {
+    const t = await geladen(["x"]);
+    const haken = t.ctl.setCompleted("x", true);
+    t.offen[1].resolve("");
+    await haken;
+    t.change({ remindersEnabled: false });
+    t.change({ remindersEnabled: true });
+    const lesen = t.ctl.refresh(); // calls[2], ohne x
+    t.offen[2].resolve(ausgabe("y"));
+    await lesen;
+    const zurueck = t.ctl.setCompleted("x", false); // calls[3]
+    t.offen[3].resolve("");
+    expect(await zurueck).toBe(true);
+    expect(t.ctl.state.get()).toEqual({ kind: "ok", items: [item("y")] });
+  });
+});

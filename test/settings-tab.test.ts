@@ -867,6 +867,8 @@ describe("Ausschluss-Schalter (Abend 33)", () => {
 describe("Karte „Heute“: Einstellungen (Abend 44)", () => {
   const REMINDERS = "Erinnerungen in „Heute“ (nur macOS)";
   const REMINDERS_DESC = "An: Offene Erinnerungen der App „Erinnerungen“, fällig heute oder früher, stehen in der Karte „Heute“; Abhaken setzt sie in der App auf erledigt. Liest per AppleScript, macOS fragt beim ersten Mal nach der Freigabe.";
+  // Nachtrag 44e: auf dem Mac der Zusatz zur Geräte-Reichweite, unter Windows „nicht verfügbar“.
+  const REMINDERS_DESC_MAC = `${REMINDERS_DESC} Gilt auf jedem Mac, der diesen Vault synchronisiert.`;
   const dashboardNames = (tab: CockpitSettingTab): string[] => {
     const out: string[] = [];
     let inDashboard = false;
@@ -888,7 +890,7 @@ describe("Karte „Heute“: Einstellungen (Abend 44)", () => {
     const rows = rowsOf(record(makeTab({}, "darwin")));
     expect(rows["Überschrift für neue Aufgaben"]).toContainEqual({ desc: "Neue Aufgaben aus der Karte „Heute“ landen als letzter Punkt unter dieser Überschrift der Aufgabenliste. Fehlt sie oder ist das Feld leer: am Dateiende." });
     expect(rows["Briefing-Punkte in „Heute“"]).toContainEqual({ desc: "An: Die Punkte unter der Überschrift der Tagespunkte und alle Checkboxen im heutigen Briefing stehen in der Karte „Heute“ und lassen sich dort und im Briefing abhaken. Das Briefing selbst wird nie geändert." });
-    expect(rows[REMINDERS]).toContainEqual({ desc: REMINDERS_DESC });
+    expect(rows[REMINDERS]).toContainEqual({ desc: REMINDERS_DESC_MAC });
     expect(rows["Listen der Erinnerungen"]).toContainEqual({ desc: "Namen der Listen, mit Komma getrennt. Leer = alle." });
     expect(rows["Überfällige Erinnerungen zeigen"]).toContainEqual({ desc: "Aus: nur Erinnerungen, die heute fällig sind." });
     expect(rows["Erinnerungen-Abstand (Minuten)"]).toContainEqual({ desc: "So oft liest die Karte die Erinnerungen, solange ein Dashboard offen ist (0 bis 1440). 0 = nur beim Öffnen und per Knopf." });
@@ -904,7 +906,7 @@ describe("Karte „Heute“: Einstellungen (Abend 44)", () => {
     const tab = makeTab({}, "darwin");
     const rows = rowsOf(record(tab));
     expect(Object.keys(rows)).toContain(REMINDERS);
-    expect(rows[REMINDERS]).toContainEqual({ desc: REMINDERS_DESC });
+    expect(rows[REMINDERS]).toContainEqual({ desc: REMINDERS_DESC_MAC });
     expect(rows[REMINDERS]).not.toContainEqual({ disabled: true });
     expect(openRow(tab, REMINDERS).disabledNow).toBe(false);
   });

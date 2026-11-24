@@ -108,6 +108,7 @@ const input = (over: Partial<TodayInput>): TodayInput => ({
   briefingDone: [],
   reminders: [],
   remindersDone: [],
+  tasksDone: [],
   tasks: [],
   ...over,
 });
@@ -145,14 +146,16 @@ describe("todayView", () => {
       { kind: "reminder", id: "fremd", text: "Erledigte Erinnerung", done: true, since: null },
       { kind: "task", line: 3, text: "Fertig", done: true, depth: 0 },
     ]);
-    expect(view.doneCount).toBe(3);
-    expect(view.total).toBe(6);
+    // Nachtrag 44e: „Fertig“ steht nicht in tasksDone (alter Haken aus der Datei), zählt also nicht als heute erledigt.
+    expect(view.doneCount).toBe(2);
+    expect(view.total).toBe(5);
+    expect(view.listed).toBe(6);
     expect(view.openTexts).toEqual(["A", "Erinnerung r1", "Offen"]);
     expect(view.tasksMissing).toBe(false);
   });
   it("alles leer, Datei fehlt: nichts offen, keine Quellzeilen", () => {
     const view = todayView(input({ tasks: null }));
-    expect(view).toEqual({ open: [], done: [], doneCount: 0, total: 0, openTexts: [], tasksMissing: true });
+    expect(view).toEqual({ open: [], done: [], doneCount: 0, total: 0, listed: 0, openTexts: [], tasksMissing: true });
   });
   it("Haken zu einem Schlüssel, den das Briefing nicht nennt, zählt nicht", () => {
     const view = todayView(input({ briefing: [point("a")], briefingDone: ["weg"] }));
@@ -185,6 +188,79 @@ describe("todayView", () => {
       { kind: "task", line: 2, text: "X", done: false, depth: 1 },
     ]);
     expect(view.openTexts).toEqual(["X"]);
+  });
+});
+
+describe("todayView: Kopfzähler zählt nur heute Abgehaktes (Nachtrag 44e)", () => {
+  const t = (line: number, text: string, done: boolean): TaskRow => ({ kind: "task", line, text, done, depth: 0 });
+  const alt = Array.from({ length: 8 }, (_, i) => t(i, `Alt ${i}`, true));
+  it("8 alte [x], 2 offen, nichts heute abgehakt: 0/2, Liste Erledigt bleibt vollständig", () => {
+    const view = todayView(input({ tasks: [...alt, t(8, "Offen 1", false), t(9, "Offen 2", false)] }));
+    expect(view.doneCount).toBe(0);
+    expect(view.total).toBe(2);
+    expect(view.done).toHaveLength(8);
+    expect(view.listed).toBe(10);
+  });
+  it("eine heute abgehakte Aufgabe (Schlüssel in tasksDone): 1/3", () => {
+    const view = todayView(input({ tasks: [...alt, t(8, "Offen 1", false), t(9, "Offen 2", false)], tasksDone: ["alt 3"] }));
+    expect(view.doneCount).toBe(1);
+    expect(view.total).toBe(3);
+    expect(view.done).toHaveLength(8);
+  });
+  it("Schlüssel ist pointKey: Großschreibung und Leerraum egal", () => {
+    const view = todayView(input({ tasks: [t(0, "  Mehr   Platz  ", true)], tasksDone: ["mehr platz"] }));
+    expect(view.doneCount).toBe(1);
+  });
+  it("zwei gleichnamige, beide heute abgehakt: 2/2 (Mehrfachmenge)", () => {
+    const view = todayView(input({ tasks: [t(0, "Milch", true), t(1, "Milch", true), t(2, "Brot", false)], tasksDone: ["milch", "milch"] }));
+    expect(view.doneCount).toBe(2);
+    expect(view.total).toBe(3);
+  });
+  it("zwei gleichnamige, eine davon zurückgeholt (offen): 1/3", () => {
+    const view = todayView(input({ tasks: [t(0, "Milch", true), t(1, "Milch", false), t(2, "Brot", false)], tasksDone: ["milch"] }));
+    expect(view.doneCount).toBe(1);
+    expect(view.total).toBe(3);
+  });
+  it("ein Eintrag in tasksDone, zwei erledigte Zeilen gleichen Namens (alte plus neue): zählt einmal", () => {
+    const view = todayView(input({ tasks: [t(0, "Milch", true), t(1, "Milch", true)], tasksDone: ["milch"] }));
+    expect(view.doneCount).toBe(1);
+  });
+  it("zwei Einträge, nur eine erledigte Zeile: zählt einmal (höchstens so viele wie Zeilen)", () => {
+    const view = todayView(input({ tasks: [t(0, "Milch", true)], tasksDone: ["milch", "milch"] }));
+    expect(view.doneCount).toBe(1);
+  });
+  it("Schlüssel ohne erledigte Zeile (offen oder nicht vorhanden) zählt nicht", () => {
+    const view = todayView(input({ tasks: [t(0, "Milch", false)], tasksDone: ["milch", "weg"] }));
+    expect(view.doneCount).toBe(0);
+    expect(view.total).toBe(1);
+  });
+  it("bekannte Grenze: alter [x] zurückgeholt, nachdem heute ein gleichnamiger abgehakt wurde: der heute erledigte zählt nicht mehr", () => {
+    // Ablauf in der Karte: neue „Milch“ abhaken -> ["milch"]; alte „Milch“ zurückholen -> setTaskDone(false) entfernt genau ein
+    // Vorkommen -> []. Datei danach: alte offen, neue erledigt. Dokumentiert das gewollte Verhalten (docs/module.md).
+    const view = todayView(input({ tasks: [t(0, "Milch", false), t(1, "Milch", true)], tasksDone: [] }));
+    expect(view.doneCount).toBe(0);
+  });
+  it("leerer Schlüssel (Text nur aus Zeichen, die pointKey entfernt) zählt nie als heute erledigt", () => {
+    const view = todayView(input({ tasks: [t(0, "   ", true)], tasksDone: [""] }));
+    expect(view.doneCount).toBe(0);
+  });
+  it("Briefing (auch aus der Datei erledigt) und Erinnerungen zählen weiter, plus Aufgaben", () => {
+    const view = todayView(input({
+      briefing: [point("a", true), point("b"), point("c")],
+      briefingDone: ["b"],
+      remindersDone: [{ id: "x", name: "Anruf" }],
+      tasks: [t(0, "Fertig", true), t(1, "Offen", false)],
+      tasksDone: ["fertig"],
+    }));
+    expect(view.doneCount).toBe(4);
+    expect(view.total).toBe(6);
+    expect(view.listed).toBe(6);
+  });
+  it("listed ist der alte total: 8 alte [x], nichts offen", () => {
+    const view = todayView(input({ tasks: alt }));
+    expect(view.listed).toBe(8);
+    expect(view.total).toBe(0);
+    expect(view.doneCount).toBe(0);
   });
 });
 

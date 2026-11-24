@@ -3,7 +3,7 @@ import { isInBriefingsDir } from "../core/briefings";
 import { TASKS_RELOAD_DEBOUNCE_MS, TODAY_CLICK_GUARD_MS } from "../core/constants";
 import { Observable } from "../core/observable";
 import { createDebounce } from "../core/debounce";
-import { type BriefingPoint, scanBriefing } from "../core/focus";
+import { type BriefingPoint, pointKey, scanBriefing } from "../core/focus";
 import { dueReminders, parseListNames } from "../core/reminders";
 import type { ReminderDone } from "../core/session-model";
 import type { CockpitSettings } from "../core/settings";
@@ -23,6 +23,9 @@ export interface TasksCardDeps {
   setBriefingDone: (today: string, key: string, done: boolean) => void;
   remindersDone: (today: string) => ReminderDone[];
   setReminderDone: (today: string, item: ReminderDone, done: boolean) => void;
+  /** Heute in der Karte abgehakte Aufgaben (pointKey, Dopplungen erlaubt); Setzen meldet onTodayChange. */
+  tasksDone: (today: string) => string[];
+  setTaskDone: (today: string, key: string, done: boolean) => void;
   onTodayChange: (cb: () => void) => () => void;
   /** Eine Instanz im Plugin; die Karte liest den Zustand und setzt über sie. */
   reminders: RemindersController;
@@ -172,6 +175,7 @@ export class TasksCard {
       briefingDone: this.deps.briefingDone(today),
       reminders: due,
       remindersDone: this.deps.remindersDone(today),
+      tasksDone: this.deps.tasksDone(today),
       tasks,
     });
     this.today = today;
@@ -224,12 +228,18 @@ export class TasksCard {
       new Notice("Aufgabenliste fehlt");
       return;
     }
+    // Tag des Klicks wie in toggleReminder: vor dem Schreiben gelesen, damit Mitternacht während vault.process nicht zählt.
+    const today = localDayString(this.deps.now());
     try {
       await this.app.vault.process(file, (data) => {
         const result = toggleTask(data, row.line, row.text, row.done);
         if (!result.ok) throw new TaskChangedError(result.reason);
         return result.content;
       });
+      // Nur nach Erfolg (auch „schon erledigt“ wirft oben und kommt nie hierher). Ein leerer Schlüssel (Text nur aus
+      // Markdown-Zeichen) wird nicht gemerkt, die Zählung kennt ihn nicht.
+      const key = pointKey(row.text);
+      if (key !== "") this.deps.setTaskDone(today, key, !row.done);
     } catch (fehler) {
       if (fehler instanceof TaskChangedError) {
         // Schon im gewünschten Zustand (zweiter Klick eines Doppelklicks) ist kein fremder Eingriff: nur der Grund, ohne „Datei geändert“.
@@ -316,10 +326,11 @@ export class TasksCard {
     const s = this.deps.settings();
     const v = this.data.get()?.today ?? null;
 
-    count.hidden = v === null;
+    // Nichts offen und nichts heute erledigt (total 0): kein „0/0“, Zähltext leer und ausgeblendet.
+    count.hidden = v === null || v.total === 0;
     bar.hidden = v === null;
     if (v) {
-      count.textContent = `${v.doneCount}/${v.total}`;
+      count.textContent = v.total === 0 ? "" : `${v.doneCount}/${v.total}`;
       fill.style.width = `${v.total === 0 ? 0 : Math.round((v.doneCount / v.total) * 100)}%`;
     }
     // Eine Stelle für „Erinnerungen aktiv“: Der Controller meldet `off` bei ausgeschaltetem Schalter und auf jeder Plattform außer macOS.
@@ -359,11 +370,10 @@ export class TasksCard {
 
     if (v.done.length > 0) {
       const open = this.deps.doneOpen();
-      const toggle = body.createEl("button", {
-        text: `Erledigt (${v.done.length})`,
-        cls: "cockpit-today-done-toggle",
-        attr: { "aria-expanded": String(open) },
-      });
+      const toggle = body.createEl("button", { cls: "cockpit-today-done-toggle", attr: { "aria-expanded": String(open) } });
+      // Pfeil wie cockpit-card-chevron, für Screenreader verborgen: der zugängliche Name bleibt „Erledigt (n)“.
+      toggle.createSpan({ text: open ? "▾" : "▸", cls: "cockpit-today-done-chevron", attr: { "aria-hidden": "true" } });
+      toggle.createSpan({ text: `Erledigt (${v.done.length})` });
       toggle.addEventListener("click", () => {
         this.deps.setDoneOpen(!this.deps.doneOpen());
         // Der Knopf ist danach ein neuer Knoten; render nimmt den Fokus mit.
